@@ -16,6 +16,16 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const registered = searchParams.get("registered");
   const redirectTo = searchParams.get("redirect");
+  const authError = searchParams.get("error");
+
+  // Map NextAuth error codes to user-friendly messages
+  const authErrorMessage = authError
+    ? authError === "OAuthAccountNotLinked"
+      ? "This email is already registered with a different sign-in method."
+      : authError === "OAuthCallbackError"
+        ? "GitHub sign-in was cancelled or failed. Please try again."
+        : "Sign-in failed. Please try again."
+    : null;
 
   async function handleGitHub() {
     setGithubLoading(true);
@@ -104,6 +114,11 @@ function LoginForm() {
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               Account created! Sign in to view your scan results.
+            </div>
+          )}
+          {authErrorMessage && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+              {authErrorMessage}
             </div>
           )}
           {error && (
