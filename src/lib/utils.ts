@@ -11,6 +11,20 @@ export function getBaseUrl() {
   return `http://localhost:${process.env.PORT ?? 3000}`;
 }
 
+/** Return the canonical site origin with protocol (for server-side use in API routes). */
+export function getSiteUrl(): string {
+  // AUTH_URL / NEXTAUTH_URL are set by the developer
+  const envUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL;
+  if (envUrl) {
+    // Guard against bare domains like "scanmysaas.com" (missing protocol)
+    if (envUrl.startsWith("http://") || envUrl.startsWith("https://")) return envUrl;
+    return `https://${envUrl}`;
+  }
+  // Vercel sets this automatically (no protocol)
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return `http://localhost:${process.env.PORT ?? 3000}`;
+}
+
 export function formatDate(date: Date | string) {
   return new Date(date).toLocaleDateString("en-US", {
     year: "numeric",

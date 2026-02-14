@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { stripe, getPriceId, PlanKey, PLANS } from "@/lib/stripe";
+import { getSiteUrl } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,6 +62,8 @@ export async function POST(req: NextRequest) {
 
     const priceId = getPriceId(planKey);
 
+    const siteUrl = getSiteUrl();
+
     // Create checkout session
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -71,8 +74,8 @@ export async function POST(req: NextRequest) {
         userId: session.user.id,
         plan: planKey,
       },
-      success_url: `${req.nextUrl.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.nextUrl.origin}/pricing`,
+      success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteUrl}/pricing`,
       subscription_data: {
         metadata: {
           userId: session.user.id,
