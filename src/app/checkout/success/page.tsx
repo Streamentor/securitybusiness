@@ -23,8 +23,34 @@ function SuccessContent() {
   const [plan, setPlan] = useState<string>("");
   const [credits, setCredits] = useState<number>(0);
 
-  const pollPlan = useCallback(async () => {
-    const maxAttempts = 15;
+  const activateAndPoll = useCallback(async () => {
+    if (!sessionId) {
+      setStatus("timeout");
+      return;
+    }
+
+    // Step 1: Call our verify endpoint to directly activate the subscription
+    // (bypasses webhook — works even if webhook signature fails)
+    try {
+      const verifyRes = await fetch("/api/stripe/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      if (verifyRes.ok) {
+        const verifyData = await verifyRes.json();
+        if (verifyData.plan) {
+          setPlan(verifyData.plan);
+          setCredits(verifyData.credits ?? 0);
+          // If already active or just activated, confirm via plan endpoint
+        }
+      }
+    } catch {
+      // Verify failed — fall through to polling
+    }
+
+    // Step 2: Poll /api/user/plan to confirm activation
+    const maxAttempts = 10;
     let attempt = 0;
 
     while (attempt < maxAttempts) {
@@ -43,16 +69,15 @@ function SuccessContent() {
       } catch {
         // Retry
       }
-      // Wait 2 seconds between polls
       await new Promise((r) => setTimeout(r, 2000));
     }
-    // Timed out — webhook may be slow
+    // Timed out
     setStatus("timeout");
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
-    pollPlan();
-  }, [pollPlan]);
+    activateAndPoll();
+  }, [activateAndPoll]);
 
   if (status === "verifying") {
     return (
