@@ -6,10 +6,10 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SecureSaaS - Website Security Scanner for SaaS Builders",
+  title: "Website Vulnerability Scanner — Free Security Scan for Web Apps | SecureSaaS",
   description:
-    "Free website security scanner for SaaS builders. Crawl your entire site and discover security vulnerabilities before hackers do. SSL, headers, XSS, CSRF and more.",
-  keywords: "website security scanner, SaaS security, vulnerability scanner, free security audit",
+    "Free website vulnerability scanner that crawls your web app to detect vulnerabilities, security issues, and misconfigurations. Run an automated security scan — check SSL, headers, XSS, CSRF, open ports, and more. No credit card needed.",
+  keywords: "website vulnerability scanner, web vulnerability scanner, vulnerability scanning tool, free website security, security scan, web application vulnerability, website scanner, vulnerability detection",
 };
 
 export default function RootLayout({

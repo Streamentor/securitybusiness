@@ -140,7 +140,7 @@ function HeroSection() {
           >
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-400">
               <Sparkles className="h-4 w-4" />
-              3 free scans for SaaS builders — no credit card needed
+              Free website vulnerability scanner — no credit card needed
             </div>
           </motion.div>
 
@@ -150,9 +150,9 @@ function HeroSection() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-5xl leading-tight font-bold tracking-tight sm:text-7xl"
           >
-            Secure your SaaS
+            Website Vulnerability
             <br />
-            <span className="gradient-text">before hackers do</span>
+            <span className="gradient-text">Scanner for Web Apps</span>
           </motion.h1>
 
           <motion.p
@@ -161,8 +161,9 @@ function HeroSection() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 max-w-2xl text-lg text-gray-400 sm:text-xl"
           >
-            We crawl your entire website and analyze it for security vulnerabilities.
-            Get a detailed report with severity scores — upgrade for actionable fixes.
+            Run a free website vulnerability scan on your web app in seconds. Our automated scanner
+            crawls your site, checks for security issues, and delivers a detailed report with severity
+            scores — upgrade for actionable fixes.
           </motion.p>
 
           <motion.form
@@ -193,7 +194,7 @@ function HeroSection() {
               </button>
             </div>
             <p className="mt-3 text-sm text-gray-500">
-              ✓ 3 free scans &nbsp; ✓ Full site crawl &nbsp; ✓ Detailed report
+              ✓ 3 free scans &nbsp; ✓ Full site crawl &nbsp; ✓ 60+ vulnerability checks &nbsp; ✓ Automated scanning
             </p>
           </motion.form>
 
@@ -214,15 +215,15 @@ function HeroSection() {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              XSS Detection
+              XSS & Injection Detection
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              CSRF Checks
+              OWASP Top 10 Risks
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              Cookie Security
+              Access Controls
             </div>
           </motion.div>
         </div>
@@ -235,99 +236,99 @@ function FeaturesSection() {
   const features = [
     {
       icon: Search,
-      title: "Full Site Crawl",
+      title: "Full Site Crawl & Vulnerability Detection",
       description:
-        "We don't just check your homepage. Our crawler discovers and scans up to 10 pages on your site for comprehensive coverage.",
+        "Unlike basic scanning tools, our web vulnerability scanner crawls up to 10 pages on your site to detect vulnerabilities across your entire web application — not just the homepage.",
     },
     {
       icon: Lock,
-      title: "SSL/TLS Analysis",
+      title: "SSL/TLS & Web Server Scanner",
       description:
-        "Verify your SSL certificate, check for mixed content, HTTPS redirects, and HSTS configuration — the foundation of secure data transit.",
+        "Verify your SSL certificate, check for mixed content, HTTPS redirects, and HSTS on your web server — the foundation of secure data transit and strong security posture.",
     },
     {
       icon: Shield,
-      title: "30+ Security Headers",
+      title: "30+ Security Header Checks",
       description:
-        "Check for CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy, and more. Get exact configuration recommendations.",
+        "Run vulnerability checks on CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy, and more. Get exact configuration recommendations to fix security issues.",
     },
     {
       icon: Code2,
-      title: "XSS & Injection Detection",
+      title: "XSS & Injection Vulnerability Scan",
       description:
-        "Detect unsafe JavaScript patterns, inline eval(), document.write(), innerHTML usage, and potential cross-site scripting vulnerabilities.",
+        "Detect unsafe JavaScript patterns, inline eval(), document.write(), innerHTML usage, and potential cross-site scripting — common web application vulnerabilities in source code.",
     },
     {
       icon: AlertTriangle,
-      title: "CSRF Protection Audit",
+      title: "CSRF & Access Controls Audit",
       description:
-        "Verify forms have CSRF tokens and cookies have proper SameSite, HttpOnly, and Secure attributes to prevent cross-site request forgery.",
+        "Verify forms have CSRF tokens and cookies have proper SameSite, HttpOnly, and Secure attributes. Check access controls to prevent cross-site request forgery attacks.",
     },
     {
       icon: FileWarning,
-      title: "Sensitive File Exposure",
+      title: "Sensitive File & Open Ports Exposure",
       description:
-        "Detect exposed .env files, .git repositories, database backups, debug logs, and 14+ other commonly leaked sensitive files.",
+        "Detect exposed .env files, .git repositories, database backups, debug logs, open ports, and 14+ other commonly leaked paths that penetration testers look for first.",
     },
     {
       icon: Mail,
       title: "Email Security (SPF/DMARC)",
       description:
-        "Check DNS records for SPF and DMARC configuration. Prevent email spoofing and phishing attacks using your domain.",
+        "Check DNS records for SPF and DMARC configuration. Prevent email spoofing and phishing attacks — a critical security check often missed by other security tools.",
     },
     {
       icon: Eye,
       title: "CSP Deep Analysis",
       description:
-        "Parse and grade your Content-Security-Policy. Detect unsafe-inline, unsafe-eval, wildcards, and missing directives.",
+        "Parse and grade your Content-Security-Policy. Detect unsafe-inline, unsafe-eval, wildcards, and missing directives — identify vulnerabilities that DAST tools flag in production.",
     },
     {
       icon: Cookie,
       title: "Cookie Security Audit",
       description:
-        "Analyze cookies for HttpOnly, Secure, SameSite attributes, and overly broad domain scoping that could leak session data.",
+        "Analyze cookies for HttpOnly, Secure, SameSite attributes, and overly broad domain scoping that could leak session data to attackers performing penetration testing.",
     },
     {
       icon: Bug,
-      title: "Vulnerable Library Detection",
+      title: "Known Vulnerabilities in Libraries",
       description:
-        "Identify outdated jQuery, AngularJS 1.x, old Bootstrap, and deprecated libraries with known security vulnerabilities.",
+        "Identify outdated jQuery, AngularJS 1.x, old Bootstrap, and unpatched software with known vulnerabilities — the kind of vulnerability discovery that prevents real breaches.",
     },
     {
       icon: Fingerprint,
       title: "Technology Fingerprinting",
       description:
-        "Detect WordPress, Next.js, Shopify, Drupal, and 10+ frameworks. Know what your site reveals to potential attackers.",
+        "Detect WordPress, Next.js, Shopify, Drupal, and 10+ frameworks. Understand what your site reveals to potential attackers — essential for vulnerability management.",
     },
     {
       icon: FolderOpen,
       title: "Directory & robots.txt Audit",
       description:
-        "Check for exposed directory listings, sensitive paths in robots.txt, and error pages that leak stack traces or framework details.",
+        "Check for exposed directory listings, sensitive paths in robots.txt, and error pages that leak stack traces — the same checks penetration testers run with tools like Nikto web scanner.",
     },
     {
       icon: Network,
       title: "CORS Misconfiguration",
       description:
-        "Detect overly permissive CORS policies (Access-Control-Allow-Origin: *) and dangerous credential/wildcard combinations.",
+        "Detect overly permissive CORS policies (Access-Control-Allow-Origin: *) and dangerous credential/wildcard combinations — a critical web app security vulnerability.",
     },
     {
       icon: Globe,
       title: "Open Redirect Detection",
       description:
-        "Find redirect parameters (url=, next=, goto=) in links and forms that could be exploited to redirect users to malicious sites.",
+        "Find redirect parameters (url=, next=, goto=) in links and forms that could be exploited — a common finding in dynamic application security testing.",
     },
     {
       icon: ShieldCheck,
-      title: "SRI Verification",
+      title: "SRI & Supply Chain Security",
       description:
-        "Ensure external CDN scripts and stylesheets use Subresource Integrity (SRI) hashes to prevent supply-chain attacks.",
+        "Ensure external CDN scripts use Subresource Integrity (SRI) hashes. Guard against supply-chain attacks — a growing concern for application security testing.",
     },
     {
       icon: Zap,
-      title: "Actionable Remedies",
+      title: "Actionable Fix Suggestions",
       description:
-        "Every vulnerability comes with a clear, developer-friendly explanation and exact code snippets to fix it. No security jargon.",
+        "Every vulnerability comes with a clear, developer-friendly explanation and exact code snippets. No manual testing or security jargon — just step-by-step remedies.",
     },
   ];
 
@@ -336,13 +337,13 @@ function FeaturesSection() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold sm:text-4xl">
-            Everything you need to
+            What Our Vulnerability Scanner
             <br />
-            <span className="gradient-text">secure your SaaS</span>
+            <span className="gradient-text">Checks For</span>
           </h2>
           <p className="mt-4 text-lg text-gray-400">
-            50+ security checks across 15 categories — designed specifically for modern web
-            applications and SaaS platforms.
+            60+ automated vulnerability checks across 15 categories — covering the types of vulnerability
+            that security teams care about most in modern web apps.
           </p>
         </div>
 
@@ -375,19 +376,19 @@ function HowItWorksSection() {
       step: "01",
       title: "Enter your URL",
       description:
-        "Just paste your website URL into the scanner. Start with 3 free scans — no credit card required.",
+        "Paste your website URL into our vulnerability scanning tool. Start with 3 free scans — no credit card or GitHub account required.",
     },
     {
       step: "02",
-      title: "We crawl & analyze",
+      title: "Automated scanning begins",
       description:
-        "Our engine crawls your site and runs 50+ checks across 15 categories — SSL, headers, XSS, CSRF, email security, exposed files, and more.",
+        "Our automated scanner crawls your web app and runs 60+ security checks — SSL, headers, XSS, CSRF, cookie security, exposed files, and OWASP top 10 risks.",
     },
     {
       step: "03",
-      title: "Get your report",
+      title: "Get your security report",
       description:
-        "Receive a detailed security report with severity ratings and explanations. Upgrade to unlock step-by-step remediation guides.",
+        "Receive a detailed vulnerability scan report with severity ratings. Upgrade to unlock step-by-step fix suggestions to eliminate critical vulnerabilities.",
     },
   ];
 
@@ -396,10 +397,10 @@ function HowItWorksSection() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold sm:text-4xl">
-            How it <span className="gradient-text">works</span>
+            How Does a Web Vulnerability <span className="gradient-text">Scanner Work?</span>
           </h2>
           <p className="mt-4 text-lg text-gray-400">
-            Get your security report in three simple steps
+            Run your first free website security scan in three simple steps
           </p>
         </div>
 
@@ -437,7 +438,7 @@ function PricingSection() {
       name: "Free",
       price: "$0",
       period: "forever",
-      description: "Try SecureSaaS and scan your first site",
+      description: "Free website security scan — try our scanner",
       features: [
         "3 scan credits (one-time)",
         "Up to 25 pages per scan",
@@ -445,14 +446,14 @@ function PricingSection() {
         "Security score & severity breakdown",
         "Vulnerability descriptions",
       ],
-      cta: "Start Free",
+      cta: "Start Free Scan",
       popular: false,
     },
     {
       name: "Starter",
       price: "$29",
       period: "/month",
-      description: "For indie hackers & small SaaS teams",
+      description: "For indie hackers & small security teams",
       features: [
         "10 scan credits / month",
         "60+ vulnerability checks",
@@ -468,7 +469,7 @@ function PricingSection() {
       name: "Pro",
       price: "$79",
       period: "/month",
-      description: "For growing SaaS businesses",
+      description: "Full vulnerability management platform",
       features: [
         "30 scan credits / month",
         "Up to 50 pages per scan",
@@ -489,10 +490,10 @@ function PricingSection() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold sm:text-4xl">
-            Simple, transparent <span className="gradient-text">pricing</span>
+            Website Vulnerability Scanning <span className="gradient-text">Plans</span>
           </h2>
           <p className="mt-4 text-lg text-gray-400">
-            Start free and upgrade as you grow. No hidden fees.
+            Start with a free website scanner and upgrade as your security needs grow. No hidden fees.
           </p>
         </div>
 
@@ -556,6 +557,136 @@ function PricingSection() {
   );
 }
 
+function ComparisonSection() {
+  return (
+    <section className="relative py-24 sm:py-32">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="text-3xl font-bold sm:text-4xl">
+            How SecureSaaS Compares to Other
+            <br />
+            <span className="gradient-text">Scanning Tools</span>
+          </h2>
+          <p className="mt-4 text-lg text-gray-400">
+            There are many commercial and open source vulnerability scanners on the market — from
+            enterprise-grade DAST tools to open source tools like Nikto web server scanner and
+            OpenVAS. Here&apos;s how we fit in.
+          </p>
+        </div>
+
+        <div className="mt-16 grid gap-8 md:grid-cols-2">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-gray-800 bg-gray-900/50 p-8"
+          >
+            <h3 className="text-xl font-semibold text-white">
+              Commercial and Open Source Alternatives
+            </h3>
+            <p className="mt-3 text-gray-400 leading-relaxed">
+              Tools like Burp Suite are powerful but complex — built for penetration testers and
+              security teams with deep expertise. OpenVAS is a powerful open source vulnerability
+              scanner designed for network-level vulnerability scanning across infrastructure. SAST
+              tools analyze source code for flaws (static application security testing), while DAST
+              tools like our scanner test running applications from the outside (dynamic application
+              security testing). Commercial tools from major vendors or scanning tools by listing
+              can cost thousands per year.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="rounded-2xl border border-emerald-500/20 bg-gray-900/50 p-8"
+          >
+            <h3 className="text-xl font-semibold text-white">
+              Why Choose SecureSaaS as Your Website Scanner
+            </h3>
+            <p className="mt-3 text-gray-400 leading-relaxed">
+              SecureSaaS is built specifically for web app security. Vulnerability scanners are
+              automated tools that scan web applications for common flaws — and ours does exactly
+              that, without the steep learning curve. No CLI setup, no false positives to wade
+              through, no manual testing required. Just paste your URL and get actionable results.
+              Unlike a web application security scanner aimed at enterprise, we&apos;re designed for
+              SaaS builders, indie hackers, and small security teams who need fast, reliable
+              application security testing.
+            </p>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FAQSection() {
+  const faqs = [
+    {
+      question: "How does a website vulnerability scanner work?",
+      answer:
+        "A website vulnerability scanner is an automated tool that scans web applications for security flaws. It crawls your site, analyzes pages for known vulnerabilities like XSS, CSRF, missing security headers, SSL misconfigurations, and exposed files. SecureSaaS runs 60+ automated vulnerability checks and generates a report with severity ratings and fix suggestions.",
+    },
+    {
+      question: "What types of vulnerability does the scanner detect?",
+      answer:
+        "Our scanner covers a wide range of web application vulnerability categories: SSL/TLS issues, missing or misconfigured security headers, cross-site scripting (XSS), cross-site request forgery (CSRF), cookie security flaws, sensitive file exposure, outdated libraries with known vulnerabilities, CORS misconfigurations, open redirects, SPF/DMARC email security, and more — covering the OWASP top 10 risks.",
+    },
+    {
+      question: "Is SecureSaaS a free website vulnerability scanner?",
+      answer:
+        "Yes — every account starts with 3 free scan credits. Run a complete website vulnerability scanning session with full results, severity scores, and vulnerability descriptions at no cost. Upgrade to Starter ($29/mo) or Pro ($79/mo) to unlock fix suggestions, PDF exports, and more credits.",
+    },
+    {
+      question: "How is this different from Burp Suite or Nikto?",
+      answer:
+        "Burp Suite is a comprehensive web application scanner and testing tools platform built for penetration testers and security professionals. Nikto is an open source web server scanner focused on server-level checks. SecureSaaS provides automated scanning focused on web app security — no installation, no CLI, no steep learning curve. Think of it as application security testing made simple for developers.",
+    },
+    {
+      question: "Do I need penetration testing experience to use this?",
+      answer:
+        "Not at all. Unlike commercial tools that require expertise in penetration testing or security check configurations, SecureSaaS is designed for developers and SaaS builders. Just enter your URL and our security scanner handles the rest — vulnerability discovery, severity scoring, and actionable remedies you can implement immediately.",
+    },
+    {
+      question: "Does it reduce false positives?",
+      answer:
+        "Yes. Our scanner is tuned specifically for modern web apps and SaaS platforms, which significantly reduces false positives compared to generic scanning tools. Every finding includes context about why it matters and how to verify it, so your security teams can focus on real issues — not noise.",
+    },
+  ];
+
+  return (
+    <section className="relative py-24 sm:py-32">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold sm:text-4xl">
+            Vulnerability Scanner <span className="gradient-text">FAQ</span>
+          </h2>
+          <p className="mt-4 text-lg text-gray-400">
+            Common questions about our web vulnerability scanning tool
+          </p>
+        </div>
+
+        <div className="mt-12 space-y-6">
+          {faqs.map((faq, index) => (
+            <motion.div
+              key={faq.question}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.08 }}
+              className="rounded-2xl border border-gray-800 bg-gray-900/50 p-6"
+            >
+              <h3 className="text-lg font-semibold text-white">{faq.question}</h3>
+              <p className="mt-3 text-gray-400 leading-relaxed">{faq.answer}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function CTASection() {
   return (
     <section className="relative py-24 sm:py-32">
@@ -568,11 +699,11 @@ function CTASection() {
           <div className="relative">
             <ShieldCheck className="mx-auto h-12 w-12 text-emerald-400" />
             <h2 className="mt-6 text-3xl font-bold sm:text-4xl">
-              Ready to secure your SaaS?
+              Automate Your Web App Security Scan
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-gray-400">
-              Don&apos;t wait for a security breach. Scan your website now and fix vulnerabilities
-              before they become problems.
+              Don&apos;t wait for a security breach. Use our website vulnerability scanner to look
+              for security vulnerabilities and fix them before attackers find them.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
@@ -636,7 +767,9 @@ export default function HomePage() {
       <HeroSection />
       <FeaturesSection />
       <HowItWorksSection />
+      <ComparisonSection />
       <PricingSection />
+      <FAQSection />
       <CTASection />
       <Footer />
     </div>
