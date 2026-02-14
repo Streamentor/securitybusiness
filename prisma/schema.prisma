@@ -1,0 +1,50 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  hashedPassword String
+  plan           String   @default("free") // free, starter, pro, enterprise
+  scansUsed      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  scans          Scan[]
+}
+
+model Scan {
+  id              String          @id @default(cuid())
+  url             String
+  status          String          @default("pending") // pending, running, completed, failed
+  overallScore    Int?
+  totalPages      Int             @default(0)
+  pagesScanned    Int             @default(0)
+  createdAt       DateTime        @default(now())
+  completedAt     DateTime?
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id])
+  vulnerabilities Vulnerability[]
+}
+
+model Vulnerability {
+  id          String @id @default(cuid())
+  scanId      String
+  scan        Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  type        String // ssl, headers, xss, csrf, info-disclosure, outdated-software, etc.
+  severity    String // critical, high, medium, low, info
+  title       String
+  description String
+  url         String // The specific page where found
+  remedy      String // How to fix it
+  createdAt   DateTime @default(now())
+}

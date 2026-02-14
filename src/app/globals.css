@@ -1,1 +1,51 @@
 @import "tailwindcss";
+
+@layer base {
+  * {
+    @apply border-gray-800;
+  }
+
+  body {
+    @apply bg-gray-950 text-gray-100;
+  }
+}
+
+@layer utilities {
+  .gradient-text {
+    @apply bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent;
+  }
+
+  .gradient-border {
+    @apply border border-transparent bg-clip-padding;
+    background-image: linear-gradient(theme(colors.gray.900), theme(colors.gray.900)),
+      linear-gradient(to right, theme(colors.emerald.500), theme(colors.cyan.500), theme(colors.blue.500));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+  }
+
+  .glow {
+    box-shadow: 0 0 40px rgba(16, 185, 129, 0.15), 0 0 80px rgba(6, 182, 212, 0.1);
+  }
+
+  .glow-sm {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.1), 0 0 40px rgba(6, 182, 212, 0.05);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: theme(colors.gray.900);
+}
+
+::-webkit-scrollbar-thumb {
+  background: theme(colors.gray.700);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: theme(colors.gray.600);
+}
