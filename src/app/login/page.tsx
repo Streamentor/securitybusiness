@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Shield, Loader2, Mail, Lock } from "lucide-react";
+import { Shield, Loader2, Mail, Lock, CheckCircle2 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const registered = searchParams.get("registered");
+  const redirectTo = searchParams.get("redirect");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,7 +34,37 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      // Check for pending plan (user selected a plan before registering)
+      const pendingPlan = typeof window !== "undefined" ? localStorage.getItem("pendingPlan") : null;
+      // Check for pending scan redirect or explicit redirect param
+      const pendingScanId = typeof window !== "undefined" ? sessionStorage.getItem("pendingScanId") : null;
+
+      if (pendingPlan) {
+        localStorage.removeItem("pendingPlan");
+        // Start checkout for the plan they chose
+        try {
+          const res = await fetch("/api/stripe/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plan: pendingPlan }),
+          });
+          const data = await res.json();
+          if (data.url) {
+            window.location.href = data.url;
+            return;
+          }
+        } catch {
+          // Fall through to dashboard if checkout fails
+        }
+        router.push("/dashboard");
+      } else if (pendingScanId) {
+        sessionStorage.removeItem("pendingScanId");
+        router.push(`/scan/${pendingScanId}`);
+      } else if (redirectTo) {
+        router.push(redirectTo);
+      } else {
+        router.push("/dashboard");
+      }
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -56,6 +89,12 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          {registered && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Account created! Sign in to view your scan results.
+            </div>
+          )}
           {error && (
             <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
               {error}
@@ -116,5 +155,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -34,7 +34,14 @@ export default function RegisterPage() {
       }
 
       // Auto sign in after registration
-      router.push("/login?registered=true");
+      // Check if there's a pending scan to redirect to
+      const pendingScanId = typeof window !== "undefined" ? sessionStorage.getItem("pendingScanId") : null;
+      if (pendingScanId) {
+        sessionStorage.removeItem("pendingScanId");
+        router.push(`/login?registered=true&redirect=/scan/${pendingScanId}`);
+      } else {
+        router.push("/login?registered=true");
+      }
     } catch {
       setError("Something went wrong. Please try again.");
       setLoading(false);

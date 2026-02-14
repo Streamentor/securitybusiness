@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield,
@@ -26,6 +27,7 @@ import {
   ShieldAlert,
   ArrowRightLeft,
   FileCode,
+  UserPlus,
 } from "lucide-react";
 
 interface ScanProgress {
@@ -102,6 +104,7 @@ interface ScanningOverlayProps {
 
 export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverlayProps) {
   const router = useRouter();
+  const { data: session, status: authStatus } = useSession();
   const [progress, setProgress] = useState<ScanProgress[]>([]);
   const [currentStep, setCurrentStep] = useState<ScanProgress | null>(null);
   const [complete, setComplete] = useState<ScanComplete | null>(null);
@@ -110,6 +113,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
   const hasStarted = useRef(false);
+  const isLoggedIn = authStatus === "authenticated";
 
   const addTerminalLine = useCallback((line: string) => {
     setTerminalLines((prev) => [...prev.slice(-50), line]); // Keep last 50 lines
@@ -477,13 +481,47 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 )}
               </div>
 
-              <button
-                onClick={() => router.push(`/scan/${complete.scanId}`)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
-              >
-                View Full Report
-                <ArrowRight className="h-4 w-4" />
-              </button>
+              {isLoggedIn ? (
+                <button
+                  onClick={() => router.push(`/scan/${complete.scanId}`)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
+                >
+                  View Full Report
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+                    <p className="text-sm text-amber-300">
+                      Create a free account to view your full security report with detailed findings.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Store scan ID so we can redirect after registration
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem("pendingScanId", complete.scanId);
+                      }
+                      router.push("/register");
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Sign Up Free to View Report
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem("pendingScanId", complete.scanId);
+                      }
+                      router.push("/login");
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-700 px-6 py-3 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
+                  >
+                    Already have an account? Log in
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
 

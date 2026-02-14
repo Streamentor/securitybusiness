@@ -53,6 +53,9 @@ function Navbar() {
             <a href="#pricing" className="text-sm text-gray-400 transition hover:text-white">
               Pricing
             </a>
+            <Link href="/pricing" className="text-sm text-gray-400 transition hover:text-white">
+              Plans & Credits
+            </Link>
           </div>
 
           <div className="flex items-center gap-3">
@@ -120,7 +123,7 @@ function HeroSection() {
           >
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-400">
               <Sparkles className="h-4 w-4" />
-              Free for SaaS builders — no credit card needed
+              3 free scans for SaaS builders — no credit card needed
             </div>
           </motion.div>
 
@@ -142,7 +145,7 @@ function HeroSection() {
             className="mx-auto mt-6 max-w-2xl text-lg text-gray-400 sm:text-xl"
           >
             We crawl your entire website and analyze it for security vulnerabilities.
-            Get a detailed report with actionable fixes — completely free.
+            Get a detailed report with severity scores — upgrade for actionable fixes.
           </motion.p>
 
           <motion.form
@@ -173,7 +176,7 @@ function HeroSection() {
               </button>
             </div>
             <p className="mt-3 text-sm text-gray-500">
-              ✓ No signup required &nbsp; ✓ Full site crawl &nbsp; ✓ Detailed report
+              ✓ 3 free scans &nbsp; ✓ Full site crawl &nbsp; ✓ Detailed report
             </p>
           </motion.form>
 
@@ -355,7 +358,7 @@ function HowItWorksSection() {
       step: "01",
       title: "Enter your URL",
       description:
-        "Just paste your website URL into the scanner. No account needed for your first scan.",
+        "Just paste your website URL into the scanner. Start with 3 free scans — no credit card required.",
     },
     {
       step: "02",
@@ -367,7 +370,7 @@ function HowItWorksSection() {
       step: "03",
       title: "Get your report",
       description:
-        "Receive a detailed security report with severity ratings, explanations, and step-by-step remediation guides.",
+        "Receive a detailed security report with severity ratings and explanations. Upgrade to unlock step-by-step remediation guides.",
     },
   ];
 
@@ -417,49 +420,47 @@ function PricingSection() {
       name: "Free",
       price: "$0",
       period: "forever",
-      description: "Perfect to get started and test your site",
+      description: "Try SecureSaaS and scan your first site",
       features: [
-        "3 scans per month",
-        "Up to 10 pages per scan",
-        "50+ vulnerability checks",
-        "Security score",
-        "Remediation guides",
+        "3 scan credits (one-time)",
+        "Up to 25 pages per scan",
+        "60+ vulnerability checks",
+        "Security score & severity breakdown",
+        "Vulnerability descriptions",
       ],
       cta: "Start Free",
       popular: false,
     },
     {
       name: "Starter",
-      price: "$19",
+      price: "$29",
       period: "/month",
-      description: "For growing SaaS products",
+      description: "For indie hackers & small SaaS teams",
       features: [
-        "25 scans per month",
-        "Up to 50 pages per scan",
-        "50+ vulnerability checks",
-        "CSP deep analysis",
-        "Email security audit",
-        "Priority scanning",
-        "Email alerts",
-        "PDF export",
+        "10 scan credits / month",
+        "60+ vulnerability checks",
+        "✨ Fix suggestions & remedies",
+        "✨ PDF report export",
+        "Email notifications",
+        "Credits roll over (max 20)",
       ],
-      cta: "Get Started",
+      cta: "Get Starter",
       popular: true,
     },
     {
       name: "Pro",
-      price: "$49",
+      price: "$79",
       period: "/month",
-      description: "For serious SaaS businesses",
+      description: "For growing SaaS businesses",
       features: [
-        "Unlimited scans",
-        "Up to 200 pages per scan",
-        "50+ vulnerability checks",
-        "API access",
-        "Scheduled scans",
-        "Slack integration",
-        "Custom branding",
-        "Team access (5 seats)",
+        "30 scan credits / month",
+        "Up to 50 pages per scan",
+        "✨ Fix suggestions & remedies",
+        "✨ API access & scheduled scans",
+        "✨ Slack & webhook alerts",
+        "✨ Team access (5 seats)",
+        "Priority scanning queue",
+        "Credits roll over (max 60)",
       ],
       cta: "Go Pro",
       popular: false,

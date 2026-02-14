@@ -20,6 +20,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldX,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { formatDate, getSeverityColor, getScoreColor, getScoreLabel } from "@/lib/utils";
 
@@ -101,7 +103,7 @@ function ScoreGauge({ score }: { score: number }) {
   );
 }
 
-function VulnerabilityCard({ vulnerability }: { vulnerability: Vulnerability }) {
+function VulnerabilityCard({ vulnerability, canViewRemedies }: { vulnerability: Vulnerability; canViewRemedies: boolean }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -153,9 +155,28 @@ function VulnerabilityCard({ vulnerability }: { vulnerability: Vulnerability }) 
 
           <div>
             <h4 className="mb-1 text-sm font-medium text-emerald-400">How to Fix</h4>
-            <p className="text-sm text-gray-300 leading-relaxed rounded-lg bg-gray-800/50 p-3">
-              {vulnerability.remedy}
-            </p>
+            {canViewRemedies ? (
+              <p className="text-sm text-gray-300 leading-relaxed rounded-lg bg-gray-800/50 p-3">
+                {vulnerability.remedy}
+              </p>
+            ) : (
+              <div className="relative rounded-lg bg-gray-800/50 p-3 overflow-hidden">
+                <p className="text-sm text-gray-300 leading-relaxed select-none blur-sm" aria-hidden>
+                  {vulnerability.remedy}
+                </p>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-[2px]">
+                  <Lock className="h-5 w-5 text-amber-400 mb-2" />
+                  <p className="text-sm font-medium text-white">Upgrade to unlock fix suggestions</p>
+                  <Link
+                    href="/pricing"
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-1.5 text-xs font-medium text-white hover:from-emerald-600 hover:to-cyan-600 transition"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    View Plans
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -168,18 +189,29 @@ export default function ScanResultPage() {
   const [scan, setScan] = useState<Scan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [userPlan, setUserPlan] = useState<string>("free");
 
   useEffect(() => {
-    async function fetchScan() {
+    async function fetchData() {
       try {
-        const res = await fetch(`/api/scan/${params.id}`);
-        if (!res.ok) {
+        const [scanRes, planRes] = await Promise.all([
+          fetch(`/api/scan/${params.id}`),
+          fetch("/api/user/plan"),
+        ]);
+
+        if (!scanRes.ok) {
           setError("Scan not found");
           setLoading(false);
           return;
         }
-        const data = await res.json();
-        setScan(data);
+
+        const scanData = await scanRes.json();
+        setScan(scanData);
+
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          setUserPlan(planData.plan || "free");
+        }
       } catch {
         setError("Failed to load scan results");
       } finally {
@@ -187,8 +219,10 @@ export default function ScanResultPage() {
       }
     }
 
-    fetchScan();
+    fetchData();
   }, [params.id]);
+
+  const canViewRemedies = userPlan === "starter" || userPlan === "pro";
 
   if (loading) {
     return (
@@ -306,10 +340,21 @@ export default function ScanResultPage() {
         {/* Vulnerabilities List */}
         {sortedVulns.length > 0 ? (
           <div>
-            <h2 className="mb-4 text-xl font-semibold">Vulnerabilities Found</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Vulnerabilities Found</h2>
+              {!canViewRemedies && (
+                <Link
+                  href="/pricing"
+                  className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-400 transition hover:from-emerald-500/20 hover:to-cyan-500/20"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Upgrade to unlock all fix suggestions
+                </Link>
+              )}
+            </div>
             <div className="space-y-3">
               {sortedVulns.map((vuln) => (
-                <VulnerabilityCard key={vuln.id} vulnerability={vuln} />
+                <VulnerabilityCard key={vuln.id} vulnerability={vuln} canViewRemedies={canViewRemedies} />
               ))}
             </div>
           </div>

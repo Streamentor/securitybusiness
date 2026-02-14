@@ -19,6 +19,9 @@ import {
   ExternalLink,
   ShieldCheck,
   XCircle,
+  Sparkles,
+  Zap,
+  CreditCard,
 } from "lucide-react";
 import { formatDate, getScoreColor, getScoreLabel } from "@/lib/utils";
 
@@ -37,6 +40,12 @@ interface Scan {
   vulnerabilities: Vulnerability[];
 }
 
+interface UserPlan {
+  plan: string;
+  credits: number;
+  scansUsed: number;
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -45,6 +54,7 @@ export default function DashboardPage() {
   const [url, setUrl] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanUrl, setScanUrl] = useState("");
+  const [userPlan, setUserPlan] = useState<UserPlan>({ plan: "free", credits: 3, scansUsed: 0 });
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -53,12 +63,20 @@ export default function DashboardPage() {
   }, [status, router]);
 
   useEffect(() => {
-    async function fetchScans() {
+    async function fetchData() {
       try {
-        const res = await fetch("/api/scan");
-        if (res.ok) {
-          const data = await res.json();
+        const [scansRes, planRes] = await Promise.all([
+          fetch("/api/scan"),
+          fetch("/api/user/plan"),
+        ]);
+
+        if (scansRes.ok) {
+          const data = await scansRes.json();
           setScans(data);
+        }
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          setUserPlan(planData);
         }
       } catch {
         // Silently handle errors
@@ -68,13 +86,37 @@ export default function DashboardPage() {
     }
 
     if (status === "authenticated") {
-      fetchScans();
+      fetchData();
     }
   }, [status]);
+
+  const [billingLoading, setBillingLoading] = useState(false);
+
+  async function handleManageBilling() {
+    setBillingLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Failed to open billing portal.");
+      }
+    } catch {
+      alert("Failed to open billing portal.");
+    } finally {
+      setBillingLoading(false);
+    }
+  }
 
   function handleScan(e: React.FormEvent) {
     e.preventDefault();
     if (!url.trim()) return;
+
+    if (userPlan.credits <= 0) {
+      alert("No scan credits remaining. Please upgrade your plan.");
+      return;
+    }
 
     let normalizedUrl = url.trim();
     if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
@@ -133,6 +175,50 @@ export default function DashboardPage() {
           <p className="mt-1 text-gray-400">
             Scan your websites and monitor security vulnerabilities
           </p>
+        </div>
+
+        {/* Plan & Credits */}
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+            <div className="text-xs font-medium uppercase text-gray-500">Plan</div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-lg font-bold capitalize text-white">{userPlan.plan}</span>
+              {userPlan.plan === "free" ? (
+                <Link href="/pricing" className="text-xs text-emerald-400 hover:text-emerald-300">
+                  Upgrade
+                </Link>
+              ) : (
+                <button
+                  onClick={handleManageBilling}
+                  disabled={billingLoading}
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
+                >
+                  <CreditCard className="h-3 w-3" />
+                  {billingLoading ? "Loading..." : "Manage billing"}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+            <div className="text-xs font-medium uppercase text-gray-500">Credits Remaining</div>
+            <div className="mt-1 flex items-center gap-2">
+              <Zap className={`h-4 w-4 ${userPlan.credits > 0 ? "text-amber-400" : "text-gray-600"}`} />
+              <span className={`text-lg font-bold ${userPlan.credits > 0 ? "text-white" : "text-red-400"}`}>
+                {userPlan.credits}
+              </span>
+              {userPlan.credits === 0 && (
+                <Link href="/pricing" className="text-xs text-emerald-400 hover:text-emerald-300">
+                  Get more
+                </Link>
+              )}
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+            <div className="text-xs font-medium uppercase text-gray-500">Total Scans</div>
+            <div className="mt-1">
+              <span className="text-lg font-bold text-white">{userPlan.scansUsed}</span>
+            </div>
+          </div>
         </div>
 
         {/* New Scan */}
@@ -280,11 +366,11 @@ export default function DashboardPage() {
           setScanning(false);
           setScanUrl("");
           setUrl("");
-          // Refresh scan history
-          fetch("/api/scan")
-            .then((res) => res.json())
-            .then((data) => setScans(data))
-            .catch(() => {});
+          // Refresh scan history and plan data
+          Promise.all([
+            fetch("/api/scan").then((res) => res.json()).then((data) => setScans(data)),
+            fetch("/api/user/plan").then((res) => res.json()).then((data) => setUserPlan(data)),
+          ]).catch(() => {});
         }}
       />
     </div>

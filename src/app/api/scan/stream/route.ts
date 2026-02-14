@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { scanWebsite, ScanProgress } from "@/lib/scanner";
+import { scanWebsite, ScanProgress, VulnerabilityResult } from "@/lib/scanner";
 import { auth } from "@/lib/auth";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
@@ -30,13 +30,28 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Get user session (optional)
+  // Get user session (optional) and check credits
   let userId: string | null = null;
   try {
     const session = await auth();
     userId = session?.user?.id || null;
   } catch {
     // Non-fatal
+  }
+
+  // Check credits if user is logged in
+  if (userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { credits: true, plan: true },
+    });
+
+    if (user && user.credits <= 0) {
+      return new Response(
+        JSON.stringify({ error: "No scan credits remaining. Please upgrade your plan." }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
+      );
+    }
   }
 
   // Create the readable stream
@@ -101,11 +116,14 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // Update user scan count
+        // Update user scan count and deduct credit
         if (userId) {
           await prisma.user.update({
             where: { id: userId },
-            data: { scansUsed: { increment: 1 } },
+            data: {
+              scansUsed: { increment: 1 },
+              credits: { decrement: 1 },
+            },
           });
         }
 
@@ -114,11 +132,11 @@ export async function POST(req: NextRequest) {
           score: results.score,
           totalVulnerabilities: results.vulnerabilities.length,
           pagesScanned: results.pagesScanned,
-          critical: results.vulnerabilities.filter((v) => v.severity === "critical").length,
-          high: results.vulnerabilities.filter((v) => v.severity === "high").length,
-          medium: results.vulnerabilities.filter((v) => v.severity === "medium").length,
-          low: results.vulnerabilities.filter((v) => v.severity === "low").length,
-          info: results.vulnerabilities.filter((v) => v.severity === "info").length,
+          critical: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "critical").length,
+          high: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "high").length,
+          medium: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "medium").length,
+          low: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "low").length,
+          info: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "info").length,
         });
       } catch (error) {
         console.error("Stream scan error:", error);

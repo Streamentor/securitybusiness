@@ -789,16 +789,90 @@ async function checkRedirectChain(url: string): Promise<VulnerabilityResult[]> {
 
 // ─── Score calculation ─────────────────────────────────────────────
 function calculateScore(vulns: VulnerabilityResult[]): number {
-  let score = 100;
+  // Category-based scoring: each category has a weight and we calculate
+  // how much of that category's budget is lost based on findings.
+  // This prevents a site with many low/info issues from getting 0.
+
+  const categoryWeights: Record<string, number> = {
+    ssl: 15,
+    headers: 12,
+    csp: 8,
+    cookies: 6,
+    csrf: 8,
+    xss: 10,
+    "sensitive-file": 10,
+    "info-disclosure": 4,
+    cors: 5,
+    email: 5,
+    "api-exposure": 6,
+    "http-methods": 3,
+    waf: 2,
+    redirect: 2,
+    "source-maps": 3,
+    "directory-listing": 3,
+    "open-redirect": 4,
+    "outdated-lib": 4,
+    sri: 3,
+    iframe: 1,
+    seo: 0,
+    fingerprint: 0,
+  };
+
+  const severityMultipliers: Record<string, number> = {
+    critical: 1.0,
+    high: 0.75,
+    medium: 0.45,
+    low: 0.2,
+    info: 0.05,
+  };
+
+  // Group vulns by category
+  const byCategory = new Map<string, VulnerabilityResult[]>();
   for (const v of vulns) {
-    switch (v.severity) {
-      case "critical": score -= 25; break;
-      case "high": score -= 15; break;
-      case "medium": score -= 8; break;
-      case "low": score -= 3; break;
-      case "info": score -= 1; break;
+    const cat = v.type;
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(v);
+  }
+
+  let totalWeight = 0;
+  let totalLost = 0;
+
+  for (const [cat, weight] of Object.entries(categoryWeights)) {
+    if (weight === 0) continue;
+    totalWeight += weight;
+
+    const catVulns = byCategory.get(cat);
+    if (!catVulns || catVulns.length === 0) continue;
+
+    // Take the worst severity multiplier in this category,
+    // then add diminishing amounts for additional findings
+    const sorted = [...catVulns].sort(
+      (a, b) => (severityMultipliers[b.severity] ?? 0) - (severityMultipliers[a.severity] ?? 0)
+    );
+
+    let catLoss = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const mult = severityMultipliers[sorted[i].severity] ?? 0.1;
+      // Diminishing returns: each additional finding in same category adds less
+      const diminish = 1 / (1 + i * 0.6);
+      catLoss += mult * diminish;
+    }
+
+    // Cap category loss at 100% of its weight
+    const lost = Math.min(weight, weight * Math.min(catLoss, 1));
+    totalLost += lost;
+  }
+
+  // Also handle unknown categories
+  for (const [cat, catVulns] of byCategory) {
+    if (cat in categoryWeights) continue;
+    for (const v of catVulns) {
+      const mult = severityMultipliers[v.severity] ?? 0.1;
+      totalLost += 2 * mult; // small penalty for unknown categories
     }
   }
+
+  const score = Math.round(((totalWeight - totalLost) / totalWeight) * 100);
   return Math.max(0, Math.min(100, score));
 }
 
