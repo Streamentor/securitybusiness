@@ -9,7 +9,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Use non-pooling direct connection for migrations/db push
-    url: process.env["POSTGRES_URL_NON_POOLING"],
+    // Use the transaction pooler on port 6543 (port 5432 times out from local)
+    url: process.env["DATABASE_URL"],
   },
 });

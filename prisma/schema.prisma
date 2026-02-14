@@ -14,7 +14,8 @@ model User {
   id                   String    @id @default(cuid())
   name                 String
   email                String    @unique
-  hashedPassword       String
+  hashedPassword       String?
+  image                String?
   plan                 String    @default("free") // free, starter, pro
   credits              Int       @default(3)      // scan credits remaining
   scansUsed            Int       @default(0)
