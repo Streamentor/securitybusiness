@@ -9,8 +9,8 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  // Remove sslmode from URL if present (pg handles ssl via config)
-  const cleanUrl = connectionString.replace(/[?&]sslmode=[^&]*/g, "");
+  // Strip query params (sslmode, pgbouncer) that pg driver doesn't understand
+  const cleanUrl = connectionString.split("?")[0];
   const pool = new pg.Pool({
     connectionString: cleanUrl,
     ssl: { rejectUnauthorized: false },
