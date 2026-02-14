@@ -62,6 +62,19 @@ function LoginForm() {
 
       if (pendingPlan) {
         localStorage.removeItem("pendingPlan");
+        // Claim any pending scan before redirecting to checkout
+        if (pendingScanId) {
+          sessionStorage.removeItem("pendingScanId");
+          try {
+            await fetch("/api/scan/claim", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scanId: pendingScanId }),
+            });
+          } catch {
+            // Non-fatal
+          }
+        }
         // Start checkout for the plan they chose
         try {
           const res = await fetch("/api/stripe/checkout", {
@@ -80,6 +93,16 @@ function LoginForm() {
         router.push("/dashboard");
       } else if (pendingScanId) {
         sessionStorage.removeItem("pendingScanId");
+        // Claim the scan so it appears in the user's scan history
+        try {
+          await fetch("/api/scan/claim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scanId: pendingScanId }),
+          });
+        } catch {
+          // Non-fatal
+        }
         router.push(`/scan/${pendingScanId}`);
       } else if (redirectTo) {
         router.push(redirectTo);

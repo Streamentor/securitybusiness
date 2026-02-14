@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -44,6 +45,7 @@ interface Scan {
   totalPages: number;
   createdAt: string;
   completedAt: string | null;
+  userId: string | null;
   vulnerabilities: Vulnerability[];
 }
 
@@ -205,6 +207,7 @@ function VulnerabilityCard({ vulnerability, canViewRemedies, index }: { vulnerab
 
 export default function ScanResultPage() {
   const params = useParams();
+  const { data: session } = useSession();
   const [scan, setScan] = useState<Scan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -227,6 +230,19 @@ export default function ScanResultPage() {
         const scanData = await scanRes.json();
         setScan(scanData);
 
+        // Auto-claim: if user is logged in and scan has no owner, claim it
+        if (session?.user?.id && !scanData.userId) {
+          try {
+            await fetch("/api/scan/claim", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scanId: scanData.id }),
+            });
+          } catch {
+            // Non-fatal — scan will still display, just won't appear in history
+          }
+        }
+
         if (planRes.ok) {
           const planData = await planRes.json();
           setUserPlan(planData.plan || "free");
@@ -239,7 +255,7 @@ export default function ScanResultPage() {
     }
 
     fetchData();
-  }, [params.id]);
+  }, [params.id, session?.user?.id]);
 
   const canViewRemedies = userPlan === "starter" || userPlan === "pro";
 
