@@ -39,14 +39,17 @@ export async function POST(req: NextRequest) {
     // Non-fatal
   }
 
-  // Check credits if user is logged in
+  // Verify user exists and check credits
   if (userId) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { credits: true, plan: true },
     });
 
-    if (user && user.credits <= 0) {
+    if (!user) {
+      // Session references a deleted user (e.g. after DB reset)
+      userId = null;
+    } else if (user.credits <= 0) {
       return new Response(
         JSON.stringify({ error: "No scan credits remaining. Please upgrade your plan." }),
         { status: 403, headers: { "Content-Type": "application/json" } }
