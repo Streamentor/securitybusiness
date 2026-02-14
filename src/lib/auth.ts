@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
+import Google from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
 
@@ -8,6 +9,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   providers: [
     GitHub,
+    Google,
     Credentials({
       name: "credentials",
       credentials: {
@@ -49,7 +51,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider === "github") {
+      if (account?.provider === "github" || account?.provider === "google") {
         // Create or find the user in our DB
         const email = user.email;
         if (!email) return false;
@@ -59,7 +61,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
 
         if (!existingUser) {
-          // Create new user for GitHub sign-in
+          // Create new user for OAuth sign-in
           const newUser = await prisma.user.create({
             data: {
               email,
