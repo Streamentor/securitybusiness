@@ -113,7 +113,22 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
   const hasStarted = useRef(false);
-  const isLoggedIn = authStatus === "authenticated";
+  const [verifiedLoggedIn, setVerifiedLoggedIn] = useState(false);
+
+  // Verify the user actually exists in DB (handles stale JWT after DB reset)
+  useEffect(() => {
+    if (authStatus !== "authenticated") {
+      setVerifiedLoggedIn(false);
+      return;
+    }
+    fetch("/api/user/plan")
+      .then((res) => res.json())
+      .then((data) => {
+        // If the API returns "anonymous" despite having a session, the user doesn't exist in DB
+        setVerifiedLoggedIn(data.plan !== "anonymous");
+      })
+      .catch(() => setVerifiedLoggedIn(false));
+  }, [authStatus]);
 
   const addTerminalLine = useCallback((line: string) => {
     setTerminalLines((prev) => [...prev.slice(-50), line]); // Keep last 50 lines
@@ -486,7 +501,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 )}
               </div>
 
-              {isLoggedIn ? (
+              {verifiedLoggedIn ? (
                 <button
                   onClick={() => router.push(`/scan/${complete.scanId}`)}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
