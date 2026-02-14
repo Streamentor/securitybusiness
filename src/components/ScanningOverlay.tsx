@@ -109,6 +109,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
   const [currentStep, setCurrentStep] = useState<ScanProgress | null>(null);
   const [complete, setComplete] = useState<ScanComplete | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [requireAuth, setRequireAuth] = useState(false);
   const [totalFound, setTotalFound] = useState(0);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -137,7 +138,19 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
         });
 
         if (!res.ok || !res.body) {
-          setError("Failed to start scan. Please try again.");
+          // Try to parse the JSON error for requireAuth flag
+          try {
+            const errData = await res.json();
+            if (errData.requireAuth) {
+              setRequireAuth(true);
+              setError(errData.error || "Please create an account to run scans.");
+              addTerminalLine("[auth] Authentication required to run scans");
+              return;
+            }
+            setError(errData.error || "Failed to start scan. Please try again.");
+          } catch {
+            setError("Failed to start scan. Please try again.");
+          }
           addTerminalLine("[error] Connection failed");
           return;
         }
@@ -257,7 +270,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 </div>
                 <div>
                   <h2 className="font-semibold text-white">
-                    {complete ? "Scan Complete" : error ? "Scan Failed" : "Scanning…"}
+                    {complete ? "Scan Complete" : requireAuth ? "Account Required" : error ? "Scan Failed" : "Scanning…"}
                   </h2>
                   <p className="text-sm text-gray-400 truncate max-w-md">{url}</p>
                 </div>
@@ -284,7 +297,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           </div>
 
           {/* Progress bar */}
-          {!complete && !error && (
+          {!complete && !error && !requireAuth && (
             <div className="px-6 pt-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-400">
@@ -304,6 +317,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           )}
 
           {/* Check statuses grid */}
+          {!requireAuth && (
           <div className="grid grid-cols-4 gap-2 p-4 sm:grid-cols-4">
             {[
               { step: "crawl", label: "Crawl" },
@@ -376,7 +390,10 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               );
             })}
           </div>
+          )}
 
+          {!requireAuth && (
+          <>
           {/* Terminal output */}
           <div className="mx-4 mb-4 overflow-hidden rounded-xl border border-gray-800 bg-gray-950">
             <div className="flex items-center gap-2 border-b border-gray-800 bg-gray-900/80 px-4 py-2">
@@ -444,6 +461,8 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 Scanning…
               </div>
             </div>
+          )}
+          </>
           )}
 
           {/* Complete summary */}
@@ -526,7 +545,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           )}
 
           {/* Error state */}
-          {error && (
+          {error && !requireAuth && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -542,6 +561,50 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               >
                 Close
               </button>
+            </motion.div>
+          )}
+
+          {/* Auth required state */}
+          {requireAuth && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="border-t border-gray-800 px-6 py-4"
+            >
+              <div className="space-y-3">
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-center">
+                  <Lock className="mx-auto mb-2 h-6 w-6 text-emerald-400" />
+                  <p className="text-sm font-medium text-white mb-1">
+                    Sign up to scan your website
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Create a free account to run security scans and get detailed vulnerability reports. You get 3 free scans!
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      sessionStorage.setItem("pendingScanUrl", url);
+                    }
+                    router.push("/register");
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Sign Up Free — 3 Scans Included
+                </button>
+                <button
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      sessionStorage.setItem("pendingScanUrl", url);
+                    }
+                    router.push("/login");
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-700 px-6 py-3 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
+                >
+                  Already have an account? Log in
+                </button>
+              </div>
             </motion.div>
           )}
         </motion.div>

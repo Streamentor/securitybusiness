@@ -30,7 +30,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Session expired. Please log out and log in again." },
+        { status: 401 }
+      );
     }
 
     // Don't allow subscribing to the same plan
