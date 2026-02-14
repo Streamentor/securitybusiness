@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   HelpCircle,
   Loader2,
+  LayoutDashboard,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -179,18 +180,30 @@ export default function PricingPage() {
                 <ArrowLeft className="h-4 w-4" />
                 Home
               </Link>
-              <Link
-                href="/login"
-                className="rounded-lg px-4 py-2 text-sm text-gray-300 transition hover:text-white"
-              >
-                Log in
-              </Link>
-              <Link
-                href="/register"
-                className="rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
-              >
-                Get Started
-              </Link>
+              {session?.user ? (
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="rounded-lg px-4 py-2 text-sm text-gray-300 transition hover:text-white"
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
