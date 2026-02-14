@@ -103,8 +103,9 @@ function ScoreGauge({ score }: { score: number }) {
   );
 }
 
-function VulnerabilityCard({ vulnerability, canViewRemedies }: { vulnerability: Vulnerability; canViewRemedies: boolean }) {
-  const [expanded, setExpanded] = useState(false);
+function VulnerabilityCard({ vulnerability, canViewRemedies, index }: { vulnerability: Vulnerability; canViewRemedies: boolean; index: number }) {
+  // Auto-expand the first vulnerability for free users so they see the locked remedy CTA
+  const [expanded, setExpanded] = useState(!canViewRemedies && index === 0);
 
   return (
     <motion.div
@@ -154,26 +155,44 @@ function VulnerabilityCard({ vulnerability, canViewRemedies }: { vulnerability: 
           </div>
 
           <div>
-            <h4 className="mb-1 text-sm font-medium text-emerald-400">How to Fix</h4>
+            <h4 className="mb-1 text-sm font-medium text-emerald-400 flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              How to Fix
+            </h4>
             {canViewRemedies ? (
               <p className="text-sm text-gray-300 leading-relaxed rounded-lg bg-gray-800/50 p-3">
                 {vulnerability.remedy}
               </p>
             ) : (
-              <div className="relative rounded-lg bg-gray-800/50 p-3 overflow-hidden">
-                <p className="text-sm text-gray-300 leading-relaxed select-none blur-sm" aria-hidden>
+              <div className="relative rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-orange-500/5 p-4 overflow-hidden">
+                {/* Blurred preview */}
+                <p className="text-sm text-gray-400 leading-relaxed select-none blur-[6px] pointer-events-none" aria-hidden>
                   {vulnerability.remedy}
                 </p>
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-[2px]">
-                  <Lock className="h-5 w-5 text-amber-400 mb-2" />
-                  <p className="text-sm font-medium text-white">Upgrade to unlock fix suggestions</p>
-                  <Link
-                    href="/pricing"
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-1.5 text-xs font-medium text-white hover:from-emerald-600 hover:to-cyan-600 transition"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    View Plans
-                  </Link>
+                {/* Overlay CTA */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950/40 backdrop-blur-[1px]">
+                  <div className="flex flex-col items-center gap-3 p-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/30">
+                      <Lock className="h-5 w-5 text-amber-400" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-white">
+                        Fix available — upgrade to view
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-400">
+                        {vulnerability.severity === "critical" || vulnerability.severity === "high"
+                          ? "This is a high-priority issue. Get the fix now."
+                          : "Step-by-step instructions to resolve this issue."}
+                      </p>
+                    </div>
+                    <Link
+                      href="/pricing"
+                      className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:from-emerald-600 hover:to-cyan-600 hover:shadow-emerald-500/30"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Unlock Fixes — From $29/mo
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}
@@ -265,7 +284,7 @@ export default function ScanResultPage() {
   );
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className={`min-h-screen ${!canViewRemedies && sortedVulns.length > 0 ? "pb-32" : "pb-20"}`}>
       {/* Header */}
       <div className="border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
@@ -340,21 +359,48 @@ export default function ScanResultPage() {
         {/* Vulnerabilities List */}
         {sortedVulns.length > 0 ? (
           <div>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4">
               <h2 className="text-xl font-semibold">Vulnerabilities Found</h2>
-              {!canViewRemedies && (
-                <Link
-                  href="/pricing"
-                  className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-400 transition hover:from-emerald-500/20 hover:to-cyan-500/20"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Upgrade to unlock all fix suggestions
-                </Link>
-              )}
             </div>
+
+            {/* Upgrade Banner — shown to free users */}
+            {!canViewRemedies && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 via-cyan-500/5 to-emerald-500/5 p-6 sm:p-8"
+              >
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/20">
+                      <Sparkles className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">
+                        We found {sortedVulns.length} issue{sortedVulns.length !== 1 ? "s" : ""} — unlock the fixes
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-400">
+                        {severityCounts.critical + severityCounts.high > 0
+                          ? `Including ${severityCounts.critical + severityCounts.high} high-priority issue${severityCounts.critical + severityCounts.high !== 1 ? "s" : ""} that need immediate attention. `
+                          : ""}
+                        Upgrade to get step-by-step remediation guides for every vulnerability.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/pricing"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-semibold text-white shadow-lg shadow-emerald-500/25 transition hover:from-emerald-600 hover:to-cyan-600 hover:shadow-emerald-500/40"
+                  >
+                    <Lock className="h-4 w-4" />
+                    Unlock All Fixes
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+
             <div className="space-y-3">
-              {sortedVulns.map((vuln) => (
-                <VulnerabilityCard key={vuln.id} vulnerability={vuln} canViewRemedies={canViewRemedies} />
+              {sortedVulns.map((vuln, i) => (
+                <VulnerabilityCard key={vuln.id} vulnerability={vuln} canViewRemedies={canViewRemedies} index={i} />
               ))}
             </div>
           </div>
@@ -378,6 +424,31 @@ export default function ScanResultPage() {
           </Link>
         </div>
       </div>
+
+      {/* Sticky bottom upgrade bar — free users only */}
+      {!canViewRemedies && sortedVulns.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-50 border-t border-gray-800 bg-gray-950/95 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 ring-1 ring-amber-500/30">
+                <Lock className="h-4 w-4 text-amber-400" />
+              </div>
+              <p className="text-sm text-gray-300 truncate">
+                <span className="font-semibold text-white">{sortedVulns.length} fix{sortedVulns.length !== 1 ? "es" : ""}</span>{" "}
+                available — unlock step-by-step remediation
+              </p>
+            </div>
+            <Link
+              href="/pricing"
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:from-emerald-600 hover:to-cyan-600"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">Upgrade Now</span>
+              <span className="sm:hidden">Upgrade</span>
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
