@@ -65,8 +65,10 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
+    // Only redirect after session has fully loaded — don't redirect during "loading" state
+    // as useSession() may briefly show "unauthenticated" before the cookie is parsed
     if (status === "unauthenticated") {
-      router.push("/login");
+      router.push("/login?redirect=/dashboard");
     }
   }, [status, router]);
 

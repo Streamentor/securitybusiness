@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Suspense } from "react";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const sessionId = searchParams.get("session_id");
   const [message, setMessage] = useState("Activating your subscription...");
 
   const activate = useCallback(async () => {
     if (!sessionId) {
-      router.replace("/dashboard");
+      window.location.href = "/dashboard";
       return;
     }
 
@@ -29,11 +28,11 @@ function SuccessContent() {
       // Even if verify fails, redirect — webhook may handle it
     }
 
-    // Step 2: Brief pause then redirect to dashboard
+    // Step 2: Hard redirect to dashboard (ensures fresh session load)
     setMessage("Redirecting to your dashboard...");
-    await new Promise((r) => setTimeout(r, 1000));
-    router.replace("/dashboard");
-  }, [sessionId, router]);
+    await new Promise((r) => setTimeout(r, 500));
+    window.location.href = "/dashboard";
+  }, [sessionId]);
 
   useEffect(() => {
     activate();
