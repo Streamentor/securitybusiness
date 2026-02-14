@@ -20,6 +20,12 @@ import {
   Loader2,
   ArrowRight,
   Radar,
+  Globe,
+  Network,
+  Map,
+  ShieldAlert,
+  ArrowRightLeft,
+  FileCode,
 } from "lucide-react";
 
 interface ScanProgress {
@@ -52,10 +58,16 @@ const stepIcons: Record<string, React.ElementType> = {
   robots: Bot,
   "error-pages": AlertTriangle,
   directories: FolderOpen,
+  "api-probe": Globe,
+  "http-methods": Network,
+  sitemap: Map,
+  waf: ShieldAlert,
+  redirects: ArrowRightLeft,
   headers: ShieldCheck,
   cookies: Cookie,
   csp: Shield,
   html: Code2,
+  "source-maps": FileCode,
   fingerprint: Fingerprint,
   saving: CheckCircle2,
 };
@@ -68,10 +80,16 @@ const stepColors: Record<string, string> = {
   robots: "text-purple-400",
   "error-pages": "text-orange-400",
   directories: "text-pink-400",
+  "api-probe": "text-sky-400",
+  "http-methods": "text-rose-400",
+  sitemap: "text-lime-400",
+  waf: "text-fuchsia-400",
+  redirects: "text-slate-400",
   headers: "text-cyan-400",
   cookies: "text-amber-400",
   csp: "text-teal-400",
   html: "text-indigo-400",
+  "source-maps": "text-orange-300",
   fingerprint: "text-violet-400",
   saving: "text-emerald-400",
 };
@@ -282,7 +300,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           )}
 
           {/* Check statuses grid */}
-          <div className="grid grid-cols-3 gap-2 p-4 sm:grid-cols-4">
+          <div className="grid grid-cols-4 gap-2 p-4 sm:grid-cols-4">
             {[
               { step: "crawl", label: "Crawl" },
               { step: "ssl", label: "SSL/TLS" },
@@ -291,10 +309,16 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               { step: "robots", label: "Robots" },
               { step: "error-pages", label: "Errors" },
               { step: "directories", label: "Dirs" },
+              { step: "api-probe", label: "APIs" },
+              { step: "http-methods", label: "Methods" },
+              { step: "sitemap", label: "Sitemap" },
+              { step: "waf", label: "WAF" },
+              { step: "redirects", label: "Redirects" },
               { step: "headers", label: "Headers" },
               { step: "cookies", label: "Cookies" },
               { step: "csp", label: "CSP" },
               { step: "html", label: "HTML" },
+              { step: "source-maps", label: "Src Maps" },
               { step: "fingerprint", label: "Tech" },
             ].map((item) => {
               const done = progress.find((p) => p.step === item.step);
@@ -408,7 +432,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           {!complete && !error && (
             <div className="flex items-center justify-between border-t border-gray-800 px-6 py-3">
               <div className="flex gap-4 text-xs text-gray-500">
-                <span>Steps: {currentStep?.currentStep || 0}/{currentStep?.totalSteps || 12}</span>
+                <span>Steps: {currentStep?.currentStep || 0}/{currentStep?.totalSteps || 16}</span>
                 <span>Issues: {totalFound}</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-500">

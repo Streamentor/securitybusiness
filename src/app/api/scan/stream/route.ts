@@ -70,8 +70,8 @@ export async function POST(req: NextRequest) {
           step: "saving",
           label: "Saving results to database…",
           status: "running",
-          totalSteps: 13,
-          currentStep: 13,
+          totalSteps: 17,
+          currentStep: 17,
         });
 
         // Save vulnerabilities
