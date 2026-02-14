@@ -30,41 +30,29 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Require authentication — no anonymous scans
+  // Check authentication (optional — anonymous scans are allowed)
   let userId: string | null = null;
   try {
     const session = await auth();
-    userId = session?.user?.id || null;
+    if (session?.user?.id) {
+      // Verify user still exists in DB (handles stale JWT after DB reset)
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { credits: true, plan: true },
+      });
+      if (user) {
+        if (user.credits <= 0) {
+          return new Response(
+            JSON.stringify({ error: "No scan credits remaining. Please upgrade your plan." }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        userId = session.user.id;
+      }
+      // If user not found in DB, treat as anonymous (stale session)
+    }
   } catch {
-    // Auth error
-  }
-
-  if (!userId) {
-    return new Response(
-      JSON.stringify({ error: "Please create an account to run scans.", requireAuth: true }),
-      { status: 401, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  // Verify user exists in DB and check credits
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { credits: true, plan: true },
-  });
-
-  if (!user) {
-    // Session references a deleted user (stale JWT after DB reset)
-    return new Response(
-      JSON.stringify({ error: "Session expired. Please log in again.", requireAuth: true }),
-      { status: 401, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  if (user.credits <= 0) {
-    return new Response(
-      JSON.stringify({ error: "No scan credits remaining. Please upgrade your plan." }),
-      { status: 403, headers: { "Content-Type": "application/json" } }
-    );
+    // Auth error — proceed as anonymous
   }
 
   // Create the readable stream
