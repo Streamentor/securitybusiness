@@ -9,8 +9,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
+  // Remove sslmode from URL if present (pg handles ssl via config)
+  const cleanUrl = connectionString.replace(/[?&]sslmode=[^&]*/g, "");
   const pool = new pg.Pool({
-    connectionString,
+    connectionString: cleanUrl,
     ssl: { rejectUnauthorized: false },
   });
   const adapter = new PrismaPg(pool);
