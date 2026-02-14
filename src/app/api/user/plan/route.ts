@@ -6,16 +6,37 @@ export async function GET() {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ plan: "anonymous", credits: 0, scansUsed: 0, hasSubscription: false });
+      return NextResponse.json({
+        plan: "anonymous",
+        credits: 0,
+        scansUsed: 0,
+        hasSubscription: false,
+        currentPeriodEnd: null,
+      });
     }
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { plan: true, credits: true, scansUsed: true, stripeSubscriptionId: true },
+      select: {
+        plan: true,
+        credits: true,
+        scansUsed: true,
+        stripeSubscriptionId: true,
+        currentPeriodEnd: true,
+        email: true,
+        name: true,
+        createdAt: true,
+      },
     });
 
     if (!user) {
-      return NextResponse.json({ plan: "anonymous", credits: 0, scansUsed: 0, hasSubscription: false });
+      return NextResponse.json({
+        plan: "anonymous",
+        credits: 0,
+        scansUsed: 0,
+        hasSubscription: false,
+        currentPeriodEnd: null,
+      });
     }
 
     return NextResponse.json({
@@ -23,8 +44,18 @@ export async function GET() {
       credits: user.credits,
       scansUsed: user.scansUsed,
       hasSubscription: !!user.stripeSubscriptionId,
+      currentPeriodEnd: user.currentPeriodEnd?.toISOString() || null,
+      email: user.email,
+      name: user.name,
+      memberSince: user.createdAt.toISOString(),
     });
   } catch {
-    return NextResponse.json({ plan: "anonymous", credits: 0, scansUsed: 0, hasSubscription: false });
+    return NextResponse.json({
+      plan: "anonymous",
+      credits: 0,
+      scansUsed: 0,
+      hasSubscription: false,
+      currentPeriodEnd: null,
+    });
   }
 }

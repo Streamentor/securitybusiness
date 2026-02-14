@@ -44,6 +44,8 @@ interface UserPlan {
   plan: string;
   credits: number;
   scansUsed: number;
+  hasSubscription: boolean;
+  currentPeriodEnd: string | null;
 }
 
 export default function DashboardPage() {
@@ -54,7 +56,13 @@ export default function DashboardPage() {
   const [url, setUrl] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanUrl, setScanUrl] = useState("");
-  const [userPlan, setUserPlan] = useState<UserPlan>({ plan: "free", credits: 3, scansUsed: 0 });
+  const [userPlan, setUserPlan] = useState<UserPlan>({
+    plan: "free",
+    credits: 3,
+    scansUsed: 0,
+    hasSubscription: false,
+    currentPeriodEnd: null,
+  });
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -177,49 +185,105 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Plan & Credits */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
-            <div className="text-xs font-medium uppercase text-gray-500">Plan</div>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-lg font-bold capitalize text-white">{userPlan.plan}</span>
-              {userPlan.plan === "free" ? (
-                <Link href="/pricing" className="text-xs text-emerald-400 hover:text-emerald-300">
-                  Upgrade
-                </Link>
-              ) : (
-                <button
-                  onClick={handleManageBilling}
-                  disabled={billingLoading}
-                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
-                >
-                  <CreditCard className="h-3 w-3" />
-                  {billingLoading ? "Loading..." : "Manage billing"}
-                </button>
-              )}
+        {/* Plan & Subscription */}
+        {userPlan.plan === "free" ? (
+          /* ── Free user: upgrade CTA ── */
+          <div className="mb-8 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 via-cyan-500/5 to-emerald-500/5 p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/20">
+                  <Sparkles className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Upgrade your plan</h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    You have <span className="font-semibold text-amber-400">{userPlan.credits}</span> free scan{userPlan.credits !== 1 ? "s" : ""} remaining.
+                    Upgrade to unlock fix suggestions, more credits, and priority scanning.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/pricing"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-semibold text-white shadow-lg shadow-emerald-500/25 transition hover:from-emerald-600 hover:to-cyan-600"
+              >
+                View Plans
+              </Link>
             </div>
           </div>
-          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
-            <div className="text-xs font-medium uppercase text-gray-500">Credits Remaining</div>
-            <div className="mt-1 flex items-center gap-2">
-              <Zap className={`h-4 w-4 ${userPlan.credits > 0 ? "text-amber-400" : "text-gray-600"}`} />
-              <span className={`text-lg font-bold ${userPlan.credits > 0 ? "text-white" : "text-red-400"}`}>
-                {userPlan.credits}
-              </span>
-              {userPlan.credits === 0 && (
-                <Link href="/pricing" className="text-xs text-emerald-400 hover:text-emerald-300">
-                  Get more
-                </Link>
-              )}
+        ) : (
+          /* ── Paid user: subscription details ── */
+          <div className="mb-8 rounded-2xl border border-gray-800 bg-gray-900/50 p-6">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500">
+                  <ShieldCheck className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold capitalize text-white">{userPlan.plan} Plan</h3>
+                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-400">
+                      Active
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-400">
+                    {userPlan.plan === "pro"
+                      ? "30 scans/mo • Fix suggestions • Priority scanning"
+                      : "10 scans/mo • Fix suggestions"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleManageBilling}
+                disabled={billingLoading}
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium text-gray-300 transition hover:bg-gray-800 hover:text-white disabled:opacity-50"
+              >
+                <CreditCard className="h-4 w-4" />
+                {billingLoading ? "Loading..." : "Manage Billing"}
+              </button>
+            </div>
+
+            {/* Stats row */}
+            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-3">
+                <div className="text-xs font-medium uppercase text-gray-500">Credits</div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <Zap className={`h-4 w-4 ${userPlan.credits > 0 ? "text-amber-400" : "text-gray-600"}`} />
+                  <span className={`text-xl font-bold ${userPlan.credits > 0 ? "text-white" : "text-red-400"}`}>
+                    {userPlan.credits}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-3">
+                <div className="text-xs font-medium uppercase text-gray-500">Scans Run</div>
+                <div className="mt-1">
+                  <span className="text-xl font-bold text-white">{userPlan.scansUsed}</span>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-3">
+                <div className="text-xs font-medium uppercase text-gray-500">Fix Suggestions</div>
+                <div className="mt-1">
+                  <span className="text-sm font-semibold text-emerald-400">✓ Unlocked</span>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-3">
+                <div className="text-xs font-medium uppercase text-gray-500">
+                  {userPlan.currentPeriodEnd ? "Renews" : "Status"}
+                </div>
+                <div className="mt-1">
+                  <span className="text-sm font-semibold text-white">
+                    {userPlan.currentPeriodEnd
+                      ? new Date(userPlan.currentPeriodEnd).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "Active"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
-            <div className="text-xs font-medium uppercase text-gray-500">Total Scans</div>
-            <div className="mt-1">
-              <span className="text-lg font-bold text-white">{userPlan.scansUsed}</span>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* New Scan */}
         <div className="mb-8 rounded-2xl border border-gray-800 bg-gray-900/50 p-6">
