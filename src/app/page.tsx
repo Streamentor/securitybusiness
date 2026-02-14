@@ -724,9 +724,9 @@ function Footer() {
           </div>
           <p className="text-sm text-gray-500">&copy; {new Date().getFullYear()} SecureSaaS. All rights reserved.</p>
           <div className="flex gap-6">
-            <a href="#" className="text-sm text-gray-400 hover:text-white">Privacy</a>
-            <a href="#" className="text-sm text-gray-400 hover:text-white">Terms</a>
-            <a href="#" className="text-sm text-gray-400 hover:text-white">Contact</a>
+            <a href="/privacy" className="text-sm text-gray-400 hover:text-white">Privacy</a>
+            <a href="/terms" className="text-sm text-gray-400 hover:text-white">Terms</a>
+            <a href="/contact" className="text-sm text-gray-400 hover:text-white">Contact</a>
           </div>
         </div>
       </div>
