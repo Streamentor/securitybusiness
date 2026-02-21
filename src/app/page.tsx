@@ -762,6 +762,9 @@ function Footer() {
             </div>
             <span className="text-lg font-bold">Secure<span className="gradient-text">SaaS</span></span>
           </div>
+          <a href="https://theresanaiforthat.com/ai/website-vulnerability-scanner-securesaas/?ref=featured&v=1092536" target="_blank" rel="nofollow">
+            <img width={300} src="https://media.theresanaiforthat.com/featured-on-taaft.png?width=600" alt="Featured on TAAFT" />
+          </a>
           <p className="text-sm text-gray-500">&copy; {new Date().getFullYear()} SecureSaaS. All rights reserved.</p>
           <div className="flex gap-6">
             <a href="/privacy" className="text-sm text-gray-400 hover:text-white">Privacy</a>
