@@ -25,11 +25,46 @@ export async function POST(req: NextRequest) {
 
     // Get user session (optional - free scans without login)
     let userId: string | null = null;
+    let userPlan = "free";
     try {
       const session = await auth();
-      userId = session?.user?.id || null;
+      if (session?.user?.id) {
+        const user = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { plan: true },
+        });
+        userId = session.user.id;
+        userPlan = user?.plan || "free";
+      }
     } catch (e) {
       console.error("Auth error (non-fatal):", e);
+    }
+
+    // ── Domain abuse prevention ──
+    // Free/anonymous users can only scan a domain once across ALL accounts.
+    if (userPlan === "free") {
+      try {
+        const parsedUrl = new URL(normalizedUrl);
+        const domain = parsedUrl.hostname.replace(/^www\./, "");
+
+        const existingScan = await prisma.scan.findFirst({
+          where: {
+            url: { contains: domain },
+            status: "completed",
+            user: { plan: "free" },
+          },
+          select: { id: true },
+        });
+
+        if (existingScan) {
+          return NextResponse.json(
+            { error: "This domain has already been scanned on a free plan. Upgrade to Starter or Pro for unlimited scans of any domain." },
+            { status: 403 }
+          );
+        }
+      } catch {
+        // If domain check fails, allow the scan to proceed
+      }
     }
 
     // Create scan record

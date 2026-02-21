@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
 
   // Check authentication (optional — anonymous scans are allowed)
   let userId: string | null = null;
+  let userPlan = "free";
   try {
     const session = await auth();
     if (session?.user?.id) {
@@ -48,11 +49,44 @@ export async function POST(req: NextRequest) {
           );
         }
         userId = session.user.id;
+        userPlan = user.plan;
       }
       // If user not found in DB, treat as anonymous (stale session)
     }
   } catch {
     // Auth error — proceed as anonymous
+  }
+
+  // ── Domain abuse prevention ──
+  // Free/anonymous users can only scan a domain once across ALL accounts.
+  // This prevents creating multiple free accounts to repeatedly scan the same site.
+  // Paid users bypass this restriction entirely.
+  if (userPlan === "free") {
+    try {
+      const parsedUrl = new URL(normalizedUrl);
+      const domain = parsedUrl.hostname.replace(/^www\./, "");
+
+      // Check if this domain has already been scanned by ANY free user
+      const existingScan = await prisma.scan.findFirst({
+        where: {
+          url: { contains: domain },
+          status: "completed",
+          user: { plan: "free" },
+        },
+        select: { id: true },
+      });
+
+      if (existingScan) {
+        return new Response(
+          JSON.stringify({
+            error: "This domain has already been scanned on a free plan. Upgrade to Starter or Pro for unlimited scans of any domain.",
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    } catch {
+      // If domain check fails, allow the scan to proceed
+    }
   }
 
   // Create the readable stream
