@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import ScanningOverlay from "@/components/ScanningOverlay";
+import { ToastContainer, toast } from "@/components/Toast";
 import {
   Shield,
   Globe,
@@ -22,6 +23,9 @@ import {
   Sparkles,
   Zap,
   CreditCard,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from "lucide-react";
 import { formatDate, getScoreColor, getScoreLabel } from "@/lib/utils";
 
@@ -110,10 +114,10 @@ export default function DashboardPage() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        alert(data.error || "Failed to open billing portal.");
+        toast(data.error || "Failed to open billing portal.", "error");
       }
     } catch {
-      alert("Failed to open billing portal.");
+      toast("Failed to open billing portal.", "error");
     } finally {
       setBillingLoading(false);
     }
@@ -124,7 +128,7 @@ export default function DashboardPage() {
     if (!url.trim()) return;
 
     if (userPlan.credits <= 0) {
-      alert("No scan credits remaining. Please upgrade your plan.");
+      toast("No scan credits remaining. Please upgrade your plan.", "warning");
       return;
     }
 
@@ -343,6 +347,28 @@ export default function DashboardPage() {
                   (v) => v.severity === "critical" || v.severity === "high"
                 ).length;
 
+                // Score trend: compare with the previous scan of the same domain
+                let scoreDelta: number | null = null;
+                if (scan.status === "completed" && scan.overallScore !== null) {
+                  try {
+                    const scanDomain = new URL(scan.url).hostname.replace(/^www\./, "");
+                    // Find the next (older) completed scan of the same domain
+                    const olderScan = scans.find((s, i) => {
+                      if (i <= index) return false; // only look at older scans (higher index = older)
+                      if (s.status !== "completed" || s.overallScore === null) return false;
+                      try {
+                        const d = new URL(s.url).hostname.replace(/^www\./, "");
+                        return d === scanDomain;
+                      } catch { return false; }
+                    });
+                    if (olderScan && olderScan.overallScore !== null) {
+                      scoreDelta = scan.overallScore - olderScan.overallScore;
+                    }
+                  } catch {
+                    // URL parse error — skip trend
+                  }
+                }
+
                 return (
                   <motion.div
                     key={scan.id}
@@ -405,8 +431,21 @@ export default function DashboardPage() {
                             <div className={`text-2xl font-bold ${getScoreColor(scan.overallScore)}`}>
                               {scan.overallScore}
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {getScoreLabel(scan.overallScore)}
+                            <div className="flex items-center justify-end gap-1 text-xs text-gray-500">
+                              {scoreDelta !== null && scoreDelta !== 0 ? (
+                                <span className={`flex items-center gap-0.5 font-medium ${scoreDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {scoreDelta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                  {scoreDelta > 0 ? "+" : ""}{scoreDelta}
+                                </span>
+                              ) : scoreDelta === 0 ? (
+                                <span className="flex items-center gap-0.5 font-medium text-gray-500">
+                                  <Minus className="h-3 w-3" />
+                                  same
+                                </span>
+                              ) : null}
+                              {scoreDelta === null && (
+                                <span>{getScoreLabel(scan.overallScore)}</span>
+                              )}
                             </div>
                           </div>
                         )}
@@ -439,6 +478,9 @@ export default function DashboardPage() {
           ]).catch(() => {});
         }}
       />
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   );
 }

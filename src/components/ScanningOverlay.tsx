@@ -28,7 +28,9 @@ import {
   ArrowRightLeft,
   FileCode,
   UserPlus,
+  Ban,
 } from "lucide-react";
+import { toast } from "@/components/Toast";
 
 interface ScanProgress {
   step: string;
@@ -154,7 +156,16 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
         if (!res.ok || !res.body) {
           try {
             const errData = await res.json();
-            setError(errData.error || "Failed to start scan. Please try again.");
+            const errorMsg = errData.error || "Failed to start scan. Please try again.";
+
+            // Domain abuse / credits exhausted → show toast and auto-close overlay
+            if (res.status === 403) {
+              toast(errorMsg, "warning");
+              onClose();
+              return;
+            }
+
+            setError(errorMsg);
           } catch {
             setError("Failed to start scan. Please try again.");
           }

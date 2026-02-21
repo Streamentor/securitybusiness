@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import ScanningOverlay from "@/components/ScanningOverlay";
+import { ToastContainer, toast } from "@/components/Toast";
 import {
   Shield,
   ArrowLeft,
@@ -24,6 +26,11 @@ import {
   Lock,
   Sparkles,
   Zap,
+  RotateCw,
+  Share2,
+  Copy,
+  TrendingUp,
+  Trophy,
 } from "lucide-react";
 import { formatDate, getSeverityColor, getScoreColor, getScoreLabel } from "@/lib/utils";
 
@@ -208,12 +215,16 @@ function VulnerabilityCard({ vulnerability, canViewRemedies, index }: { vulnerab
 
 export default function ScanResultPage() {
   const params = useParams();
+  const router = useRouter();
   const { data: session } = useSession();
   const [scan, setScan] = useState<Scan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [userPlan, setUserPlan] = useState<string>("free");
   const [userCredits, setUserCredits] = useState<number | null>(null);
+  const [percentile, setPercentile] = useState<number | null>(null);
+  const [rescanning, setRescanning] = useState(false);
+  const [rescanUrl, setRescanUrl] = useState("");
 
   useEffect(() => {
     async function fetchData() {
@@ -250,6 +261,19 @@ export default function ScanResultPage() {
           setUserPlan(planData.plan || "free");
           setUserCredits(planData.credits ?? null);
         }
+
+        // Fetch score percentile
+        if (scanData.overallScore !== null) {
+          try {
+            const pctRes = await fetch(`/api/scan/percentile?score=${scanData.overallScore}`);
+            if (pctRes.ok) {
+              const pctData = await pctRes.json();
+              setPercentile(pctData.percentile);
+            }
+          } catch {
+            // Non-fatal
+          }
+        }
       } catch {
         setError("Failed to load scan results");
       } finally {
@@ -261,6 +285,24 @@ export default function ScanResultPage() {
   }, [params.id, session?.user?.id]);
 
   const canViewRemedies = userPlan === "starter" || userPlan === "pro";
+
+  function handleRescan() {
+    if (!scan) return;
+    if (userCredits !== null && userCredits <= 0) {
+      toast("No scan credits remaining. Upgrade your plan.", "warning");
+      return;
+    }
+    setRescanUrl(scan.url);
+    setRescanning(true);
+  }
+
+  function handleCopyLink() {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(
+      () => toast("Report link copied to clipboard!", "success"),
+      () => toast("Failed to copy link", "error")
+    );
+  }
 
   if (loading) {
     return (
@@ -323,6 +365,25 @@ export default function ScanResultPage() {
                   {userCredits} scan{userCredits !== 1 ? "s" : ""} left
                 </div>
               )}
+              <button
+                onClick={handleCopyLink}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
+                title="Copy report link"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Share</span>
+              </button>
+              {session?.user && (
+                <button
+                  onClick={handleRescan}
+                  disabled={userCredits !== null && userCredits <= 0}
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-400 transition hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Rescan this website"
+                >
+                  <RotateCw className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Rescan</span>
+                </button>
+              )}
               <Link href="/" className="flex items-center gap-2 text-sm text-gray-400 hover:text-white">
                 <ArrowLeft className="h-4 w-4" />
                 New Scan
@@ -358,8 +419,25 @@ export default function ScanResultPage() {
               </div>
             </div>
 
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-3 justify-center">
               {scan.overallScore !== null && <ScoreGauge score={scan.overallScore} />}
+              {percentile !== null && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 1.8 }}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                    percentile >= 70
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      : percentile >= 40
+                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                        : "bg-red-500/10 text-red-400 border border-red-500/20"
+                  }`}
+                >
+                  <Trophy className="h-3 w-3" />
+                  Better than {percentile}% of sites
+                </motion.div>
+              )}
             </div>
           </div>
         </div>
@@ -476,6 +554,19 @@ export default function ScanResultPage() {
           </div>
         </div>
       )}
+
+      {/* Rescan overlay */}
+      <ScanningOverlay
+        url={rescanUrl}
+        isOpen={rescanning}
+        onClose={() => {
+          setRescanning(false);
+          setRescanUrl("");
+        }}
+      />
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   );
 }

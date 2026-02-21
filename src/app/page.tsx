@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import ScanningOverlay from "@/components/ScanningOverlay";
+import { ToastContainer } from "@/components/Toast";
 import {
   Shield,
   Search,
@@ -144,6 +145,7 @@ function HeroSection() {
   return (
     <section className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-32">
       <ScanningOverlay url={scanUrl} isOpen={scanning} onClose={() => { setScanning(false); setScanUrl(""); }} />
+      <ToastContainer />
 
       {/* Background effects */}
       <div className="pointer-events-none absolute inset-0">
