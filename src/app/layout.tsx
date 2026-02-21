@@ -167,7 +167,7 @@ const jsonLd = {
           name: "Free Plan",
           price: "0",
           priceCurrency: "USD",
-          description: "3 free scan credits with full vulnerability reports",
+          description: "1 free scan credit with full vulnerability report",
         },
         {
           "@type": "Offer",
@@ -221,7 +221,7 @@ const jsonLd = {
           name: "Is SecureSaaS a free website vulnerability scanner?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Yes — every account starts with 3 free scan credits. Run a complete website vulnerability scanning session with full results, severity scores, and vulnerability descriptions at no cost. Upgrade to Starter ($29/mo) or Pro ($79/mo) to unlock fix suggestions, PDF exports, and more credits.",
+            text: "Yes — every account starts with 1 free scan credit. Run a complete website vulnerability scanning session with full results, severity scores, and vulnerability descriptions at no cost. Upgrade to Starter ($29/mo) or Pro ($79/mo) to unlock fix suggestions, PDF exports, and more credits.",
           },
         },
         {

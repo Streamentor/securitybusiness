@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Register — Start Free Vulnerability Scanning",
   description:
-    "Create a free SecureSaaS account and get 3 free scan credits. Scan your website for vulnerabilities including XSS, CSRF, SSL issues, missing security headers, and more. No credit card required.",
+    "Create a free SecureSaaS account and get a free scan credit. Scan your website for vulnerabilities including XSS, CSRF, SSL issues, missing security headers, and more. No credit card required.",
   alternates: {
     canonical: "https://scanmysaas.com/register",
   },
   openGraph: {
     title: "Register — Start Free Vulnerability Scanning | SecureSaaS",
     description:
-      "Create a free account and get 3 free scan credits to find vulnerabilities in your web applications.",
+      "Create a free account and get a free scan credit to find vulnerabilities in your web applications.",
     url: "https://scanmysaas.com/register",
   },
   robots: {

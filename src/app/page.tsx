@@ -163,7 +163,7 @@ function HeroSection() {
                 Scan Now
               </button>
             </div>
-            <p className="mt-3 text-sm text-gray-500">&#10003; 3 free scans &nbsp; &#10003; Full site crawl &nbsp; &#10003; 60+ vulnerability checks &nbsp; &#10003; Automated scanning</p>
+            <p className="mt-3 text-sm text-gray-500">&#10003; 1 free scan &nbsp; &#10003; Full site crawl &nbsp; &#10003; 60+ vulnerability checks &nbsp; &#10003; Automated scanning</p>
           </motion.form>
 
           {/* Demo Video */}
@@ -523,7 +523,7 @@ function FeaturesSection() {
 
 function HowItWorksSection() {
   const steps = [
-    { step: "01", title: "Enter your URL", description: "Paste your website URL into our vulnerability scanning tool. Start with 3 free scans — no credit card or GitHub account required.", icon: Globe },
+    { step: "01", title: "Enter your URL", description: "Paste your website URL into our vulnerability scanning tool. Start with a free scan — no credit card or GitHub account required.", icon: Globe },
     { step: "02", title: "Automated scanning begins", description: "Our automated scanner crawls your web app and runs 60+ security checks — SSL, headers, XSS, CSRF, cookie security, exposed files, and OWASP top 10 risks.", icon: Search },
     { step: "03", title: "Get your security report", description: "Receive a detailed vulnerability scan report with severity ratings. Upgrade to unlock step-by-step fix suggestions to eliminate critical vulnerabilities.", icon: ShieldCheck },
   ];
@@ -601,7 +601,7 @@ function UrgencySection() {
 
 function PricingSection() {
   const plans = [
-    { name: "Free", price: "$0", period: "forever", description: "Free website security scan — try our scanner", features: ["3 scan credits (one-time)", "Up to 25 pages per scan", "60+ vulnerability checks", "Security score & severity breakdown", "Vulnerability descriptions"], cta: "Start Free Scan", popular: false },
+    { name: "Free", price: "$0", period: "forever", description: "Free website security scan — try our scanner", features: ["1 free scan credit", "Up to 25 pages per scan", "60+ vulnerability checks", "Security score & severity breakdown", "Vulnerability descriptions"], cta: "Start Free Scan", popular: false },
     { name: "Starter", price: "$29", period: "/month", description: "For indie hackers & small security teams", features: ["10 scan credits / month", "60+ vulnerability checks", "Fix suggestions & remedies", "PDF report export", "Email notifications", "Credits roll over (max 20)"], cta: "Get Starter", popular: true },
     { name: "Pro", price: "$79", period: "/month", description: "Full vulnerability management platform", features: ["30 scan credits / month", "Up to 50 pages per scan", "Fix suggestions & remedies", "API access & scheduled scans", "Slack & webhook alerts", "Team access (5 seats)", "Priority scanning queue", "Credits roll over (max 60)"], cta: "Go Pro", popular: false },
   ];
@@ -689,7 +689,7 @@ function FAQSection() {
   const faqs = [
     { question: "How does a website vulnerability scanner work?", answer: "A website vulnerability scanner is an automated tool that scans web applications for security flaws. It crawls your site, analyzes pages for known vulnerabilities like XSS, CSRF, missing security headers, SSL misconfigurations, and exposed files. SecureSaaS runs 60+ automated vulnerability checks and generates a report with severity ratings and fix suggestions." },
     { question: "What types of vulnerability does the scanner detect?", answer: "Our scanner covers a wide range of web application vulnerability categories: SSL/TLS issues, missing or misconfigured security headers, cross-site scripting (XSS), cross-site request forgery (CSRF), cookie security flaws, sensitive file exposure, outdated libraries with known vulnerabilities, CORS misconfigurations, open redirects, SPF/DMARC email security, and more — covering the OWASP top 10 risks." },
-    { question: "Is SecureSaaS a free website vulnerability scanner?", answer: "Yes — every account starts with 3 free scan credits. Run a complete website vulnerability scanning session with full results, severity scores, and vulnerability descriptions at no cost. Upgrade to Starter ($29/mo) or Pro ($79/mo) to unlock fix suggestions, PDF exports, and more credits." },
+    { question: "Is SecureSaaS a free website vulnerability scanner?", answer: "Yes — every account starts with 1 free scan credit. Run a complete website vulnerability scanning session with full results, severity scores, and vulnerability descriptions at no cost. Upgrade to Starter ($29/mo) or Pro ($79/mo) to unlock fix suggestions, PDF exports, and more credits." },
     { question: "How is this different from Burp Suite or Nikto?", answer: "Burp Suite is a comprehensive web application scanner and testing tools platform built for penetration testers and security professionals. Nikto is an open source web server scanner focused on server-level checks. SecureSaaS provides automated scanning focused on web app security — no installation, no CLI, no steep learning curve. Think of it as application security testing made simple for developers." },
     { question: "Do I need penetration testing experience to use this?", answer: "Not at all. Unlike commercial tools that require expertise in penetration testing or security check configurations, SecureSaaS is designed for developers and SaaS builders. Just enter your URL and our security scanner handles the rest — vulnerability discovery, severity scoring, and actionable remedies you can implement immediately." },
     { question: "Does it reduce false positives?", answer: "Yes. Our scanner is tuned specifically for modern web apps and SaaS platforms, which significantly reduces false positives compared to generic scanning tools. Every finding includes context about why it matters and how to verify it, so your security teams can focus on real issues — not noise." },

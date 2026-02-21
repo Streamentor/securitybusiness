@@ -25,9 +25,9 @@ const plans = [
     price: "$0",
     period: "forever",
     description: "Try SecureSaaS and scan your first site",
-    credits: "3 scans total",
+    credits: "1 free scan",
     features: [
-      "3 scan credits (one-time)",
+      "1 scan credit (one-time)",
       "Up to 25 pages per scan",
       "60+ vulnerability checks",
       "Security score & severity breakdown",
@@ -414,7 +414,7 @@ export default function PricingPage() {
         {/* CTA */}
         <div className="mt-20 text-center">
           <h2 className="text-2xl font-bold">Ready to secure your SaaS?</h2>
-          <p className="mt-2 text-gray-400">Start with 3 free scans — no credit card required.</p>
+          <p className="mt-2 text-gray-400">Start with a free scan — no credit card required.</p>
           <Link
             href="/register"
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"

@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const [scanUrl, setScanUrl] = useState("");
   const [userPlan, setUserPlan] = useState<UserPlan>({
     plan: "free",
-    credits: 3,
+    credits: 1,
     scansUsed: 0,
     hasSubscription: false,
     currentPeriodEnd: null,
