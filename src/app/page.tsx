@@ -45,6 +45,16 @@ import {
 function Navbar() {
   const { data: session, status } = useSession();
   const isLoggedIn = status === "authenticated" && !!session?.user;
+  const [credits, setCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetch("/api/user/plan")
+        .then((r) => r.json())
+        .then((d) => setCredits(d.credits ?? null))
+        .catch(() => {});
+    }
+  }, [isLoggedIn]);
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-xl">
@@ -68,13 +78,21 @@ function Navbar() {
 
           <div className="flex items-center gap-3">
             {isLoggedIn ? (
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                Dashboard
-              </Link>
+              <>
+                {credits !== null && (
+                  <div className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium ${credits > 0 ? "border-amber-500/20 bg-amber-500/10 text-amber-400" : "border-red-500/20 bg-red-500/10 text-red-400"}`}>
+                    <Zap className="h-3.5 w-3.5" />
+                    {credits} scan{credits !== 1 ? "s" : ""} left
+                  </div>
+                )}
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Link>
+              </>
             ) : (
               <>
                 <Link href="/login" className="rounded-lg px-4 py-2 text-sm text-gray-300 transition hover:text-white">Log in</Link>

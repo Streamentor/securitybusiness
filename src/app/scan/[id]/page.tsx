@@ -23,6 +23,7 @@ import {
   ShieldX,
   Lock,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { formatDate, getSeverityColor, getScoreColor, getScoreLabel } from "@/lib/utils";
 
@@ -212,6 +213,7 @@ export default function ScanResultPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [userPlan, setUserPlan] = useState<string>("free");
+  const [userCredits, setUserCredits] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -246,6 +248,7 @@ export default function ScanResultPage() {
         if (planRes.ok) {
           const planData = await planRes.json();
           setUserPlan(planData.plan || "free");
+          setUserCredits(planData.credits ?? null);
         }
       } catch {
         setError("Failed to load scan results");
@@ -313,10 +316,18 @@ export default function ScanResultPage() {
                 Secure<span className="gradient-text">SaaS</span>
               </span>
             </Link>
-            <Link href="/" className="flex items-center gap-2 text-sm text-gray-400 hover:text-white">
-              <ArrowLeft className="h-4 w-4" />
-              New Scan
-            </Link>
+            <div className="flex items-center gap-3">
+              {userCredits !== null && (
+                <div className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium ${userCredits > 0 ? "border-amber-500/20 bg-amber-500/10 text-amber-400" : "border-red-500/20 bg-red-500/10 text-red-400"}`}>
+                  <Zap className="h-3.5 w-3.5" />
+                  {userCredits} scan{userCredits !== 1 ? "s" : ""} left
+                </div>
+              )}
+              <Link href="/" className="flex items-center gap-2 text-sm text-gray-400 hover:text-white">
+                <ArrowLeft className="h-4 w-4" />
+                New Scan
+              </Link>
+            </div>
           </div>
         </div>
       </div>
