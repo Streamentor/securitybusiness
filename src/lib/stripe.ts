@@ -26,16 +26,16 @@ export const stripe = new Proxy({} as Stripe, {
 export const PLANS = {
   starter: {
     name: "Starter",
-    productId: "prod_TygHziMgZ7eu60",
-    priceId: "price_1T0ivOPIdNed8lkP3I0Ms4pR",
+    productId: "prod_TygKO85IEJP0zc",
+    priceId: "price_1T0ixvAcN6gjkt6Rss9oBOzj",
     price: 2900, // $29/mo in cents
     credits: 10,
     maxRollover: 20,
   },
   pro: {
     name: "Pro",
-    productId: "prod_TygJufW81WaHZZ",
-    priceId: "price_1T0iwcPIdNed8lkPVGj8duZ0",
+    productId: "prod_TygKWFGlNcfMgg",
+    priceId: "price_1T0ixrAcN6gjkt6RQsKhA4R7",
     price: 7900, // $79/mo in cents
     credits: 30,
     maxRollover: 60,
