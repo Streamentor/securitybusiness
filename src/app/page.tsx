@@ -37,6 +37,7 @@ import {
   BarChart3,
   Clock,
   ChevronDown,
+  Play,
 } from "lucide-react";
 
 /* ---- Navbar ---- */
@@ -172,6 +173,68 @@ function HeroSection() {
             <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" />Access Controls</div>
           </motion.div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---- Demo Video ---- */
+
+function DemoVideoSection() {
+  const [playing, setPlaying] = useState(false);
+
+  return (
+    <section className="relative py-20 sm:py-28">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mx-auto max-w-2xl text-center">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-1.5 text-sm text-cyan-400">
+            <Play className="h-4 w-4" />
+            See it in action
+          </div>
+          <h2 className="text-3xl font-bold sm:text-4xl">
+            Watch How <span className="gradient-text">SecureSaaS</span> Works
+          </h2>
+          <p className="mt-4 text-lg text-gray-400">
+            See a full vulnerability scan from start to finish — enter a URL, watch it crawl, and get your security report in under 60 seconds.
+          </p>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.1 }} className="relative mx-auto mt-12">
+          <div className="glow overflow-hidden rounded-2xl border border-gray-700/50 shadow-2xl shadow-emerald-500/5">
+            <div className="relative aspect-video w-full bg-gray-900">
+              {!playing ? (
+                <div className="group relative h-full w-full cursor-pointer" onClick={() => setPlaying(true)}>
+                  {/* YouTube thumbnail */}
+                  <img
+                    src="https://img.youtube.com/vi/8wF8yVI161c/maxresdefault.jpg"
+                    alt="SecureSaaS Demo — Website Vulnerability Scanner"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  {/* Dark overlay */}
+                  <div className="absolute inset-0 bg-black/40 transition-colors duration-300 group-hover:bg-black/30" />
+                  {/* Play button */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/30 transition-transform duration-300 group-hover:scale-110">
+                      <Play className="ml-1 h-8 w-8 text-white" fill="white" />
+                    </div>
+                  </div>
+                  {/* Duration badge */}
+                  <div className="absolute bottom-4 right-4 rounded-lg bg-black/70 px-3 py-1 text-sm font-medium text-white backdrop-blur-sm">
+                    ▶ Watch Demo
+                  </div>
+                </div>
+              ) : (
+                <iframe
+                  src="https://www.youtube.com/embed/8wF8yVI161c?autoplay=1&rel=0&modestbranding=1"
+                  title="SecureSaaS Demo — Website Vulnerability Scanner"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="h-full w-full"
+                />
+              )}
+            </div>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
@@ -741,6 +804,7 @@ export default function HomePage() {
     <div className="min-h-screen" id="top-scanner">
       <Navbar />
       <HeroSection />
+      <DemoVideoSection />
       <StatsSection />
       <ReportPreviewSection />
       <DashboardPreviewSection />
