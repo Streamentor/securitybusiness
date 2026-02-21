@@ -16,6 +16,7 @@ model User {
   email                String    @unique
   hashedPassword       String?
   image                String?
+  role                 String    @default("user") // user, admin
   plan                 String    @default("free") // free, starter, pro
   credits              Int       @default(3)      // scan credits remaining
   scansUsed            Int       @default(0)
