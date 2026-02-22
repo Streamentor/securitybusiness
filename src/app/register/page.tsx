@@ -16,8 +16,22 @@ export default function RegisterPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
 
+  // Store referrer data in a cookie before OAuth redirects (sessionStorage won't survive the redirect)
+  function storeReferrerCookie() {
+    if (typeof window === "undefined") return;
+    const data = {
+      referrerUrl: sessionStorage.getItem("referrer_url") || "",
+      utmSource: sessionStorage.getItem("utm_source") || "",
+      utmMedium: sessionStorage.getItem("utm_medium") || "",
+      utmCampaign: sessionStorage.getItem("utm_campaign") || "",
+    };
+    // Set cookie that expires in 10 minutes (enough for OAuth round-trip)
+    document.cookie = `signup_referrer=${encodeURIComponent(JSON.stringify(data))};path=/;max-age=600;SameSite=Lax`;
+  }
+
   async function handleGoogle() {
     setGoogleLoading(true);
+    storeReferrerCookie();
     const pendingScanId = typeof window !== "undefined" ? sessionStorage.getItem("pendingScanId") : null;
     const callbackUrl = pendingScanId ? `/scan/${pendingScanId}` : "/dashboard";
     if (pendingScanId) sessionStorage.removeItem("pendingScanId");
@@ -27,6 +41,7 @@ export default function RegisterPage() {
 
   async function handleGitHub() {
     setGithubLoading(true);
+    storeReferrerCookie();
     const pendingScanId = typeof window !== "undefined" ? sessionStorage.getItem("pendingScanId") : null;
     const callbackUrl = pendingScanId ? `/scan/${pendingScanId}` : "/dashboard";
     if (pendingScanId) sessionStorage.removeItem("pendingScanId");
@@ -39,11 +54,17 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
 
+    // Read referrer/UTM data stored from the landing page
+    const referrerUrl = typeof window !== "undefined" ? sessionStorage.getItem("referrer_url") || "" : "";
+    const utmSource = typeof window !== "undefined" ? sessionStorage.getItem("utm_source") || "" : "";
+    const utmMedium = typeof window !== "undefined" ? sessionStorage.getItem("utm_medium") || "" : "";
+    const utmCampaign = typeof window !== "undefined" ? sessionStorage.getItem("utm_campaign") || "" : "";
+
     try {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, referrerUrl, utmSource, utmMedium, utmCampaign }),
       });
 
       const data = await res.json();

@@ -27,6 +27,8 @@ import {
   RefreshCw,
   UserCheck,
   Zap,
+  Globe,
+  Link2,
 } from "lucide-react";
 
 // ── Types ──
@@ -55,6 +57,7 @@ interface AdminUser {
   stripeSubscriptionId: string | null;
   stripePriceId: string | null;
   currentPeriodEnd: string | null;
+  referrerSource: string | null;
   createdAt: string;
   updatedAt: string;
   image: string | null;
@@ -76,6 +79,10 @@ interface AdminScan {
 }
 
 interface UserDetail extends AdminUser {
+  referrerUrl: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
   scans: {
     id: string;
     url: string;
@@ -92,6 +99,7 @@ interface StatsData {
   overview: Overview;
   plans: Record<string, number>;
   vulnBySeverity: Record<string, number>;
+  trafficSources: Record<string, number>;
   recentUsers: AdminUser[];
   recentScans: AdminScan[];
 }
@@ -540,6 +548,61 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* Traffic Sources */}
+            <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+              <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                <Globe className="h-4 w-4 text-cyan-400" />
+                Traffic Sources
+              </h3>
+              {Object.keys(stats.trafficSources).length === 0 ? (
+                <p className="text-sm text-gray-500">No referrer data yet. New signups will be tracked.</p>
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(stats.trafficSources)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([source, count]) => {
+                      const pct = overview.totalUsers > 0 ? (count / overview.totalUsers) * 100 : 0;
+                      return (
+                        <div key={source}>
+                          <div className="mb-1 flex items-center justify-between text-sm">
+                            <span className="capitalize text-gray-300">{source}</span>
+                            <span className="text-gray-400">
+                              {count} ({pct.toFixed(0)}%)
+                            </span>
+                          </div>
+                          <div className="h-2 rounded-full bg-gray-800">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                source === "google"
+                                  ? "bg-blue-500"
+                                  : source === "direct"
+                                  ? "bg-gray-500"
+                                  : source === "taaft"
+                                  ? "bg-amber-500"
+                                  : source === "youtube"
+                                  ? "bg-red-500"
+                                  : source === "twitter"
+                                  ? "bg-sky-500"
+                                  : source === "github"
+                                  ? "bg-purple-500"
+                                  : source === "producthunt"
+                                  ? "bg-orange-500"
+                                  : source === "linkedin"
+                                  ? "bg-blue-600"
+                                  : source === "reddit"
+                                  ? "bg-orange-600"
+                                  : "bg-cyan-500"
+                              }`}
+                              style={{ width: `${Math.max(pct, 2)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
             {/* Recent Users */}
             <div className="rounded-xl border border-gray-800 bg-gray-900">
               <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
@@ -560,6 +623,7 @@ export default function AdminDashboard() {
                     <tr className="border-b border-gray-800 text-left text-xs text-gray-500">
                       <th className="px-5 py-3 font-medium">User</th>
                       <th className="px-5 py-3 font-medium">Plan</th>
+                      <th className="px-5 py-3 font-medium">Source</th>
                       <th className="px-5 py-3 font-medium">Credits</th>
                       <th className="px-5 py-3 font-medium">Scans</th>
                       <th className="px-5 py-3 font-medium">Joined</th>
@@ -586,6 +650,16 @@ export default function AdminDashboard() {
                           >
                             {u.plan}
                           </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          {u.referrerSource ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-medium text-cyan-400 capitalize">
+                              <Link2 className="h-2.5 w-2.5" />
+                              {u.referrerSource}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-600">—</span>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-gray-300">
                           {u.credits}
@@ -744,6 +818,7 @@ export default function AdminDashboard() {
                     <tr className="border-b border-gray-800 text-left text-xs text-gray-500">
                       <th className="px-5 py-3 font-medium">User</th>
                       <th className="px-5 py-3 font-medium">Plan</th>
+                      <th className="px-5 py-3 font-medium">Source</th>
                       <th className="px-5 py-3 font-medium">Credits</th>
                       <th className="px-5 py-3 font-medium">Scans Used</th>
                       <th className="px-5 py-3 font-medium">Total Scans</th>
@@ -781,6 +856,16 @@ export default function AdminDashboard() {
                           >
                             {u.plan}
                           </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          {u.referrerSource ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-medium text-cyan-400 capitalize">
+                              <Link2 className="h-2.5 w-2.5" />
+                              {u.referrerSource}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-600">—</span>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-gray-300">
                           {u.credits}
@@ -1062,6 +1147,46 @@ export default function AdminDashboard() {
                         {selectedUser.currentPeriodEnd
                           ? formatDate(selectedUser.currentPeriodEnd)
                           : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Traffic Attribution */}
+                <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+                  <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-cyan-400" />
+                    Traffic Attribution
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
+                    <div>
+                      <span className="text-gray-500">Source</span>
+                      <p className="text-gray-300 mt-1 capitalize">
+                        {selectedUser.referrerSource || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Referrer URL</span>
+                      <p className="text-gray-300 font-mono text-xs mt-1 break-all">
+                        {selectedUser.referrerUrl || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">UTM Source</span>
+                      <p className="text-gray-300 mt-1">
+                        {selectedUser.utmSource || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">UTM Medium</span>
+                      <p className="text-gray-300 mt-1">
+                        {selectedUser.utmMedium || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">UTM Campaign</span>
+                      <p className="text-gray-300 mt-1">
+                        {selectedUser.utmCampaign || "—"}
                       </p>
                     </div>
                   </div>

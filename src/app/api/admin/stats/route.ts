@@ -25,6 +25,7 @@ export async function GET() {
       recentUsers,
       recentScans,
       vulnerabilityStats,
+      referrerBreakdown,
     ] = await Promise.all([
       // Total users
       prisma.user.count(),
@@ -74,6 +75,7 @@ export async function GET() {
           stripeSubscriptionId: true,
           stripePriceId: true,
           currentPeriodEnd: true,
+          referrerSource: true,
           createdAt: true,
           updatedAt: true,
           _count: { select: { scans: true } },
@@ -104,6 +106,12 @@ export async function GET() {
         by: ["severity"],
         _count: { severity: true },
       }),
+
+      // Referrer source breakdown
+      prisma.user.groupBy({
+        by: ["referrerSource"],
+        _count: { referrerSource: true },
+      }),
     ]);
 
     // Format plan breakdown into a map
@@ -116,6 +124,13 @@ export async function GET() {
     const vulnBySeverity: Record<string, number> = {};
     for (const v of vulnerabilityStats) {
       vulnBySeverity[v.severity] = v._count.severity;
+    }
+
+    // Format referrer source stats
+    const trafficSources: Record<string, number> = {};
+    for (const r of referrerBreakdown) {
+      const source = r.referrerSource || "unknown";
+      trafficSources[source] = r._count.referrerSource;
     }
 
     // Revenue estimate: count paying users
@@ -140,6 +155,7 @@ export async function GET() {
       },
       plans,
       vulnBySeverity,
+      trafficSources,
       recentUsers,
       recentScans,
     });

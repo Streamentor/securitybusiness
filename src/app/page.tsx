@@ -800,6 +800,28 @@ function Footer() {
 /* ---- Page ---- */
 
 export default function HomePage() {
+  // Capture referrer + UTM params on first visit so we can attribute signups
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Only store once per session (don't overwrite with internal navigations)
+    if (sessionStorage.getItem("referrer_captured")) return;
+    sessionStorage.setItem("referrer_captured", "1");
+
+    const referrerUrl = document.referrer || "";
+    if (referrerUrl) {
+      sessionStorage.setItem("referrer_url", referrerUrl);
+    }
+
+    // Capture UTM params from the landing URL
+    const params = new URLSearchParams(window.location.search);
+    const utmSource = params.get("utm_source");
+    const utmMedium = params.get("utm_medium");
+    const utmCampaign = params.get("utm_campaign");
+    if (utmSource) sessionStorage.setItem("utm_source", utmSource);
+    if (utmMedium) sessionStorage.setItem("utm_medium", utmMedium);
+    if (utmCampaign) sessionStorage.setItem("utm_campaign", utmCampaign);
+  }, []);
+
   return (
     <div className="min-h-screen" id="top-scanner">
       <Navbar />

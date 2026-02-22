@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
           stripeSubscriptionId: true,
           stripePriceId: true,
           currentPeriodEnd: true,
+          referrerSource: true,
           createdAt: true,
           updatedAt: true,
           image: true,

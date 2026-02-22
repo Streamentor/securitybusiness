@@ -24,6 +24,11 @@ model User {
   stripeSubscriptionId String?   @unique
   stripePriceId        String?
   currentPeriodEnd     DateTime?
+  referrerSource       String?   // e.g. google, taaft, direct, github, youtube, twitter
+  referrerUrl          String?   // the full document.referrer URL
+  utmSource            String?   // utm_source param
+  utmMedium            String?   // utm_medium param
+  utmCampaign          String?   // utm_campaign param
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   scans                Scan[]

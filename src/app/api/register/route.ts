@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { classifyReferrer } from "@/lib/referrer";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password } = await req.json();
+    const { name, email, password, referrerUrl, utmSource, utmMedium, utmCampaign } = await req.json();
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -33,11 +34,19 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await hash(password, 12);
 
+    // Classify the referrer source
+    const referrerSource = utmSource || classifyReferrer(referrerUrl || "");
+
     const user = await prisma.user.create({
       data: {
         name,
         email,
         hashedPassword,
+        referrerSource: referrerSource || null,
+        referrerUrl: referrerUrl || null,
+        utmSource: utmSource || null,
+        utmMedium: utmMedium || null,
+        utmCampaign: utmCampaign || null,
       },
     });
 

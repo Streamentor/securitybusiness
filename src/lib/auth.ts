@@ -4,6 +4,8 @@ import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { classifyReferrer } from "@/lib/referrer";
+import { cookies } from "next/headers";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -61,13 +63,38 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
 
         if (!existingUser) {
+          // Read referrer data from cookie (set before OAuth redirect)
+          let referrerUrl = "";
+          let utmSource = "";
+          let utmMedium = "";
+          let utmCampaign = "";
+          try {
+            const cookieStore = await cookies();
+            const refCookie = cookieStore.get("signup_referrer");
+            if (refCookie?.value) {
+              const data = JSON.parse(decodeURIComponent(refCookie.value));
+              referrerUrl = data.referrerUrl || "";
+              utmSource = data.utmSource || "";
+              utmMedium = data.utmMedium || "";
+              utmCampaign = data.utmCampaign || "";
+            }
+          } catch {
+            // Cookie parse error — ignore
+          }
+
+          const referrerSource = utmSource || classifyReferrer(referrerUrl);
+
           // Create new user for OAuth sign-in
           const newUser = await prisma.user.create({
             data: {
               email,
               name: user.name || email.split("@")[0],
               image: user.image,
-              // No hashedPassword for OAuth users
+              referrerSource: referrerSource || null,
+              referrerUrl: referrerUrl || null,
+              utmSource: utmSource || null,
+              utmMedium: utmMedium || null,
+              utmCampaign: utmCampaign || null,
             },
           });
           user.id = newUser.id;

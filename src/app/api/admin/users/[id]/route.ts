@@ -29,6 +29,11 @@ export async function GET(
         stripeSubscriptionId: true,
         stripePriceId: true,
         currentPeriodEnd: true,
+        referrerSource: true,
+        referrerUrl: true,
+        utmSource: true,
+        utmMedium: true,
+        utmCampaign: true,
         createdAt: true,
         updatedAt: true,
         scans: {
