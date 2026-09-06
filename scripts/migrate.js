@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 require("dotenv").config();
 const pg = require("pg");
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });

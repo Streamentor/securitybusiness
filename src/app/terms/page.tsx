@@ -12,7 +12,7 @@ export default function TermsOfServicePage() {
               <Shield className="h-5 w-5 text-white" />
             </div>
             <span className="text-xl font-bold">
-              Secure<span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">SaaS</span>
+              ScanMy<span className="text-[var(--signal)]">SaaS</span>
             </span>
           </Link>
         </div>
@@ -26,7 +26,7 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-xl font-semibold text-white">1. Agreement to Terms</h2>
             <p className="mt-3">
-              These Terms of Service (&quot;Terms&quot;) constitute a legally binding agreement between you and Content Petit LLC (&quot;Company,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), located at 16192 Coastal Highway, Lewes, Delaware, governing your access to and use of the SecureSaaS website vulnerability scanning platform at scanmysaas.com (&quot;Service&quot;).
+              These Terms of Service (&quot;Terms&quot;) constitute a legally binding agreement between you and Content Petit LLC (&quot;Company,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), located at 16192 Coastal Highway, Lewes, Delaware, governing your access to and use of the ScanMySaaS website security scanning platform at scanmysaas.com (&quot;Service&quot;).
             </p>
             <p className="mt-3">
               By accessing or using our Service, you agree to be bound by these Terms. If you do not agree to these Terms, you must not use the Service.
@@ -36,7 +36,7 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-xl font-semibold text-white">2. Description of Service</h2>
             <p className="mt-3">
-              SecureSaaS is a web application vulnerability scanning platform that performs automated security assessments on websites. The Service crawls target websites and checks for common vulnerabilities, security misconfigurations, and best-practice violations including but not limited to SSL/TLS issues, missing security headers, cross-site scripting (XSS), cross-site request forgery (CSRF), and exposed sensitive files.
+              ScanMySaaS is a web application security scanning platform that performs automated assessments on websites. The Service crawls target websites and checks for common vulnerabilities, security misconfigurations, and best-practice violations including but not limited to SSL/TLS issues, missing security headers, cross-site scripting (XSS), cross-site request forgery (CSRF), and exposed sensitive files.
             </p>
           </section>
 
@@ -74,8 +74,8 @@ export default function TermsOfServicePage() {
             <p className="mt-3">The Service offers the following plans:</p>
             <ul className="mt-2 list-disc space-y-1 pl-6">
               <li><strong className="text-white">Free Plan:</strong> Includes a limited number of scan credits with basic vulnerability reports.</li>
-              <li><strong className="text-white">Starter Plan ($29/month):</strong> Includes additional scan credits, fix suggestions, and PDF report exports.</li>
-              <li><strong className="text-white">Pro Plan ($79/month):</strong> Includes unlimited scans, priority scanning, API access, and dedicated support.</li>
+              <li><strong className="text-white">Starter Plan ($29/month):</strong> Includes 10 monthly scan credits, remediation guidance, scan history, rescans, score trends, and credit rollover up to 20.</li>
+              <li><strong className="text-white">Pro Plan ($79/month):</strong> Includes 30 monthly scan credits, remediation guidance, scan history, rescans, score trends, and credit rollover up to 60.</li>
             </ul>
             <p className="mt-3">
               Prices are subject to change. We will notify existing subscribers of any price changes at least 30 days before they take effect. All fees are non-refundable unless otherwise required by law.

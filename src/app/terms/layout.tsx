@@ -3,15 +3,15 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "SecureSaaS terms of service — the legal agreement governing your use of our website vulnerability scanning platform, operated by Content Petit LLC.",
+    "ScanMySaaS terms of service — the legal agreement governing your use of our website security scanning platform, operated by Content Petit LLC.",
   alternates: {
-    canonical: "https://scanmysaas.com/terms",
+    canonical: "https://www.scanmysaas.com/terms",
   },
   openGraph: {
-    title: "Terms of Service | SecureSaaS",
+    title: "Terms of Service | ScanMySaaS",
     description:
-      "Terms and conditions for using the SecureSaaS vulnerability scanning platform.",
-    url: "https://scanmysaas.com/terms",
+      "Terms and conditions for using the ScanMySaaS website security scanning platform.",
+    url: "https://www.scanmysaas.com/terms",
   },
 };
 

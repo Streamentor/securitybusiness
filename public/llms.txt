@@ -1,0 +1,47 @@
+# ScanMySaaS
+
+> ScanMySaaS is a browser-based website vulnerability scanner for SaaS founders, developers, and small product teams. It crawls a public web application, runs 60+ automated security checks, and returns a prioritized report with severity, affected URLs, and finding descriptions.
+
+## Platform facts
+
+- One free scan with no credit card required.
+- Each scan can crawl up to 25 reachable pages on a website the user owns or is authorized to test.
+- Checks cover SSL and HTTPS behavior, security headers, cookies and forms, exposed files, client-side patterns, CORS, redirects, DNS and email-security signals, and other publicly observable risks.
+- The free public GitHub repository scanner reads a bounded set of security-relevant text files from the current repository tree and checks for committed environment files, credential patterns, unsafe GitHub Actions, client-side secret exposure, Supabase RLS signals, wildcard CORS, unsafe code sinks, and public source-map settings.
+- Repository scans do not clone a repository, install packages, run builds, execute code, or reveal matched secret values. Results are returned to the browser and are not saved by the product.
+- Findings can be copied as technical prompts for Codex, Claude, Cursor, or another coding agent. Prompts require the agent to verify the signal, make a minimal fix, add regression tests, avoid exposing secrets, and report residual risk.
+- The repository scanner currently supports public GitHub repositories only and does not scan full Git history. A least-privilege private repository connection is planned but is not currently offered.
+- New scans also report a SaaS readiness snapshot for TLS certificate trust and expiry, robots.txt, XML sitemaps, llms.txt, security.txt, canonical URL, and homepage indexability. These readiness signals do not change the security score.
+- Free reports include a security score, severity breakdown, affected URLs, finding descriptions, and one prioritized remediation when an actionable finding is available.
+- Paid plans unlock remediation for the remaining findings, configuration examples, monthly credits, saved scan history, rescans, and score trends.
+- Starter is $29 per month for 10 monthly scan credits. Pro is $79 per month for 30 monthly scan credits. Current plan details are maintained on the pricing page.
+- ScanMySaaS is an automated outside-in check, not a penetration test, security certification, or substitute for professional review.
+
+## Canonical public pages
+
+- [Homepage and scanner](https://www.scanmysaas.com/) — Product overview and the free website vulnerability scanner.
+- [Public GitHub repository scanner](https://www.scanmysaas.com/repo-scan) — Read-only source and workflow checks for public repositories.
+- [Vibe coding security](https://www.scanmysaas.com/vibe-coding-security) — Security workflow for SaaS apps built with Codex, Claude, Cursor, and other coding agents.
+- [Extended machine-readable product guide](https://www.scanmysaas.com/llms-full.txt) — Detailed coverage, plan, workflow, and safe-use information.
+- [Pricing](https://www.scanmysaas.com/pricing) — Current plans, scan credits, rollover limits, and paid features.
+- [Create an account](https://www.scanmysaas.com/register) — Registration for saving scan reports and managing a plan.
+- [Sign in](https://www.scanmysaas.com/login) — Access an existing ScanMySaaS account.
+- [Contact](https://www.scanmysaas.com/contact) — Product and support contact information.
+- [Privacy policy](https://www.scanmysaas.com/privacy) — How ScanMySaaS handles personal and scan data.
+- [Terms of service](https://www.scanmysaas.com/terms) — Authorized-use rules and service terms.
+- [XML sitemap](https://www.scanmysaas.com/sitemap.xml) — Index of canonical public pages.
+- [SaaS security guides](https://www.scanmysaas.com/guides) — Practical guides connected to website and repository scanner findings.
+- [Security headers for SaaS](https://www.scanmysaas.com/guides/security-headers-for-saas) — CSP, HSTS, framing, MIME sniffing, referrer, and permissions guidance.
+- [SSL and TLS checklist](https://www.scanmysaas.com/guides/ssl-tls-checklist-for-saas) — Certificate, redirect, proxy, cookie, and HSTS checks.
+- [robots.txt and XML sitemaps](https://www.scanmysaas.com/guides/robots-txt-and-sitemap-for-saas) — Crawl guidance and safe sitemap configuration.
+- [llms.txt for SaaS](https://www.scanmysaas.com/guides/llms-txt-for-saas) — Realistic expectations and a maintainable file structure.
+- [Exposed files and source maps](https://www.scanmysaas.com/guides/exposed-files-and-source-maps) — Containment and deployment pipeline fixes.
+- [GitHub secret scanning for vibe-coded apps](https://www.scanmysaas.com/guides/github-secret-scanning-for-vibe-coded-apps) — Response and prevention for committed credentials.
+- [GitHub Actions security for vibe-coded apps](https://www.scanmysaas.com/guides/github-actions-security-for-vibe-coded-apps) — Workflow permissions, pull request boundaries, and immutable action references.
+- [Supabase security for vibe-coded apps](https://www.scanmysaas.com/guides/supabase-security-for-vibe-coded-apps) — RLS, key placement, tenant policies, storage, and server authorization.
+
+## Company and safe use
+
+ScanMySaaS is operated by Content Petit LLC. Only scan websites you own or have explicit permission to test. Support: stefan@scanmysaas.com.
+
+Last updated: August 13, 2026

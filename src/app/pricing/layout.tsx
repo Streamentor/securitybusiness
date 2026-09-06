@@ -3,15 +3,15 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Pricing — Website Vulnerability Scanner Plans",
   description:
-    "Choose the right vulnerability scanning plan for your needs. Free plan with 1 scan, Starter at $29/mo with fix suggestions, or Pro at $79/mo with unlimited scans, API access, and priority support.",
+    "Start with one free website scan and one actionable fix. Starter includes 10 monthly scan credits for $29; Pro includes 30 for $79. Compare plans and coverage.",
   alternates: {
-    canonical: "https://scanmysaas.com/pricing",
+    canonical: "https://www.scanmysaas.com/pricing",
   },
   openGraph: {
-    title: "Pricing — Website Vulnerability Scanner Plans | SecureSaaS",
+    title: "Pricing — Website Security Scanner Plans | ScanMySaaS",
     description:
-      "Affordable vulnerability scanning plans. Start free with 1 scan, or upgrade for unlimited scanning, fix suggestions, and PDF exports.",
-    url: "https://scanmysaas.com/pricing",
+      "Start with a free website security scan and one actionable fix. Upgrade for monthly credits, rollover, rescans, and remediation for all findings.",
+    url: "https://www.scanmysaas.com/pricing",
   },
   robots: {
     index: true,

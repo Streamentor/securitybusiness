@@ -3,15 +3,15 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "SecureSaaS privacy policy — learn how Content Petit LLC collects, uses, and protects your data when you use our website vulnerability scanning service.",
+    "ScanMySaaS privacy policy — learn how Content Petit LLC collects, uses, and protects your data when you use our website security scanning service.",
   alternates: {
-    canonical: "https://scanmysaas.com/privacy",
+    canonical: "https://www.scanmysaas.com/privacy",
   },
   openGraph: {
-    title: "Privacy Policy | SecureSaaS",
+    title: "Privacy Policy | ScanMySaaS",
     description:
-      "Learn how we collect, use, and protect your data when you use SecureSaaS.",
-    url: "https://scanmysaas.com/privacy",
+      "Learn how we collect, use, and protect your data when you use ScanMySaaS.",
+    url: "https://www.scanmysaas.com/privacy",
   },
 };
 

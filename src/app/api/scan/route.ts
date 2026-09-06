@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { scanWebsite } from "@/lib/scanner";
+import { scanWebsite, validateScanTarget, WebsiteScanError } from "@/lib/scanner";
 import { auth } from "@/lib/auth";
+import { applyWebsiteRemediationAccess } from "@/lib/scan-remediation";
 
 export async function POST(req: NextRequest) {
+  let userId: string | null = null;
+  let userPlan = "free";
+  let creditReserved = false;
   try {
     const { url } = await req.json();
 
@@ -18,23 +22,32 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      new URL(normalizedUrl);
-    } catch {
-      return NextResponse.json({ error: "Invalid URL format" }, { status: 400 });
+      normalizedUrl = (await validateScanTarget(normalizedUrl)).toString();
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Invalid URL format" },
+        { status: 400 }
+      );
     }
 
     // Get user session (optional - free scans without login)
-    let userId: string | null = null;
-    let userPlan = "free";
     try {
       const session = await auth();
       if (session?.user?.id) {
         const user = await prisma.user.findUnique({
           where: { id: session.user.id },
-          select: { plan: true },
+          select: { plan: true, credits: true },
         });
-        userId = session.user.id;
-        userPlan = user?.plan || "free";
+        if (user) {
+          if (user.credits <= 0) {
+            return NextResponse.json(
+              { error: "No scan credits remaining. Please upgrade your plan." },
+              { status: 403 }
+            );
+          }
+          userId = session.user.id;
+          userPlan = user.plan;
+        }
       }
     } catch (e) {
       console.error("Auth error (non-fatal):", e);
@@ -51,7 +64,7 @@ export async function POST(req: NextRequest) {
           where: {
             url: { contains: domain },
             status: "completed",
-            user: { plan: "free" },
+            OR: [{ userId: null }, { user: { plan: "free" } }],
           },
           select: { id: true },
         });
@@ -65,6 +78,20 @@ export async function POST(req: NextRequest) {
       } catch {
         // If domain check fails, allow the scan to proceed
       }
+    }
+
+    if (userId) {
+      const reservation = await prisma.user.updateMany({
+        where: { id: userId, credits: { gt: 0 } },
+        data: { credits: { decrement: 1 } },
+      });
+      if (reservation.count === 0) {
+        return NextResponse.json(
+          { error: "No scan credits remaining. Please upgrade your plan." },
+          { status: 403 }
+        );
+      }
+      creditReserved = true;
     }
 
     // Create scan record
@@ -110,7 +137,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Update user scan count
+      // The credit was reserved before the scan; only update usage here.
       if (userId) {
         await prisma.user.update({
           where: { id: userId },
@@ -118,21 +145,37 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return NextResponse.json(updatedScan);
+      return NextResponse.json({
+        ...updatedScan,
+        vulnerabilities: applyWebsiteRemediationAccess(updatedScan.vulnerabilities, userPlan),
+      });
     } catch (scanError) {
       console.error("Scan execution error:", scanError);
+      if (userId && creditReserved) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { credits: { increment: 1 } },
+        }).catch(() => undefined);
+        creditReserved = false;
+      }
       await prisma.scan.update({
         where: { id: scan.id },
         data: { status: "failed" },
       });
 
       return NextResponse.json(
-        { error: "Failed to scan the website. Please check the URL and try again." },
-        { status: 500 }
+        { error: scanError instanceof WebsiteScanError ? scanError.message : "Failed to scan the website. Please check the URL and try again." },
+        { status: scanError instanceof WebsiteScanError ? 422 : 500 }
       );
     }
   } catch (outerError) {
     console.error("Scan API error:", outerError);
+    if (userId && creditReserved) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { credits: { increment: 1 } },
+      }).catch(() => undefined);
+    }
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },
       { status: 500 }
@@ -150,8 +193,16 @@ export async function GET() {
 
     const scans = await prisma.scan.findMany({
       where: { userId: session.user.id },
-      include: {
-        vulnerabilities: true,
+      select: {
+        id: true,
+        url: true,
+        status: true,
+        overallScore: true,
+        pagesScanned: true,
+        createdAt: true,
+        vulnerabilities: {
+          select: { id: true, severity: true, type: true },
+        },
       },
       orderBy: { createdAt: "desc" },
     });

@@ -1,14 +1,21 @@
 import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
+  const privatePaths = ["/api/", "/dashboard/", "/checkout/", "/admin/"];
+
   return {
     rules: [
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/dashboard/", "/checkout/"],
+        disallow: privatePaths,
+      },
+      {
+        userAgent: ["OAI-SearchBot", "GPTBot", "ClaudeBot", "anthropic-ai", "PerplexityBot"],
+        allow: "/",
+        disallow: privatePaths,
       },
     ],
-    sitemap: "https://scanmysaas.com/sitemap.xml",
+    sitemap: "https://www.scanmysaas.com/sitemap.xml",
   };
 }
