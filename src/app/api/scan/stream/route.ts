@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { scanWebsite, ScanProgress, validateScanTarget, VulnerabilityResult, WebsiteScanError } from "@/lib/scanner";
-import { auth } from "@/lib/auth";
+import { admitWebsiteScan } from "@/lib/scan-gate";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
 
@@ -30,81 +30,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Check authentication (optional — anonymous scans are allowed)
-  let userId: string | null = null;
-  let userPlan = "free";
-  let creditReserved = false;
-  try {
-    const session = await auth();
-    if (session?.user?.id) {
-      // Verify user still exists in DB (handles stale JWT after DB reset)
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { credits: true, plan: true },
-      });
-      if (user) {
-        if (user.credits <= 0) {
-          return new Response(
-            JSON.stringify({ error: "No scan credits remaining. Please upgrade your plan." }),
-            { status: 403, headers: { "Content-Type": "application/json" } }
-          );
-        }
-        userId = session.user.id;
-        userPlan = user.plan;
-      }
-      // If user not found in DB, treat as anonymous (stale session)
-    }
-  } catch {
-    // Auth error — proceed as anonymous
-  }
-
-  // ── Domain abuse prevention ──
-  // Free/anonymous users can only scan a domain once across ALL accounts.
-  // This prevents creating multiple free accounts to repeatedly scan the same site.
-  // Paid users bypass this restriction entirely.
-  if (userPlan === "free") {
-    try {
-      const parsedUrl = new URL(normalizedUrl);
-      const domain = parsedUrl.hostname.replace(/^www\./, "");
-
-      // Check if this domain has already been scanned by ANY free user
-      const existingScan = await prisma.scan.findFirst({
-        where: {
-          url: { contains: domain },
-          status: "completed",
-          OR: [{ userId: null }, { user: { plan: "free" } }],
-        },
-        select: { id: true },
-      });
-
-      if (existingScan) {
-        return new Response(
-          JSON.stringify({
-            error: "This domain has already been scanned on a free plan. Upgrade to Starter or Pro for unlimited scans of any domain.",
-          }),
-          { status: 403, headers: { "Content-Type": "application/json" } }
-        );
-      }
-    } catch {
-      // If domain check fails, allow the scan to proceed
-    }
-  }
-
-  // Reserve the credit atomically before starting expensive work. This closes
-  // the parallel-request gap where multiple scans could spend one credit.
-  if (userId) {
-    const reservation = await prisma.user.updateMany({
-      where: { id: userId, credits: { gt: 0 } },
-      data: { credits: { decrement: 1 } },
+  const admission = await admitWebsiteScan(req, normalizedUrl);
+  if (!admission.ok) {
+    return new Response(JSON.stringify({ error: admission.error }), {
+      status: admission.status,
+      headers: { "Content-Type": "application/json", ...(admission.retryAfter ? { "Retry-After": String(admission.retryAfter) } : {}) },
     });
-    if (reservation.count === 0) {
-      return new Response(
-        JSON.stringify({ error: "No scan credits remaining. Please upgrade your plan." }),
-        { status: 403, headers: { "Content-Type": "application/json" } }
-      );
-    }
-    creditReserved = true;
   }
+  const userId = admission.userId;
+  let creditReserved = admission.creditReserved;
 
   // Create the readable stream
   const encoder = new TextEncoder();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { scanWebsite, validateScanTarget, WebsiteScanError } from "@/lib/scanner";
 import { auth } from "@/lib/auth";
+import { admitWebsiteScan } from "@/lib/scan-gate";
 import { applyWebsiteRemediationAccess } from "@/lib/scan-remediation";
 
 export async function POST(req: NextRequest) {
@@ -30,69 +31,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get user session (optional - free scans without login)
-    try {
-      const session = await auth();
-      if (session?.user?.id) {
-        const user = await prisma.user.findUnique({
-          where: { id: session.user.id },
-          select: { plan: true, credits: true },
-        });
-        if (user) {
-          if (user.credits <= 0) {
-            return NextResponse.json(
-              { error: "No scan credits remaining. Please upgrade your plan." },
-              { status: 403 }
-            );
-          }
-          userId = session.user.id;
-          userPlan = user.plan;
-        }
-      }
-    } catch (e) {
-      console.error("Auth error (non-fatal):", e);
+    const admission = await admitWebsiteScan(req, normalizedUrl);
+    if (!admission.ok) {
+      return NextResponse.json({ error: admission.error }, { status: admission.status, headers: admission.retryAfter ? { "Retry-After": String(admission.retryAfter) } : undefined });
     }
-
-    // ── Domain abuse prevention ──
-    // Free/anonymous users can only scan a domain once across ALL accounts.
-    if (userPlan === "free") {
-      try {
-        const parsedUrl = new URL(normalizedUrl);
-        const domain = parsedUrl.hostname.replace(/^www\./, "");
-
-        const existingScan = await prisma.scan.findFirst({
-          where: {
-            url: { contains: domain },
-            status: "completed",
-            OR: [{ userId: null }, { user: { plan: "free" } }],
-          },
-          select: { id: true },
-        });
-
-        if (existingScan) {
-          return NextResponse.json(
-            { error: "This domain has already been scanned on a free plan. Upgrade to Starter or Pro for unlimited scans of any domain." },
-            { status: 403 }
-          );
-        }
-      } catch {
-        // If domain check fails, allow the scan to proceed
-      }
-    }
-
-    if (userId) {
-      const reservation = await prisma.user.updateMany({
-        where: { id: userId, credits: { gt: 0 } },
-        data: { credits: { decrement: 1 } },
-      });
-      if (reservation.count === 0) {
-        return NextResponse.json(
-          { error: "No scan credits remaining. Please upgrade your plan." },
-          { status: 403 }
-        );
-      }
-      creditReserved = true;
-    }
+    userId = admission.userId;
+    userPlan = admission.plan;
+    creditReserved = admission.creditReserved;
 
     // Create scan record
     const scan = await prisma.scan.create({

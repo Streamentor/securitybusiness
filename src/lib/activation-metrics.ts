@@ -11,6 +11,12 @@ const CHANNEL_ALIASES: Record<string, string> = {
   reddit: "reddit", vibecodedevs: "reddit", sideproject: "reddit",
   facebook: "facebook", github: "github", youtube: "youtube", twitter: "twitter",
   linkedin: "linkedin", hackernews: "hackernews", unknown: "unknown",
+  instagram: "instagram", ig: "instagram", "instagram.com": "instagram",
+  tiktok: "tiktok", "tiktok.com": "tiktok",
+  stefbuilds: "stefbuilds", "stefbuilds.com": "stefbuilds",
+  lovable: "lovable", "lovable.dev": "lovable",
+  chatgpt: "ai_assistants", perplexity: "ai_assistants", claude: "ai_assistants",
+  medium: "medium", devto: "devto", substack: "substack", "x.com": "twitter", x: "twitter",
 };
 
 export interface SourceCount {

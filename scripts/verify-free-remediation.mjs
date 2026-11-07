@@ -75,6 +75,7 @@ fixture.db = {
   scan: {
     findUnique: async () => report(),
     findFirst: async () => fixture.existingDomain ? { id: "earlier-scan" } : null,
+    findMany: async () => fixture.priorScans ?? (fixture.existingDomain ? [{ userId: null, url: "https://example.com/", createdAt: new Date() }] : []),
     create: async () => { fixture.creations += 1; return { id: "fixture-scan" }; },
     update: async () => report(),
   },
@@ -112,7 +113,18 @@ try {
   assert.equal(fixture.creations, creationsBefore);
   fixture.credits = 1;
   fixture.existingDomain = true;
-  assert.equal((await postScan()).status, 403, "the existing free-domain scan restriction must remain enforced");
+  fixture.session = null;
+  assert.equal((await postScan()).status, 403, "the existing free-domain scan restriction must remain enforced for anonymous scans");
+  fixture.session = { user: { id: "fixture-owner" } };
+  fixture.credits = 0;
+  fixture.priorScans = [{ userId: "fixture-owner", url: "https://example.com/", createdAt: new Date() }];
+  const reservationsBefore = fixture.reservations;
+  const verification = await postScan();
+  assert.equal(verification.status, 200, "the owner gets one free verification rescan within 7 days");
+  assertOneFreeFix((await verification.json()).vulnerabilities);
+  assert.equal(fixture.reservations, reservationsBefore, "the verification rescan must not spend a credit");
+  fixture.priorScans = [...fixture.priorScans, { userId: "fixture-owner", url: "https://example.com/", createdAt: new Date() }];
+  assert.equal((await postScan()).status, 403, "only one free verification rescan is allowed");
 } finally {
   delete globalThis.scanRemediationFixture;
 }

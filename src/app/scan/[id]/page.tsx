@@ -35,7 +35,10 @@ import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import type { RemediationAccess } from "@/lib/scan-remediation";
 
 interface Vulnerability { id: string; type: string; severity: string; title: string; description: string; url: string; remedy: string; remediationAccess: RemediationAccess }
-interface Scan { id: string; url: string; status: string; overallScore: number | null; totalPages: number; pagesScanned: number; createdAt: string; completedAt: string | null; userId: string | null; vulnerabilities: Vulnerability[] }
+interface Scan { id: string; url: string; status: string; overallScore: number | null; totalPages: number; pagesScanned: number; createdAt: string; completedAt: string | null; userId: string | null; vulnerabilities: Vulnerability[]; comparison?: ScanComparison | null }
+interface ScanComparison { previousScanId: string; previousScore: number | null; previousCreatedAt: string; resolved: string[]; added: string[]; stillOpen: number }
+
+const VERIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 interface ReadinessItem { key: string; label: string; status: "pass" | "warning" | "unknown"; detail: string; url: string }
 
 const severityOrder = ["critical", "high", "medium", "low", "info"];
@@ -155,9 +158,14 @@ export default function ScanResultPage() {
     } catch { /* sharing dismissed */ }
   }
 
+  // Free users get one verification rescan of their own site within 7 days; the server enforces it.
+  const ownsScan = Boolean(session?.user?.id && scan?.userId === session.user.id);
+  const verificationRescan = !canViewRemedies && ownsScan && !scan?.comparison && scan !== null && Date.now() - new Date(scan.createdAt).getTime() <= VERIFICATION_WINDOW_MS;
+  const canRescan = Boolean(session?.user) && (verificationRescan || userCredits === null || userCredits > 0);
+
   function rescan() {
     if (!scan) return;
-    if (userCredits !== null && userCredits <= 0) { toast("You have no scan credits left.", "warning"); return; }
+    if (!canRescan) { toast("You have no scan credits left.", "warning"); return; }
     setRescanning(true);
   }
 
@@ -198,6 +206,15 @@ export default function ScanResultPage() {
 
         <div className="mt-8 grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_19rem]">
           <section className="min-w-0">
+            {scan.comparison && <div className="surface-muted mb-6 rounded-2xl p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-base font-semibold tracking-[-0.02em]">Since your previous scan</h2><Link href={`/scan/${scan.comparison.previousScanId}`} className="text-xs text-[#8f99a7] hover:text-white">{new Date(scan.comparison.previousCreatedAt).toLocaleDateString()} · score {scan.comparison.previousScore ?? "—"} → {scan.overallScore ?? "—"}</Link></div>
+              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-xl bg-[#b9ff66]/[0.06] px-3 py-3"><p className="text-2xl font-semibold text-[#b9ff66]">{scan.comparison.resolved.length}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">Resolved</p></div>
+                <div className="rounded-xl bg-[#ff6b6b]/[0.06] px-3 py-3"><p className="text-2xl font-semibold text-[#ff8585]">{scan.comparison.added.length}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">New</p></div>
+                <div className="rounded-xl bg-white/[0.035] px-3 py-3"><p className="text-2xl font-semibold text-white">{scan.comparison.stillOpen}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">Still open</p></div>
+              </div>
+              {(scan.comparison.resolved.length > 0 || scan.comparison.added.length > 0) && <ul className="mt-4 space-y-1 text-xs leading-5 text-[#a5afbd]">{scan.comparison.resolved.map((title) => <li key={`r-${title}`}><span className="mr-2 text-[#b9ff66]">✓</span>{title}</li>)}{scan.comparison.added.map((title) => <li key={`a-${title}`}><span className="mr-2 text-[#ff8585]">+</span>{title}</li>)}</ul>}
+            </div>}
             <div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-semibold tracking-[-0.025em]">{filter === "all" ? "All findings" : `${severityConfig[filter].label} findings`}</h2><p className="mt-1 text-xs text-[#717c8b]">Ordered from highest to lowest priority</p></div>{filter !== "all" && <button onClick={() => setFilter("all")} className="text-xs text-[var(--signal)] hover:underline">Clear filter</button>}</div>
             {visibleFindings.length ? <div className="space-y-3">{visibleFindings.map((finding, index) => <FindingCard key={finding.id} finding={finding} defaultOpen={index === 0} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[var(--signal)]" /><p className="mt-4 font-medium">No {filter} findings.</p></div>}
           </section>
@@ -205,7 +222,7 @@ export default function ScanResultPage() {
           <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
             <div className="surface-muted rounded-2xl p-5"><p className="text-xs font-semibold uppercase tracking-[.12em] text-[#6e7988]">Next move</p><p className="mt-4 text-lg font-semibold tracking-[-0.025em]">{priorityCount ? `Start with ${priorityCount} priority finding${priorityCount === 1 ? "" : "s"}.` : findings.length ? "Work through the medium-risk findings." : "Keep monitoring after releases."}</p><p className="mt-3 text-sm leading-6 text-[#7f8998]">{priorityCount ? "Critical and high findings can have the largest impact. Verify each one before making a production change." : "A clean automated result is useful, but it does not prove the app is vulnerability-free."}</p></div>
             {!canViewRemedies && lockedFixCount > 0 && <div className="rounded-2xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.05] p-5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--signal)]/10 text-[var(--signal)]"><Lock className="h-4 w-4" /></span><h3 className="mt-5 font-semibold">Unlock the remaining fixes.</h3><p className="mt-2 text-sm leading-6 text-[#8f99a7]">{freeFix ? "Your first actionable fix is included. Paid plans add the remaining implementation steps and scan credits for follow-up checks." : "Paid plans add implementation steps and scan credits for follow-up checks."}</p><Link href="/pricing" className="button-primary mt-5 w-full">View plans</Link></div>}
-            <button onClick={rescan} disabled={!session?.user || (userCredits !== null && userCredits <= 0)} className="button-secondary w-full"><RotateCw className="h-4 w-4" /> Scan this site again</button>
+            <button onClick={rescan} disabled={!canRescan} className="button-secondary w-full"><RotateCw className="h-4 w-4" /> {verificationRescan && !(userCredits && userCredits > 0) ? "Verify your fixes (free rescan)" : "Scan this site again"}</button>
             <Link href="/" className="flex items-center justify-center gap-2 py-2 text-xs text-[#737e8d] hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Scan another website</Link>
           </aside>
         </div>
