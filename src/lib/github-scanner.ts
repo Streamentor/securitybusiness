@@ -39,7 +39,7 @@ export interface RepoScanResult {
     ref: string;
     /** Every file in this report was read from this exact commit. */
     commitSha: string;
-    visibility: "public";
+    visibility: "public" | "private";
     latestPush: string | null;
   };
   score: number;
@@ -147,8 +147,8 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   }
 }
 
-function githubHeaders() {
-  const token = process.env.GITHUB_SCANNER_TOKEN;
+function githubHeaders(accessToken?: string) {
+  const token = accessToken || process.env.GITHUB_SCANNER_TOKEN;
   return {
     Accept: "application/vnd.github+json",
     "User-Agent": "ScanMySaaS-Repo-Scanner/1.0",
@@ -157,9 +157,9 @@ function githubHeaders() {
   };
 }
 
-async function githubJson<T>(path: string): Promise<T> {
-  const response = await fetchWithTimeout(`${GITHUB_API}${path}`, { headers: githubHeaders() });
-  if (response.status === 404) throw new GitHubScannerError("not_found", "The public repository could not be found. Private repositories are not supported yet.");
+async function githubJson<T>(path: string, accessToken?: string): Promise<T> {
+  const response = await fetchWithTimeout(`${GITHUB_API}${path}`, { headers: githubHeaders(accessToken) });
+  if (response.status === 404) throw new GitHubScannerError("not_found", accessToken ? "The repository could not be found, or the GitHub App was not granted access to it." : "The public repository could not be found. To scan a private repository, connect GitHub first.");
   if (response.status === 403 || response.status === 429) {
     const reset = Number(response.headers.get("x-ratelimit-reset") || 0);
     const retryAfter = Number(response.headers.get("retry-after") || 0) || (reset ? Math.max(1, reset - Math.floor(Date.now() / 1000)) : 60);
@@ -226,7 +226,7 @@ function compareCandidates(a: GitTreeItem, b: GitTreeItem) {
     || a.path.localeCompare(b.path);
 }
 
-async function fetchRepositoryFiles(owner: string, repo: string, branch: string, items: GitTreeItem[]) {
+async function fetchRepositoryFiles(owner: string, repo: string, branch: string, items: GitTreeItem[], accessToken?: string) {
   const candidateCount = items.filter((item) => isCandidateFile(item, true)).length;
   const ranked = items
     .filter((item) => isCandidateFile(item))
@@ -240,7 +240,10 @@ async function fetchRepositoryFiles(owner: string, repo: string, branch: string,
     const loaded = await Promise.all(batch.map(async (item) => {
       if (totalBytes >= MAX_TOTAL_BYTES) return null;
       try {
-        const response = await fetchWithTimeout(rawUrl(owner, repo, branch, item.path), { headers: { "User-Agent": "ScanMySaaS-Repo-Scanner/1.0" } }, 7000);
+        // Private repositories are read through the contents API with a short-lived installation token.
+        const response = accessToken
+          ? await fetchWithTimeout(`${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${item.path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(branch)}`, { headers: { ...githubHeaders(accessToken), Accept: "application/vnd.github.raw" } }, 7000)
+          : await fetchWithTimeout(rawUrl(owner, repo, branch, item.path), { headers: { "User-Agent": "ScanMySaaS-Repo-Scanner/1.0" } }, 7000);
         if (!response.ok) return null;
         const contentLength = Number(response.headers.get("content-length") || item.size || 0);
         const byteLimit = fileByteLimit(item.path);
@@ -440,11 +443,11 @@ function pruneCache() {
 }
 
 /** Resolve a branch, tag or commit to an immutable commit SHA. */
-async function resolveCommit(owner: string, repo: string, candidates: string[]): Promise<{ ref: string; commitSha: string }> {
+async function resolveCommit(owner: string, repo: string, candidates: string[], accessToken?: string): Promise<{ ref: string; commitSha: string }> {
   for (const candidate of candidates) {
     if (/^[0-9a-f]{40}$/i.test(candidate)) return { ref: candidate, commitSha: candidate.toLowerCase() };
     try {
-      const commit = await githubJson<{ sha?: unknown }>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${candidate.split("/").map(encodeURIComponent).join("/")}`);
+      const commit = await githubJson<{ sha?: unknown }>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${candidate.split("/").map(encodeURIComponent).join("/")}`, accessToken);
       if (typeof commit.sha === "string" && /^[0-9a-f]{40}$/i.test(commit.sha)) return { ref: candidate, commitSha: commit.sha.toLowerCase() };
       return { ref: candidate, commitSha: candidate };
     } catch (error) {
@@ -456,25 +459,45 @@ async function resolveCommit(owner: string, repo: string, candidates: string[]):
   throw new GitHubScannerError("invalid_repository", "No branch, tag or commit could be resolved.");
 }
 
-export async function scanPublicGitHubRepository(input: string): Promise<RepoScanResult> {
+export type RepoScanStage = "resolving" | "reading-tree" | "reading-files" | "analyzing" | "dependencies" | "scoring";
+
+export interface RepoScanOptions {
+  /** Installation token for private repositories (read-only). */
+  accessToken?: string;
+  onStage?: (stage: RepoScanStage) => void | Promise<void>;
+}
+
+/** Public, anonymous entry point: never reads private repositories. */
+export function scanPublicGitHubRepository(input: string): Promise<RepoScanResult> {
+  return scanGitHubRepository(input);
+}
+
+export async function scanGitHubRepository(input: string, options: RepoScanOptions = {}): Promise<RepoScanResult> {
+  const { accessToken } = options;
+  const stage = async (name: RepoScanStage) => { try { await options.onStage?.(name); } catch { /* progress is best-effort */ } };
   const { owner, repo, refCandidates } = parseGitHubRepository(input);
   pruneCache();
 
-  const repository = await githubJson<GitHubRepository>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
-  if (repository.private) throw new GitHubScannerError("private_repository", "Private repository scanning requires the upcoming GitHub App connection.");
-  const { ref, commitSha } = await resolveCommit(owner, repo, refCandidates.length ? refCandidates : [repository.default_branch]);
-  const cacheKey = `${owner.toLowerCase()}/${repo.toLowerCase()}@${commitSha}`;
-  const cached = scanCache.get(cacheKey);
+  await stage("resolving");
+  const repository = await githubJson<GitHubRepository>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, accessToken);
+  if (repository.private && !accessToken) throw new GitHubScannerError("private_repository", "This repository is private. Connect GitHub to scan it with read-only access.");
+  const { ref, commitSha } = await resolveCommit(owner, repo, refCandidates.length ? refCandidates : [repository.default_branch], accessToken);
+  // Private results are never cached in this shared, per-instance cache.
+  const cacheKey = repository.private ? null : `${owner.toLowerCase()}/${repo.toLowerCase()}@${commitSha}`;
+  const cached = cacheKey ? scanCache.get(cacheKey) : undefined;
   if (cached && cached.expiresAt > Date.now() && cached.result.repository.latestPush === repository.pushed_at && cached.result.repository.defaultBranch === repository.default_branch) return cached.result;
   // Pin the tree and every raw file read to one commit so a push mid-scan cannot mix versions.
-  const tree = await githubJson<GitTreeResponse>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(commitSha)}?recursive=1`);
+  await stage("reading-tree");
+  const tree = await githubJson<GitTreeResponse>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(commitSha)}?recursive=1`, accessToken);
   if (!Array.isArray(tree.tree)) throw new GitHubScannerError("upstream_unavailable", "GitHub returned an invalid repository tree.");
   if (tree.tree.length > 100_000) throw new GitHubScannerError("repository_too_large", "This repository is too large for the public scanner.");
 
-  const loaded = await fetchRepositoryFiles(owner, repo, commitSha, tree.tree);
+  await stage("reading-files");
+  const loaded = await fetchRepositoryFiles(owner, repo, commitSha, tree.tree, accessToken);
   if (!loaded.files.length) {
     throw new GitHubScannerError("upstream_unavailable", "No supported repository files could be read. The repository may be empty, use unsupported file types, or be temporarily unavailable. Try again with a repository containing source or configuration files.");
   }
+  await stage("analyzing");
   const repositoryPaths = tree.tree.filter((item) => item.type === "blob").map((item) => item.path);
   const findings: RepoFinding[] = [];
   for (const file of loaded.files) {
@@ -488,6 +511,7 @@ export async function scanPublicGitHubRepository(input: string): Promise<RepoSca
   scanSupabase(loaded.files, findings);
   for (const finding of analyzeDependencyHygiene(loaded.files, repositoryPaths, !tree.truncated)) addFinding(findings, finding);
 
+  await stage("dependencies");
   const dependencyInventory = extractDependencyInventory(loaded.files);
   const dependencyScan = await queryKnownVulnerabilities(dependencyInventory.dependencies, dependencyInventory.truncated);
   for (const match of dependencyScan.matches) {
@@ -506,9 +530,10 @@ export async function scanPublicGitHubRepository(input: string): Promise<RepoSca
 
   const severityOrder: Record<RepoSeverity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   findings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity] || a.file.localeCompare(b.file) || (a.line ?? 0) - (b.line ?? 0));
+  await stage("scoring");
   const { score, risk } = scoreFindings(findings);
   const result: RepoScanResult = {
-    repository: { owner, name: repository.name, fullName: repository.full_name, url: repository.html_url, defaultBranch: repository.default_branch, ref, commitSha, visibility: "public", latestPush: repository.pushed_at },
+    repository: { owner, name: repository.name, fullName: repository.full_name, url: repository.html_url, defaultBranch: repository.default_branch, ref, commitSha, visibility: repository.private ? "private" : "public", latestPush: repository.pushed_at },
     score,
     risk,
     filesInRepository: tree.tree.filter((item) => item.type === "blob").length,
@@ -528,6 +553,6 @@ export async function scanPublicGitHubRepository(input: string): Promise<RepoSca
     },
     scannedAt: new Date().toISOString(),
   };
-  scanCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result });
+  if (cacheKey) scanCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result });
   return result;
 }

@@ -32,6 +32,8 @@ model User {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   scans                Scan[]
+  githubInstallations  GitHubInstallation[]
+  repoScans            RepoScan[]
 }
 
 model Scan {
@@ -59,4 +61,43 @@ model Vulnerability {
   url         String // The specific page where found
   remedy      String // How to fix it
   createdAt   DateTime @default(now())
+}
+
+/// A GitHub App installation the user proved access to (read-only repository contents).
+model GitHubInstallation {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  installationId Int
+  accountLogin   String
+  accountType    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, installationId])
+  @@index([installationId])
+}
+
+/// A repository scan that runs in the background and is saved for its owner.
+model RepoScan {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository     String // owner/name
+  requestedRef   String?
+  commitSha      String?
+  visibility     String    @default("public") // public, private
+  installationId Int?
+  status         String    @default("queued") // queued, running, completed, failed
+  stage          String?
+  score          Int?
+  risk           String?
+  findingsCount  Int?
+  result         Json?
+  error          String?
+  createdAt      DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  @@index([userId, createdAt])
 }
