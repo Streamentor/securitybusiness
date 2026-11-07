@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FileSearch,
   Gauge,
+  Github,
   Globe2,
   History,
   Loader2,
@@ -31,6 +32,7 @@ import { Brand } from "@/components/Brand";
 import ScanningOverlay from "@/components/ScanningOverlay";
 import { ToastContainer, toast } from "@/components/Toast";
 import { formatDate } from "@/lib/utils";
+import { RepoScansSection } from "@/components/RepoScansSection";
 
 interface Vulnerability { id: string; severity: string; type: string }
 interface Scan { id: string; url: string; status: string; overallScore: number | null; pagesScanned: number; createdAt: string; vulnerabilities: Vulnerability[] }
@@ -111,6 +113,7 @@ export default function DashboardPage() {
           <Link href="/dashboard" className="flex items-center gap-3 rounded-xl bg-white/[0.06] px-3 py-2.5 font-medium text-white"><BarChart3 className="h-4 w-4 text-[var(--signal)]" /> Overview</Link>
           <a href="#new-scan" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><Plus className="h-4 w-4" /> New scan</a>
           <a href="#history" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><History className="h-4 w-4" /> Scan history</a>
+          <a href="#repo-scans" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><Github className="h-4 w-4" /> Repositories</a>
           <Link href="/pricing" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><Zap className="h-4 w-4" /> Plans</Link>
         </nav>
         <div className="mt-auto rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
@@ -179,6 +182,8 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
+
+          <RepoScansSection />
         </div>
       </div>
 

@@ -59,6 +59,11 @@ export default function PrivacyPolicyPage() {
             <p className="mt-2">
               When you use our vulnerability scanning Service, we collect and process information about the target websites you scan, including discovered vulnerabilities, security headers, SSL configurations, and other security-related findings. This data is stored to provide you with scan reports and history.
             </p>
+          
+            <h3 className="mt-4 text-lg font-medium text-gray-200">2.4 GitHub Repository Access</h3>
+            <p className="mt-2">
+              If you connect GitHub, you install the ScanMySaaS GitHub App on repositories you choose. The app requests only read access to repository contents and metadata and cannot write to your repositories. We store the installation identifier and the GitHub account name so we can request short-lived access tokens for scans you start. Repository files are read in memory during a scan and discarded; we store the resulting report (file paths, line numbers, finding descriptions and scores, never secret values) privately in your account. You can disconnect in ScanMySaaS and revoke the app at any time in your GitHub settings.
+            </p>
           </section>
 
           <section>

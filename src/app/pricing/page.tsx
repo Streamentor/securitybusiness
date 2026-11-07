@@ -18,7 +18,7 @@ const plans = [
     credits: "1 scan credit",
     rollover: "—",
     accent: false,
-    features: ["Up to 25 pages", "60+ automated checks", "Security score", "Prioritized findings", "One actionable fix, when found", "Saved report"],
+    features: ["Up to 25 pages", "60+ automated checks", "Security score", "Prioritized findings", "One actionable fix, when found", "One free rescan to verify your fix", "Public GitHub repository scans"],
     cta: "Run the free scan",
   },
   {
@@ -30,7 +30,7 @@ const plans = [
     credits: "10 credits / month",
     rollover: "Up to 20",
     accent: true,
-    features: ["Everything in Free", "Step-by-step remediation", "Scan history", "One-click rescans", "Score trends", "Credits roll over"],
+    features: ["Everything in Free", "Private GitHub repository scans (read-only)", "Step-by-step remediation", "Resolved / new findings after each rescan", "Scan history and score trends", "Credits roll over"],
     cta: "Choose Starter",
   },
   {
@@ -42,7 +42,7 @@ const plans = [
     credits: "30 credits / month",
     rollover: "Up to 60",
     accent: false,
-    features: ["Everything in Starter", "30 monthly credits", "Step-by-step remediation", "Scan history", "One-click rescans", "Score trends"],
+    features: ["Everything in Starter", "30 monthly credits", "Private GitHub repository scans (read-only)", "Background scans saved to your dashboard", "Step-by-step remediation", "Score trends"],
     cta: "Choose Pro",
   },
 ];
@@ -51,6 +51,7 @@ const faqs = [
   ["What counts as a scan credit?", "One credit runs a new crawl and security report for one website. A scan can cover up to 25 reachable pages on that site."],
   ["Do unused credits roll over?", "Yes. Starter can hold up to 20 credits and Pro can hold up to 60. New monthly credits are added up to that cap."],
   ["Why pay if the first report is free?", "The free report shows the score, affected URLs, severity, and descriptions, plus one prioritized fix when an actionable finding is available. Paid plans unlock remediation for the remaining findings and give you credits to verify fixes over time."],
+  ["How does private repository access work?", "You install the ScanMySaaS GitHub App on the repositories you choose. It can only read repository contents and metadata. Files are read in memory for the scan and discarded; only the report is saved, and it is visible only to your account. You can revoke access on GitHub at any time."],
   ["Can I change or cancel my plan?", "Yes. Subscribers can open the Stripe billing portal from the dashboard to manage or cancel billing."],
   ["Is the result a security certification?", "No. It is an automated outside-in assessment, not a certification or penetration test. Use it as a fast feedback layer in a broader security process."],
 ];
@@ -133,6 +134,9 @@ export default function PricingPage() {
                   ["Finding descriptions", true, true, true],
                   ["Step-by-step remediation", "One finding", "All findings", "All findings"],
                   ["Saved scan history", true, true, true],
+                  ["Free verification rescan", "Within 7 days", "Uses credits", "Uses credits"],
+                  ["Public GitHub repository scans", true, true, true],
+                  ["Private GitHub repository scans", false, true, true],
                   ["Credit rollover", false, "20 max", "60 max"],
                 ].map((row) => <tr key={String(row[0])}>{row.map((value, index) => <td key={index} className={index === 0 ? "px-6 py-4 font-medium text-white" : "px-5 py-4"}>{typeof value === "boolean" ? value ? <Check className="h-4 w-4 text-[var(--signal)]" /> : <Minus className="h-4 w-4 text-[#4c5664]" /> : value}</td>)}</tr>)}
               </tbody>
