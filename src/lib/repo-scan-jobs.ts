@@ -176,7 +176,9 @@ export async function getRepoScanForUser(id: string, userId: string) {
     return {...job, result, score: result?.score ?? job.score, risk: result?.risk ?? job.risk, findingsCount: result?.findings.length ?? job.findingsCount,
       aiModel: null, aiInputTokens: null, aiOutputTokens: null, aiFindingsCount: result?.aiReview?.findingsCount ?? 0};
   }
-  return job;
+  if (!job.result) return job;
+  const result = resultForEntitlement(job.result as unknown as RepoScanResult, true);
+  return {...job, result, score: result.score, risk: result.risk};
 }
 
 export async function listRepoScansForUser(userId: string, take = 20) {
@@ -189,7 +191,7 @@ export async function listRepoScansForUser(userId: string, take = 20) {
   });
   const user = await prisma.user.findUnique({where: {id: userId}, select: {plan: true, role: true}});
   return rows.map(({result: stored, ...row}) => {
-    const result = stored && (!user || !canReviewWithAI(user)) ? resultForEntitlement(stored as unknown as RepoScanResult, false) : null;
+    const result = stored ? resultForEntitlement(stored as unknown as RepoScanResult, Boolean(user && canReviewWithAI(user))) : null;
     return result ? {...row, score: result.score, risk: result.risk, findingsCount: result.findings.length} : row;
   });
 }

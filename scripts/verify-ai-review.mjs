@@ -44,6 +44,9 @@ assert.equal(ai.scoreReviewedFindings([{...valid[0],confidence:"low"}]).score,10
 assert.equal(ai.scoreReviewedFindings(valid).score,94);
 assert.equal(ai.scoreReviewedFindings([{...valid[0],confidence:"medium"}]).score,97);
 assert.equal(ai.scoreReviewedFindings([{...valid[0],source:"rule"}]).score,87);
+assert.equal(ai.scoreReviewedFindings(Array.from({length:15}, () => ({...valid[0],severity:"critical"}))).score,80,"unverified AI aggregate penalty is capped at twenty");
+assert.equal(ai.scoreReviewedFindings([{...valid[0],source:"rule"}, ...Array.from({length:15},()=>({...valid[0],severity:"critical"}))]).score,67,"rule penalty is not capped");
+assert.equal(ai.resultForEntitlement({findings:Array.from({length:15},()=>({...valid[0],severity:"critical"})),score:0,risk:"critical"},true).score,80,"old paid results are rescored on read");
 const free = ai.resultForEntitlement({findings:valid,score:94,risk:"moderate",aiReview:{status:"completed",note:"secret details"}},false);
 assert.equal(free.findings.length,0); assert.equal(free.score,100); assert.match(free.aiReview.note,/1 potential logic issue/); assert.ok(!JSON.stringify(free).includes(finding.evidence));
 

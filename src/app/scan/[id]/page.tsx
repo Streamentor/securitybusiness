@@ -36,7 +36,7 @@ import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import type { RemediationAccess } from "@/lib/scan-remediation";
 
 interface Vulnerability { id: string; type: string; severity: string; title: string; description: string; url: string; remedy: string; remediationAccess: RemediationAccess }
-interface Scan { id: string; url: string; status: string; overallScore: number | null; totalPages: number; pagesScanned: number; createdAt: string; completedAt: string | null; userId: string | null; vulnerabilities: Vulnerability[]; comparison?: ScanComparison | null }
+interface Scan { id: string; url: string; status: string; overallScore: number | null; totalPages: number; pagesScanned: number; createdAt: string; completedAt: string | null; userId: string | null; vulnerabilities: Vulnerability[]; access?: {owner: boolean; canClaim: boolean; shared: boolean; sharingEnabled: boolean}; comparison?: ScanComparison | null }
 interface ScanComparison { previousScanId: string; previousScore: number | null; previousCreatedAt: string; resolved: string[]; added: string[]; stillOpen: number }
 
 const VERIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -108,16 +108,20 @@ export default function ScanResultPage() {
   const [filter, setFilter] = useState("all");
   const [freeFixExpanded, setFreeFixExpanded] = useState(true);
   const [rescanning, setRescanning] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [sharingBusy, setSharingBusy] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const [scanResponse, planResponse] = await Promise.all([fetch(`/api/scan/${params.id}`), fetch("/api/user/plan")]);
-        if (!scanResponse.ok) { setError("This scan could not be found."); return; }
+        const token = new URLSearchParams(window.location.hash.slice(1)).get("share");
+        const [scanResponse, planResponse] = await Promise.all([fetch(`/api/scan/${params.id}`, {cache: "no-store", headers: token ? {"x-report-share-token": token} : {}}), fetch("/api/user/plan")]);
+        if (!scanResponse.ok) { setError("Report unavailable. Sign in as its owner or open an active sharing link."); return; }
         const scanData: Scan = await scanResponse.json();
         setScan(scanData);
-        if (session?.user?.id && !scanData.userId) {
-          fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: scanData.id }) }).catch(() => undefined);
+        if (session?.user?.id && scanData.access?.canClaim) {
+          const claimed = await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: scanData.id }) });
+          if (claimed.ok) setScan({...scanData, userId: session.user.id, access: {...scanData.access, owner: true, canClaim: false}});
         }
         if (planResponse.ok) { const plan = await planResponse.json(); setUserPlan(plan.plan || "free"); setUserCredits(plan.credits ?? null); }
         if (scanData.overallScore !== null) {
@@ -153,10 +157,29 @@ export default function ScanResultPage() {
   }
 
   async function shareReport() {
+    if (!scan) return;
+    setSharingBusy(true);
     try {
-      if (navigator.share) await navigator.share({ title: "ScanMySaaS security report", url: window.location.href });
-      else { await navigator.clipboard.writeText(window.location.href); toast("Report link copied.", "success"); }
-    } catch { /* sharing dismissed */ }
+      const response = await fetch(`/api/scan/${scan.id}/share`, {method: "POST"});
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      setShareUrl(data.url);
+      setScan({...scan, access: {...scan.access!, sharingEnabled: true}});
+      toast("Sharing link created. Anyone with this link can view the report.", "success");
+    } catch { toast("Could not create sharing link. Please try again.", "warning"); }
+    finally { setSharingBusy(false); }
+  }
+  async function revokeShare() {
+    if (!scan) return;
+    setSharingBusy(true);
+    try {
+      const response = await fetch(`/api/scan/${scan.id}/share`, {method: "DELETE"});
+      if (!response.ok) throw new Error();
+      setShareUrl("");
+      setScan({...scan, access: {...scan.access!, sharingEnabled: false}});
+      toast("Sharing link revoked. Existing links no longer work.", "success");
+    } catch { toast("Could not revoke sharing link. Please try again.", "warning"); }
+    finally { setSharingBusy(false); }
   }
 
   // Free users get one verification rescan of their own site within 7 days; the server enforces it.
@@ -171,7 +194,7 @@ export default function ScanResultPage() {
   }
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-[var(--signal)]" /></div>;
-  if (error || !scan) return <div className="flex min-h-screen items-center justify-center px-5"><div className="max-w-sm text-center"><ShieldX className="mx-auto h-10 w-10 text-[#ff8585]" /><h1 className="mt-5 text-xl font-semibold">{error || "Scan not found"}</h1><Link href="/" className="button-secondary mt-6"><ArrowLeft className="h-4 w-4" /> Back home</Link></div></div>;
+  if (error || !scan) return <div className="flex min-h-screen items-center justify-center px-5"><div className="max-w-sm text-center"><ShieldX className="mx-auto h-10 w-10 text-[#ff8585]" /><h1 className="mt-5 text-xl font-semibold">{error || "Scan not found"}</h1><Link href="/login" className="button-secondary mt-6">Sign in</Link><Link href="/" className="ml-4 text-sm">Back home</Link></div></div>;
 
   const status = scoreStatus(scan.overallScore ?? 0);
   const siteHost = (() => { try { return new URL(scan.url).hostname.replace(/^www\./, ""); } catch { return "your site"; } })();
@@ -179,9 +202,16 @@ export default function ScanResultPage() {
 
   return (
     <main className="min-h-screen pb-20">
-      <header className="border-b border-white/[0.08] bg-[#07090d]/88 backdrop-blur-xl"><div className="app-shell flex min-h-16 flex-wrap items-center justify-between gap-3 py-3"><Brand /><div className="flex items-center gap-2">{userCredits !== null && <span className="hidden items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-[#aab3bf] sm:flex"><Zap className="h-3.5 w-3.5 text-[var(--amber)]" />{userCredits} left</span>}<button onClick={shareReport} className="button-secondary !min-h-9 !px-3 !py-2"><Share2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Share</span></button>{session?.user && <button onClick={rescan} disabled={userCredits !== null && userCredits <= 0} className="button-primary !min-h-9 !px-3 !py-2"><RotateCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Rescan</span></button>}<Link href={session?.user ? "/dashboard" : "/"} className="ml-1 text-xs text-[#8a94a2] hover:text-white"><span className="hidden sm:inline">{session?.user ? "Dashboard" : "New scan"}</span><ArrowLeft className="h-4 w-4 sm:hidden" /></Link></div></div></header>
+      <header className="border-b border-white/[0.08] bg-[#07090d]/88 backdrop-blur-xl"><div className="app-shell flex min-h-16 flex-wrap items-center justify-between gap-3 py-3"><Brand /><div className="flex items-center gap-2">{userCredits !== null && <span className="hidden items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-[#aab3bf] sm:flex"><Zap className="h-3.5 w-3.5 text-[var(--amber)]" />{userCredits} left</span>}{ownsScan && <button onClick={shareReport} disabled={sharingBusy} className="button-secondary !min-h-9 !px-3 !py-2"><Share2 className="h-3.5 w-3.5" /><span>{scan.access?.sharingEnabled ? "Replace share link" : "Create share link"}</span></button>}{session?.user && <button onClick={rescan} disabled={userCredits !== null && userCredits <= 0} className="button-primary !min-h-9 !px-3 !py-2"><RotateCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Rescan</span></button>}<Link href={session?.user ? "/dashboard" : "/"} className="ml-1 text-xs text-[#8a94a2] hover:text-white"><span className="hidden sm:inline">{session?.user ? "Dashboard" : "New scan"}</span><ArrowLeft className="h-4 w-4 sm:hidden" /></Link></div></div></header>
 
       <div className="app-shell py-8 sm:py-12">
+        {ownsScan && <section className="surface-muted mb-6 rounded-xl p-4" aria-label="Report sharing">
+          <p className="text-sm text-[#a5aeba]">{scan.access?.sharingEnabled ? "Link sharing is enabled. Anyone with the current link can view this report." : "This report is private. Create a sharing link to let someone else view it."}</p>
+          {shareUrl && <div className="mt-3 flex flex-wrap gap-2"><input aria-label="Sharing link" readOnly value={shareUrl} className="min-w-0 flex-1 rounded border border-white/10 bg-black/20 p-2 text-xs" /><button className="button-secondary" onClick={async () => {try {await navigator.clipboard.writeText(shareUrl); toast("Sharing link copied.", "success");} catch {toast("Select and copy the sharing link above.", "warning");}}}>Copy link</button></div>}
+          {scan.access?.sharingEnabled && <button className="button-secondary mt-3" disabled={sharingBusy} onClick={revokeShare}>Revoke sharing link</button>}
+        </section>}
+        {scan.access?.shared && !ownsScan && <p className="mb-6 text-sm text-[#a5aeba]">Shared report · access can be revoked by its owner.</p>}
+
         <section className="surface overflow-hidden rounded-2xl">
           <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
             <div><div className="flex items-center gap-2 text-xs text-[#798493]"><Globe2 className="h-3.5 w-3.5" /><span className="break-all">{scan.url}</span></div><h1 className="mt-4 text-3xl font-semibold tracking-[-0.05em] sm:text-4xl">Website security report</h1><div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#7b8695]"><span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" />{formatDate(scan.createdAt)}</span><span className="flex items-center gap-1.5"><FileSearch className="h-3.5 w-3.5" />{scan.pagesScanned} pages</span><span className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{findings.length} findings</span></div>{percentile !== null && <div className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-xs text-[#aab3bf]"><Trophy className="h-3.5 w-3.5 text-[var(--amber)]" /> Scores above {percentile}% of scanned sites</div>}</div>

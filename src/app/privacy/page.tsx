@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
 
       <main className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
         <h1 className="text-4xl font-bold text-white">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-gray-500">Last updated: February 14, 2026</p>
+        <p className="mt-2 text-sm text-gray-500">Last updated: November 7, 2026</p>
 
         <div className="prose-invert mt-10 space-y-8 text-gray-300 leading-relaxed">
           <section>
@@ -57,7 +57,7 @@ export default function PrivacyPolicyPage() {
 
             <h3 className="mt-4 text-lg font-medium text-gray-200">2.3 Scan Data</h3>
             <p className="mt-2">
-              When you use our vulnerability scanning Service, we collect and process information about the target websites you scan, including discovered vulnerabilities, security headers, SSL configurations, and other security-related findings. This data is stored to provide you with scan reports and history.
+              When you use our vulnerability scanning Service, we collect and process information about the target websites you scan, including discovered vulnerabilities, security headers, SSL configurations, and other security-related findings. This data is stored to provide you with scan reports and history. Website reports require the account owner or the browser that created an anonymous scan. Account owners can create a random sharing link and revoke or replace it at any time. Anyone with an active sharing link can view the report; paid remediation access still depends on the viewer’s plan. The report ID alone no longer grants public access, including for older reports. We store only hashes of sharing tokens and use an HttpOnly browser cookie to let anonymous scan creators recover and claim their own reports for 30 days.
             </p>
           
             <h3 className="mt-4 text-lg font-medium text-gray-200">2.4 GitHub Repository Access</h3>

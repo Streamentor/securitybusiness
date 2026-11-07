@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { reportPermission, sameOrigin, reportHeaders } from "@/lib/report-access";
 import { auth } from "@/lib/auth";
 
 /**
@@ -9,6 +10,7 @@ import { auth } from "@/lib/auth";
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!sameOrigin(req)) return NextResponse.json({error: "Forbidden"}, {status: 403, headers: reportHeaders});
     const session = await auth();
 
     if (!session?.user?.id) {
@@ -47,11 +49,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Claim the scan — link it to the authenticated user
-    await prisma.scan.update({
-      where: { id: scanId },
-      data: { userId: session.user.id },
+    const access = await reportPermission(req, scan, session.user.id);
+    if (!access.canClaim) return NextResponse.json({error: "Scan not found"}, {status: 404, headers: reportHeaders});
+    // Compare-and-set stops two accounts racing to claim the same anonymous scan.
+    const claimed = await prisma.scan.updateMany({
+      where: {id: scanId, userId: null}, data: {userId: session.user.id},
     });
+    if (claimed.count !== 1) return NextResponse.json({error: "Scan already claimed"}, {status: 409, headers: reportHeaders});
 
     return NextResponse.json({ message: "Scan claimed successfully", claimed: true });
   } catch (error) {

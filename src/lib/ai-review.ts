@@ -178,14 +178,16 @@ export async function reviewRepositoryWithAI(input: {user: ReviewUser; files: re
 export function scoreReviewedFindings(findings: readonly RepoFinding[]) {
   const penalty = {critical: 24, high: 13, medium: 6, low: 2};
   const weighted = findings.filter((f) => f.source !== "ai" || f.confidence === "high" || f.confidence === "medium");
-  const loss = weighted.reduce((sum, f) => sum + penalty[f.severity] * (f.source !== "ai" ? 1 : f.confidence === "high" ? 0.5 : 0.25), 0);
+  const ruleLoss = weighted.filter((f) => f.source !== "ai").reduce((sum, f) => sum + penalty[f.severity], 0);
+  const aiLoss = weighted.filter((f) => f.source === "ai").reduce((sum, f) => sum + penalty[f.severity] * (f.confidence === "high" ? 0.5 : 0.25), 0);
+  const loss = ruleLoss + Math.min(20, aiLoss);
   // Risk uses the strongest weighted severity, so a provisional critical is at most high.
   const effective = weighted.map((f) => f.source === "ai" ? f.severity === "critical" ? "high" : f.severity === "high" ? "medium" : "low" : f.severity);
   return {score: Math.max(0, Math.round(100 - loss)), risk: effective.includes("critical") ? "critical" as const : effective.includes("high") ? "high" as const : effective.includes("medium") ? "moderate" as const : "low" as const};
 }
 /** Apply CURRENT entitlement on every report read (including after a downgrade). */
 export function resultForEntitlement<T extends {findings: RepoFinding[]; score: number; risk: string; aiReview?: {status: string; note: string; findingsCount?: number}}>(result: T, paid: boolean): T {
-  if (paid) return result;
+  if (paid) return {...result, ...scoreReviewedFindings(result.findings)};
   const findings = result.findings.filter((f) => f.source !== "ai");
   const count = result.findings.length - findings.length;
   return {...result, findings, ...scoreReviewedFindings(findings), aiReview: {status: "locked", note: count ? `AI review found ${count} potential logic ${count === 1 ? "issue" : "issues"}. Upgrade to see the findings.` : "AI logic review is available on Starter and Pro. No AI findings are included in this report.", findingsCount: count}};

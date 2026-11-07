@@ -50,7 +50,7 @@ the dashboard and connected repository picker, and applies to future reviews.
   configuration, budget exhaustion or provider errors still yield rule-based reports.
 
 AI score penalty: high-confidence = 50% of the normal severity penalty, medium =
-25%, low = 0%. Round the aggregate score once. Provisional AI severity is downgraded
+25%, low = 0%. Cap the aggregate AI penalty at 20 points, independently of rule penalties. Round the aggregate score once. Saved reports and dashboard rows are recalculated on read, so this cap also applies to older reports. Provisional AI severity is downgraded
 one tier for the risk label; low confidence cannot affect it. Rule scoring is unchanged.
 
 ## Storage and rollout

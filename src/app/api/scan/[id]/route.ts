@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { reportPermission, reportHeaders } from "@/lib/report-access";
 import { auth } from "@/lib/auth";
 import { applyWebsiteRemediationAccess, isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import { compareScanFindings } from "@/lib/scan-comparison";
@@ -36,6 +37,9 @@ export async function GET(
       return NextResponse.json({ error: "Scan not found" }, { status: 404 });
     }
 
+    const access = await reportPermission(req, scan, session?.user?.id);
+    if (!access.allowed) return NextResponse.json({error: "Scan not found"}, {status: 404, headers: reportHeaders});
+
     // Owners see what changed since their previous completed scan of the same hostname.
     let comparison = null;
     if (session?.user?.id && scan.userId === session.user.id && scan.status === "completed") {
@@ -63,10 +67,12 @@ export async function GET(
 
     return NextResponse.json({
       ...scan,
+      userId: access.owner ? scan.userId : null,
+      access: {owner: access.owner, canClaim: access.canClaim, shared: access.shared, sharingEnabled: access.sharingEnabled},
       comparison,
       // Never send locked implementation steps and rely on a client-side blur.
       vulnerabilities: applyWebsiteRemediationAccess(scan.vulnerabilities, user?.plan),
-    });
+    }, {headers: reportHeaders});
   } catch {
     return NextResponse.json(
       { error: "Something went wrong" },
