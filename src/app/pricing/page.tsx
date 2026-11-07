@@ -7,6 +7,9 @@ import { useSession } from "next-auth/react";
 import { ArrowRight, Check, ChevronDown, Loader2, Minus, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import {ProductFigure} from "@/components/visuals/ProductFigure";
+import {SeverityLadder} from "@/components/visuals/SeverityLadder";
+
 import { ToastContainer, toast } from "@/components/Toast";
 
 const plans = [
@@ -140,6 +143,8 @@ export default function PricingPage() {
         </div>
       </section>
 
+      <div className="app-shell grid items-start gap-8 pb-20 lg:grid-cols-2"><ProductFigure id="private-repo-picker" caption="Starter and Pro: connect the read-only GitHub App and choose a private repository." sizes="(max-width: 1023px) 100vw, 600px" /><ProductFigure id="ai-review-finding" caption="Starter and Pro: AI findings include code evidence and still need verification. Excerpt from a real scan." sizes="(max-width: 1023px) 100vw, 600px" /></div>
+      <div className="app-shell pb-20"><SeverityLadder /></div>
       <section className="border-t border-white/[0.07] bg-[#0a0e14] py-24">
         <div className="app-shell grid gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
           <div><p className="eyebrow">Pricing FAQ</p><h2 className="section-title mt-4">No fine print.</h2></div>
