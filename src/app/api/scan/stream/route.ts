@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { scanWebsite, ScanProgress, VulnerabilityResult } from "@/lib/scanner";
-import { auth } from "@/lib/auth";
+import { scanWebsite, ScanProgress, validateScanTarget, VulnerabilityResult, WebsiteScanError } from "@/lib/scanner";
+import { admitWebsiteScan } from "@/lib/scan-gate";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
 
@@ -22,77 +22,29 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    new URL(normalizedUrl);
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid URL format" }), {
+    normalizedUrl = (await validateScanTarget(normalizedUrl)).toString();
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Invalid URL format" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  // Check authentication (optional — anonymous scans are allowed)
-  let userId: string | null = null;
-  let userPlan = "free";
-  try {
-    const session = await auth();
-    if (session?.user?.id) {
-      // Verify user still exists in DB (handles stale JWT after DB reset)
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { credits: true, plan: true },
-      });
-      if (user) {
-        if (user.credits <= 0) {
-          return new Response(
-            JSON.stringify({ error: "No scan credits remaining. Please upgrade your plan." }),
-            { status: 403, headers: { "Content-Type": "application/json" } }
-          );
-        }
-        userId = session.user.id;
-        userPlan = user.plan;
-      }
-      // If user not found in DB, treat as anonymous (stale session)
-    }
-  } catch {
-    // Auth error — proceed as anonymous
+  const admission = await admitWebsiteScan(req, normalizedUrl);
+  if (!admission.ok) {
+    return new Response(JSON.stringify({ error: admission.error }), {
+      status: admission.status,
+      headers: { "Content-Type": "application/json", ...(admission.retryAfter ? { "Retry-After": String(admission.retryAfter) } : {}) },
+    });
   }
-
-  // ── Domain abuse prevention ──
-  // Free/anonymous users can only scan a domain once across ALL accounts.
-  // This prevents creating multiple free accounts to repeatedly scan the same site.
-  // Paid users bypass this restriction entirely.
-  if (userPlan === "free") {
-    try {
-      const parsedUrl = new URL(normalizedUrl);
-      const domain = parsedUrl.hostname.replace(/^www\./, "");
-
-      // Check if this domain has already been scanned by ANY free user
-      const existingScan = await prisma.scan.findFirst({
-        where: {
-          url: { contains: domain },
-          status: "completed",
-          user: { plan: "free" },
-        },
-        select: { id: true },
-      });
-
-      if (existingScan) {
-        return new Response(
-          JSON.stringify({
-            error: "This domain has already been scanned on a free plan. Upgrade to Starter or Pro for unlimited scans of any domain.",
-          }),
-          { status: 403, headers: { "Content-Type": "application/json" } }
-        );
-      }
-    } catch {
-      // If domain check fails, allow the scan to proceed
-    }
-  }
+  const userId = admission.userId;
+  let creditReserved = admission.creditReserved;
 
   // Create the readable stream
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let scanId: string | null = null;
       function send(event: string, data: unknown) {
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
@@ -108,6 +60,7 @@ export async function POST(req: NextRequest) {
             userId,
           },
         });
+        scanId = scan.id;
 
         send("scan-created", { scanId: scan.id });
 
@@ -120,8 +73,8 @@ export async function POST(req: NextRequest) {
           step: "saving",
           label: "Saving results to database…",
           status: "running",
-          totalSteps: 17,
-          currentStep: 17,
+          totalSteps: 18,
+          currentStep: 18,
         });
 
         // Save vulnerabilities
@@ -151,32 +104,45 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // Update user scan count and deduct credit
+        // The credit was reserved before the scan; only update usage here.
         if (userId) {
           await prisma.user.update({
             where: { id: userId },
             data: {
               scansUsed: { increment: 1 },
-              credits: { decrement: 1 },
             },
           });
         }
 
+        const actionable = results.vulnerabilities.filter((v: VulnerabilityResult) => v.type !== "scan-meta");
         send("complete", {
           scanId: scan.id,
           score: results.score,
-          totalVulnerabilities: results.vulnerabilities.length,
+          totalVulnerabilities: actionable.length,
           pagesScanned: results.pagesScanned,
-          critical: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "critical").length,
-          high: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "high").length,
-          medium: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "medium").length,
-          low: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "low").length,
-          info: results.vulnerabilities.filter((v: VulnerabilityResult) => v.severity === "info").length,
+          critical: actionable.filter((v: VulnerabilityResult) => v.severity === "critical").length,
+          high: actionable.filter((v: VulnerabilityResult) => v.severity === "high").length,
+          medium: actionable.filter((v: VulnerabilityResult) => v.severity === "medium").length,
+          low: actionable.filter((v: VulnerabilityResult) => v.severity === "low").length,
+          info: actionable.filter((v: VulnerabilityResult) => v.severity === "info").length,
         });
       } catch (error) {
         console.error("Stream scan error:", error);
+        if (scanId) {
+          await prisma.scan.updateMany({
+            where: { id: scanId, status: "running" },
+            data: { status: "failed" },
+          }).catch(() => undefined);
+        }
+        if (userId && creditReserved) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { credits: { increment: 1 } },
+          }).catch(() => undefined);
+          creditReserved = false;
+        }
         send("error", {
-          message: "Scan failed. Please check the URL and try again.",
+          message: error instanceof WebsiteScanError ? error.message : "Scan failed. Please check the URL and try again.",
         });
       } finally {
         controller.close();

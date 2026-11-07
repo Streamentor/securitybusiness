@@ -1,6 +1,6 @@
 {
-  "name": "SecureSaaS",
-  "short_name": "SecureSaaS",
+  "name": "ScanMySaaS",
+  "short_name": "ScanMySaaS",
   "description": "Free website vulnerability scanner — automated security scanning for web applications",
   "start_url": "/",
   "display": "standalone",

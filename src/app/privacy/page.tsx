@@ -12,7 +12,7 @@ export default function PrivacyPolicyPage() {
               <Shield className="h-5 w-5 text-white" />
             </div>
             <span className="text-xl font-bold">
-              Secure<span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">SaaS</span>
+              ScanMy<span className="text-[var(--signal)]">SaaS</span>
             </span>
           </Link>
         </div>
@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-xl font-semibold text-white">1. Introduction</h2>
             <p className="mt-3">
-              Content Petit LLC (&quot;Company,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), located at 16192 Coastal Highway, Lewes, Delaware, operates the SecureSaaS website vulnerability scanning platform at scanmysaas.com (&quot;Service&quot;). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or use our Service.
+              Content Petit LLC (&quot;Company,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), located at 16192 Coastal Highway, Lewes, Delaware, operates the ScanMySaaS website security scanning platform at scanmysaas.com (&quot;Service&quot;). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or use our Service.
             </p>
             <p className="mt-3">
               By using our Service, you agree to the collection and use of information in accordance with this Privacy Policy. If you do not agree with the terms of this Privacy Policy, please do not access the Service.

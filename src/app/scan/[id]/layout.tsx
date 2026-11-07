@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   description:
     "View detailed vulnerability scan results for your website. See severity ratings, vulnerability descriptions, and actionable fix suggestions to improve your web application security.",
   openGraph: {
-    title: "Vulnerability Scan Report | SecureSaaS",
+    title: "Website Security Scan Report | ScanMySaaS",
     description:
       "Detailed website vulnerability scan results with severity ratings and fix suggestions.",
   },

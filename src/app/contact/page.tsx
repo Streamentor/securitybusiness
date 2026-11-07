@@ -12,7 +12,7 @@ export default function ContactPage() {
               <Shield className="h-5 w-5 text-white" />
             </div>
             <span className="text-xl font-bold">
-              Secure<span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">SaaS</span>
+              ScanMy<span className="text-[var(--signal)]">SaaS</span>
             </span>
           </Link>
         </div>

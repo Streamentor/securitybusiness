@@ -3,18 +3,18 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Login — Access Your Security Dashboard",
   description:
-    "Sign in to your SecureSaaS account to view vulnerability scan results, manage your web application security, and access detailed remediation reports.",
+    "Sign in to your ScanMySaaS account to view scan results, manage website security checks, and access detailed remediation reports.",
   alternates: {
-    canonical: "https://scanmysaas.com/login",
+    canonical: "https://www.scanmysaas.com/login",
   },
   openGraph: {
-    title: "Login — Access Your Security Dashboard | SecureSaaS",
+    title: "Login — Access Your Security Dashboard | ScanMySaaS",
     description:
-      "Sign in to your SecureSaaS account to view vulnerability scan results and manage web application security.",
-    url: "https://scanmysaas.com/login",
+      "Sign in to your ScanMySaaS account to view scan results and manage website security checks.",
+    url: "https://www.scanmysaas.com/login",
   },
   robots: {
-    index: true,
+    index: false,
     follow: true,
   },
 };

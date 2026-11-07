@@ -1,0 +1,4 @@
+Contact: mailto:stefan@scanmysaas.com
+Expires: 2027-03-06T00:00:00Z
+Preferred-Languages: en, sr
+Canonical: https://www.scanmysaas.com/.well-known/security.txt

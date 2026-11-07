@@ -1,50 +1,64 @@
 import type { MetadataRoute } from "next";
+import { guides } from "@/lib/guides";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://scanmysaas.com";
+  const baseUrl = "https://www.scanmysaas.com";
 
   return [
     {
       url: baseUrl,
-      lastModified: new Date(),
+      lastModified: new Date("2026-09-06"),
       changeFrequency: "weekly",
       priority: 1,
     },
     {
       url: `${baseUrl}/pricing`,
-      lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/login`,
-      lastModified: new Date(),
-      changeFrequency: "yearly",
-      priority: 0.5,
-    },
-    {
       url: `${baseUrl}/register`,
-      lastModified: new Date(),
       changeFrequency: "yearly",
       priority: 0.6,
     },
     {
       url: `${baseUrl}/privacy`,
-      lastModified: new Date(),
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
       url: `${baseUrl}/terms`,
-      lastModified: new Date(),
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
       url: `${baseUrl}/contact`,
-      lastModified: new Date(),
       changeFrequency: "yearly",
       priority: 0.4,
     },
+    {
+      url: `${baseUrl}/guides`,
+      lastModified: new Date("2026-09-06"),
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/repo-scan`,
+      lastModified: new Date("2026-09-06"),
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/vibe-coding-security`,
+      lastModified: new Date("2026-08-13"),
+      changeFrequency: "monthly",
+      priority: 0.85,
+    },
+    ...guides.map((guide) => ({
+      url: `${baseUrl}/guides/${guide.slug}`,
+      lastModified: new Date(guide.updatedAt || "2026-08-13"),
+      changeFrequency: "monthly" as const,
+      priority: 0.75,
+    })),
   ];
 }

@@ -1,4 +1,9 @@
 import * as cheerio from "cheerio";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+import type { LookupFunction } from "node:net";
+import { connect as connectTls } from "node:tls";
+import { Agent } from "undici";
 
 export interface VulnerabilityResult {
   type: string;
@@ -28,26 +33,188 @@ export interface ScanProgress {
 
 export type ProgressCallback = (progress: ScanProgress) => void;
 
-// ─── Helper: safe fetch with timeout ───────────────────────────────
-async function safeFetch(
+export class WebsiteScanError extends Error {}
+
+interface ReadinessItem {
+  key: "tls" | "robots" | "sitemap" | "llms" | "security" | "canonical" | "indexability";
+  label: string;
+  status: "pass" | "warning" | "unknown";
+  detail: string;
+  url: string;
+}
+
+function isPrivateAddress(address: string): boolean {
+  const normalized = address.toLowerCase().split("%")[0];
+  if (normalized.startsWith("::ffff:")) return isPrivateAddress(normalized.slice(7));
+  if (isIP(normalized) === 4) {
+    const [a, b] = normalized.split(".").map(Number);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224
+    );
+  }
+  if (isIP(normalized) === 6) {
+    return (
+      normalized === "::" ||
+      normalized === "::1" ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd") ||
+      /^fe[89ab]/.test(normalized) ||
+      normalized.startsWith("ff")
+    );
+  }
+  return true;
+}
+
+// Validate the addresses returned to the socket itself. A separate preflight
+// DNS lookup cannot stop a hostname from rebinding between validation and fetch.
+export function createPublicLookup(resolveHostname = (hostname: string) => lookup(hostname, { all: true, verbatim: true })): LookupFunction {
+  return (hostname, options, callback) => {
+    resolveHostname(hostname).then((addresses) => {
+      if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
+        callback(new Error("This hostname does not resolve exclusively to public addresses."), "");
+        return;
+      }
+      const compatible = options.family === 4 || options.family === 6
+        ? addresses.filter(({ family }) => family === options.family)
+        : addresses;
+      if (!compatible.length) {
+        callback(new Error("No public address is available for the requested network family."), "");
+        return;
+      }
+      callback(null, options.all ? compatible : compatible[0].address, compatible[0].family);
+    }, (error) => callback(error instanceof Error ? error : new Error("Hostname resolution failed."), ""));
+  };
+}
+
+const scanDispatcher = new Agent({ connect: { lookup: createPublicLookup() } });
+
+export async function validateScanTarget(rawUrl: string): Promise<URL> {
+  const target = new URL(rawUrl);
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    throw new Error("Only HTTP and HTTPS websites can be scanned.");
+  }
+  if (target.username || target.password) {
+    throw new Error("URLs with embedded credentials cannot be scanned.");
+  }
+  const rawHostname = target.hostname.toLowerCase().replace(/\.$/, "");
+  const hostname = rawHostname.startsWith("[") && rawHostname.endsWith("]")
+    ? rawHostname.slice(1, -1)
+    : rawHostname;
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".lan")
+  ) {
+    throw new Error("Private network targets cannot be scanned.");
+  }
+  if (isIP(hostname)) {
+    if (isPrivateAddress(hostname)) throw new Error("Private network targets cannot be scanned.");
+    return target;
+  }
+  let addresses: Array<{ address: string; family: number }>;
+  try {
+    addresses = await lookup(hostname, { all: true, verbatim: true });
+  } catch {
+    throw new Error("The website hostname could not be resolved.");
+  }
+  if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
+    throw new Error("This hostname does not resolve to a public address.");
+  }
+  return target;
+}
+
+export const MAX_SCAN_RESPONSE_BYTES = 2_000_000;
+
+// ─── Helper: bounded fetch, including redirects and body reads ────
+export async function safeFetch(
   url: string,
   opts: RequestInit & { timeout?: number } = {}
 ): Promise<Response | null> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("Scanner response deadline exceeded."));
+    }, opts.timeout ?? 10000);
+  });
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), opts.timeout ?? 10000);
-    const res = await fetch(url, {
-      ...opts,
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "SecureSaaS-Scanner/2.0 (Security Audit Tool)",
-        ...(opts.headers as Record<string, string>),
-      },
-    });
-    clearTimeout(timer);
-    return res;
+    let currentUrl = url;
+    const followRedirects = opts.redirect === undefined || opts.redirect === "follow";
+    for (let redirectCount = 0; redirectCount <= 5; redirectCount += 1) {
+      await Promise.race([validateScanTarget(currentUrl), deadline]);
+      let response: Response | null = null;
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      try {
+        const requestOptions: RequestInit & { dispatcher: Agent } = {
+          ...opts,
+          dispatcher: scanDispatcher,
+          cache: "no-store",
+          redirect: "manual",
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "ScanMySaaS-Scanner/2.0 (Security Audit Tool)",
+            ...(opts.headers as Record<string, string>),
+          },
+        };
+        response = await Promise.race([fetch(currentUrl, requestOptions).then((result) => {
+          if (controller.signal.aborted) {
+            void result.body?.cancel().catch(() => undefined);
+            throw new Error("Scanner response deadline exceeded.");
+          }
+          return result;
+        }), deadline]);
+        const location = response.headers.get("location");
+        if (followRedirects && [301, 302, 303, 307, 308].includes(response.status) && location && redirectCount < 5) {
+          // Redirect bodies are not inspected. Cancel before following, including
+          // when the next URL subsequently fails private-target validation.
+          void response.body?.cancel().catch(() => undefined);
+          currentUrl = new URL(location, currentUrl).toString();
+          continue;
+        }
+
+        if (response.body && Number(response.headers.get("content-length")) > MAX_SCAN_RESPONSE_BYTES) {
+          throw new Error("Scanner response exceeds the body byte limit.");
+        }
+        // Drain a clone while enforcing the deadline and decoded-byte limit.
+        // The original keeps its native status, headers, URL and text/json/clone
+        // semantics, with at most the bounded body buffered for existing callers.
+        reader = response.clone().body?.getReader();
+        let bytes = 0;
+        if (reader) {
+          while (true) {
+            const chunk = await Promise.race([reader.read(), deadline]);
+            if (chunk.done) break;
+            bytes += chunk.value.byteLength;
+            if (bytes > MAX_SCAN_RESPONSE_BYTES) throw new Error("Scanner response exceeds the body byte limit.");
+          }
+        }
+        return response;
+      } catch (error) {
+        // Cancel both tee branches; awaiting only one can deadlock until the
+        // other is canceled, and an upstream cancel handler can itself stall.
+        void reader?.cancel().catch(() => undefined);
+        void response?.body?.cancel().catch(() => undefined);
+        throw error;
+      } finally {
+        reader?.releaseLock();
+      }
+    }
+    return null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer!);
   }
 }
 
@@ -64,7 +231,7 @@ async function dnsLookupTxt(hostname: string): Promise<string[][]> {
 }
 
 // ─── 1. Crawl / discover pages ────────────────────────────────────
-async function discoverPages(
+export async function discoverPages(
   baseUrl: string,
   maxPages: number = 25
 ): Promise<string[]> {
@@ -128,7 +295,7 @@ async function discoverPages(
     }
   }
 
-  return pages.length > 0 ? pages : [baseUrl];
+  return pages;
 }
 
 // ─── 2. SSL / TLS checks ──────────────────────────────────────────
@@ -186,8 +353,91 @@ async function checkSSL(url: string): Promise<VulnerabilityResult[]> {
   return vulns;
 }
 
+async function inspectTlsCertificate(url: string): Promise<{ item: ReadinessItem; vulnerabilities: VulnerabilityResult[] }> {
+  const parsed = new URL(url);
+  const certificateUrl = `https://${parsed.hostname}/`;
+  const vulnerabilities: VulnerabilityResult[] = [];
+
+  if (parsed.protocol !== "https:") {
+    return {
+      item: { key: "tls", label: "TLS certificate", status: "warning", detail: "The scanned URL does not use HTTPS.", url },
+      vulnerabilities,
+    };
+  }
+
+  try {
+    await validateScanTarget(certificateUrl);
+    const addresses = await lookup(parsed.hostname, { all: true, verbatim: true });
+    const publicAddress = addresses.find(({ address }) => !isPrivateAddress(address));
+    if (!publicAddress) throw new Error("No public address");
+
+    return await new Promise((resolve) => {
+      let settled = false;
+      const finish = (item: ReadinessItem, extra: VulnerabilityResult[] = []) => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        resolve({ item, vulnerabilities: extra });
+      };
+      const socket = connectTls({
+        host: publicAddress.address,
+        port: 443,
+        servername: parsed.hostname,
+        rejectUnauthorized: false,
+        timeout: 7000,
+      });
+
+      socket.once("secureConnect", () => {
+        const certificate = socket.getPeerCertificate();
+        if (!certificate?.valid_to) {
+          finish({ key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate details could not be read.", url: certificateUrl });
+          return;
+        }
+
+        const expiresAt = new Date(certificate.valid_to);
+        const daysRemaining = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000);
+        if (!socket.authorized) {
+          const finding: VulnerabilityResult = {
+            type: "ssl",
+            severity: "high",
+            title: "TLS Certificate Is Not Trusted",
+            description: `The certificate could not be verified by the scanner (${socket.authorizationError || "unknown trust error"}).`,
+            url: certificateUrl,
+            remedy: "Replace or renew the certificate with a certificate trusted by common browsers. Confirm that the full intermediate chain is served, that the certificate covers the production hostname, and that your CDN or load balancer is presenting the intended certificate. Test the public hostname again after deployment.",
+          };
+          finish({ key: "tls", label: "TLS certificate", status: "warning", detail: "The certificate is not trusted by the scanner.", url: certificateUrl }, [finding]);
+          return;
+        }
+
+        if (daysRemaining <= 30) {
+          const expired = daysRemaining < 0;
+          const finding: VulnerabilityResult = {
+            type: "ssl",
+            severity: expired ? "critical" : daysRemaining <= 14 ? "high" : "medium",
+            title: expired ? "TLS Certificate Has Expired" : "TLS Certificate Expires Soon",
+            description: expired ? `The TLS certificate expired ${Math.abs(daysRemaining)} day(s) ago.` : `The TLS certificate expires in ${daysRemaining} day(s), on ${expiresAt.toISOString().slice(0, 10)}.`,
+            url: certificateUrl,
+            remedy: "Renew or replace the certificate before it interrupts customer access. Check the automated renewal job, DNS validation, and CDN or load balancer configuration. Add certificate-expiry monitoring so the team is alerted well before the next renewal window.",
+          };
+          finish({ key: "tls", label: "TLS certificate", status: "warning", detail: expired ? "The certificate has expired." : `Expires in ${daysRemaining} day(s).`, url: certificateUrl }, [finding]);
+          return;
+        }
+
+        finish({ key: "tls", label: "TLS certificate", status: "pass", detail: `Trusted certificate, valid for ${daysRemaining} more day(s).`, url: certificateUrl });
+      });
+      socket.once("timeout", () => finish({ key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate check timed out.", url: certificateUrl }));
+      socket.once("error", () => finish({ key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate could not be verified.", url: certificateUrl }));
+    });
+  } catch {
+    return {
+      item: { key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate could not be verified.", url: certificateUrl },
+      vulnerabilities,
+    };
+  }
+}
+
 // ─── 3. Security headers ──────────────────────────────────────────
-function checkSecurityHeaders(
+export function checkSecurityHeaders(
   url: string,
   headers: Headers
 ): VulnerabilityResult[] {
@@ -195,7 +445,36 @@ function checkSecurityHeaders(
 
   const csp = headers.get("content-security-policy");
   if (!csp) {
-    vulns.push({ type: "headers", severity: "high", title: "Missing Content-Security-Policy Header", description: "CSP is not set. This header prevents XSS, clickjacking, and code injection attacks.", url, remedy: "Add a Content-Security-Policy header to your server responses. Start with a report-only policy to avoid breaking your site, then tighten it.\n\nStarter policy (add to your server config or middleware):\n\n   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'\n\nNext.js — add to next.config.js headers():\n\n   { key: 'Content-Security-Policy', value: \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'\" }\n\nNginx:\n\n   add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;\" always;\n\nTip: Use https://csp-evaluator.withgoogle.com to test your policy before deploying." });
+    const reportOnly = headers.has("content-security-policy-report-only");
+    vulns.push({
+      type: "headers",
+      severity: "medium",
+      title: "Missing Content-Security-Policy Header",
+      description: `No enforced CSP response header was observed. This is a defense-in-depth hardening opportunity; absence alone does not prove exploitable XSS or clickjacking.${reportOnly ? " A Report-Only policy is present, but it monitors violations without blocking them." : ""}`,
+      url,
+      remedy: `First test a Content-Security-Policy-Report-Only response header. Report-Only does not block scripts or resources and does not provide enforcement. The restrictive starter below will report legitimate inline scripts and external services until you tailor it.
+
+Create a reporting endpoint you control, replace the placeholder URL, and verify reports arrive in your supported browsers. Use both response headers together:
+
+   Reporting-Endpoints: csp-endpoint="https://your-domain.example/csp-reports"
+   Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; report-to csp-endpoint
+
+Next.js — header entries inside next.config.js headers():
+
+   { key: 'Reporting-Endpoints', value: 'csp-endpoint="https://your-domain.example/csp-reports"' },
+   { key: 'Content-Security-Policy-Report-Only', value: "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; report-to csp-endpoint" }
+
+Nginx:
+
+   add_header Reporting-Endpoints 'csp-endpoint="https://your-domain.example/csp-reports"' always;
+   add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; report-to csp-endpoint" always;
+
+Test login, checkout, navigation, uploads and embeds in a production build. Review reports and allow only required services in the appropriate directives (scripts, connections, frames, styles, images and fonts).
+
+Before enforcement, authorize required inline scripts with fresh unpredictable nonces per request, or hashes where your framework supports them. Next.js nonce integration requires dynamic rendering and coordinated request/response headers; review its caching implications. An enforced script-src 'self' alone can break Next.js inline scripts. Do not resolve this by broadly allowing unsafe-inline.
+
+Only after testing, publish the tailored policy as Content-Security-Policy. Do not simply rename the starter header. Report-Only can remain alongside enforcement while you test further changes.`,
+    });
   }
 
   if (!headers.get("x-frame-options") && !csp?.includes("frame-ancestors")) {
@@ -207,17 +486,13 @@ function checkSecurityHeaders(
   }
 
   const hsts = headers.get("strict-transport-security");
-  if (!hsts) {
+  if (new URL(url).protocol === "https:" && !hsts) {
     vulns.push({ type: "headers", severity: "high", title: "Missing Strict-Transport-Security (HSTS)", description: "Without HSTS, browsers won't enforce HTTPS.", url, remedy: "Add the Strict-Transport-Security header to tell browsers to always use HTTPS for your domain, preventing SSL-stripping attacks.\n\nRecommended value:\n\n   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n\nThis tells browsers to enforce HTTPS for 1 year, including all subdomains.\n\nNext.js (next.config.js):\n\n   async headers() { return [{ source: '/:path*', headers: [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' }] }]; }\n\nNginx:\n\n   add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;\n\nApache (.htaccess):\n\n   Header always set Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\"\n\nImportant: Only add 'preload' if you're ready to submit your domain to hstspreload.org — once added, it's very hard to undo." });
-  } else {
+  } else if (hsts) {
     const maxAgeMatch = hsts.match(/max-age=(\d+)/);
     if (maxAgeMatch && parseInt(maxAgeMatch[1]) < 15768000) {
       vulns.push({ type: "headers", severity: "low", title: "HSTS max-age Too Short", description: `HSTS max-age is ${maxAgeMatch[1]} seconds. At least 6 months recommended.`, url, remedy: `Your HSTS max-age is set to ${maxAgeMatch[1]} seconds, which is too short. Browsers will stop enforcing HTTPS after this period.\n\nIncrease it to at least 31536000 (1 year):\n\n   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n\nUpdate this in the same place you set the header (Nginx config, next.config.js headers, Apache .htaccess, or your middleware).` });
     }
-  }
-
-  if (!headers.get("x-xss-protection")) {
-    vulns.push({ type: "headers", severity: "low", title: "Missing X-XSS-Protection Header", description: "Extra XSS protection for older browsers is missing.", url, remedy: "Add the X-XSS-Protection header for legacy browser support (IE, older Safari):\n\n   X-XSS-Protection: 1; mode=block\n\nThis tells the browser to block the page if a reflected XSS attack is detected.\n\nNext.js / Nginx / Apache — add alongside your other security headers:\n\n   { key: 'X-XSS-Protection', value: '1; mode=block' }\n\nNote: Modern browsers rely on CSP instead, but this header provides defense-in-depth for older browsers." });
   }
 
   if (!headers.get("referrer-policy")) {
@@ -238,48 +513,110 @@ function checkSecurityHeaders(
     vulns.push({ type: "info-disclosure", severity: "low", title: "Technology Disclosed via X-Powered-By", description: `X-Powered-By reveals: "${poweredBy}".`, url, remedy: `The X-Powered-By header is exposing your backend technology ("${poweredBy}"), making it easier for attackers to find known exploits.\n\nExpress.js:\n\n   app.disable('x-powered-by');\n   // or use Helmet: npm install helmet\n   const helmet = require('helmet');\n   app.use(helmet());\n\nPHP (php.ini):\n\n   expose_php = Off\n\nASP.NET (web.config):\n\n   <system.webServer><httpProtocol><customHeaders><remove name=\"X-Powered-By\" /></customHeaders></httpProtocol></system.webServer>\n\nNginx — add a proxy_hide_header directive:\n\n   proxy_hide_header X-Powered-By;\n\nApache:\n\n   Header always unset X-Powered-By` });
   }
 
-  const acao = headers.get("access-control-allow-origin");
-  if (acao === "*") {
-    vulns.push({ type: "cors", severity: "medium", title: "Overly Permissive CORS Policy", description: "Access-Control-Allow-Origin is set to '*'.", url, remedy: "Your CORS policy allows any website to make requests to your API, which can lead to data theft if your endpoints return sensitive information.\n\nReplace the wildcard (*) with specific trusted origins:\n\nExpress.js (using cors package):\n\n   const cors = require('cors');\n   app.use(cors({ origin: ['https://yourdomain.com', 'https://app.yourdomain.com'] }));\n\nNext.js API route:\n\n   res.setHeader('Access-Control-Allow-Origin', 'https://yourdomain.com');\n\nNginx:\n\n   add_header Access-Control-Allow-Origin \"https://yourdomain.com\" always;\n\nIf you have a public API that genuinely needs to be called from anywhere (e.g. a CDN or public widget), wildcard is acceptable — but never combine it with Access-Control-Allow-Credentials: true." });
-  }
-  if (acao === "*" && headers.get("access-control-allow-credentials") === "true") {
-    vulns.push({ type: "cors", severity: "high", title: "CORS Credentials with Wildcard Origin", description: "Allows credentials with wildcard origin — critical misconfiguration.", url, remedy: "This is a critical security flaw. When Access-Control-Allow-Credentials is true, the browser sends cookies/auth headers with cross-origin requests. Combined with a wildcard origin, any malicious site can steal authenticated user data.\n\nBrowsers actually block this combination, but some server frameworks silently reflect the requesting origin instead of '*', which is even worse.\n\nFix — always specify exact origins when using credentials:\n\nExpress.js:\n\n   app.use(cors({\n     origin: ['https://yourdomain.com'],\n     credentials: true\n   }));\n\nNginx:\n\n   add_header Access-Control-Allow-Origin \"https://yourdomain.com\" always;\n   add_header Access-Control-Allow-Credentials \"true\" always;\n\nNext.js API route:\n\n   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '');\n   // Validate origin against allowlist before setting header\n\nNever dynamically reflect the Origin header without validation — always check it against a whitelist of trusted domains first." });
-  }
-
-  const cacheControl = headers.get("cache-control");
-  if (!cacheControl || (!cacheControl.includes("no-store") && !cacheControl.includes("private"))) {
-    vulns.push({ type: "headers", severity: "info", title: "Missing Cache-Control for Sensitive Content", description: "Sensitive pages may be cached by proxies.", url, remedy: "Without proper Cache-Control headers, CDNs, proxies, and browsers may cache pages containing sensitive data (user profiles, account settings, dashboards), making them accessible to other users on shared computers or compromised caches.\n\nFor pages with sensitive/authenticated content, add:\n\n   Cache-Control: no-store, no-cache, must-revalidate, private\n\nNginx:\n\n   location /dashboard {\n     add_header Cache-Control \"no-store, no-cache, must-revalidate, private\" always;\n   }\n\nExpress.js:\n\n   app.use('/dashboard', (req, res, next) => {\n     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');\n     next();\n   });\n\nNext.js API route:\n\n   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');\n\nFor static assets (CSS, JS, images), you can still use long cache durations with immutable:\n\n   Cache-Control: public, max-age=31536000, immutable" });
-  }
-
   return vulns;
 }
 
-// ─── 4. CSP deep analysis ──────────────────────────────────────────
-function analyzeCSP(url: string, csp: string): VulnerabilityResult[] {
-  const vulns: VulnerabilityResult[] = [];
+async function checkCorsPolicy(baseUrl: string): Promise<VulnerabilityResult[]> {
+  const testOrigin = "https://untrusted-origin.scanmysaas.invalid";
+  const response = await safeFetch(baseUrl, { timeout: 7000, headers: { Origin: testOrigin } });
+  if (!response) return [];
+  const allowedOrigin = response.headers.get("access-control-allow-origin") || "";
+  const allowsCredentials = response.headers.get("access-control-allow-credentials")?.toLowerCase() === "true";
+  if (allowedOrigin !== testOrigin || !allowsCredentials) return [];
+  return [{
+    type: "cors",
+    severity: "high",
+    title: "CORS Reflects an Untrusted Origin with Credentials",
+    description: `The server reflected the scanner's unrelated Origin value (${testOrigin}) and also returned Access-Control-Allow-Credentials: true. This can let an attacker-controlled site read authenticated responses in a victim's browser.`,
+    url: baseUrl,
+    remedy: "Replace dynamic Origin reflection with an exact allowlist. Compare the parsed Origin against trusted production origins before returning Access-Control-Allow-Origin, send Access-Control-Allow-Credentials only on routes that require cookie-based cross-origin access, and add Vary: Origin when the response changes by origin. Add a regression test that sends an unrelated Origin and verifies that no permissive CORS headers are returned.",
+  }];
+}
 
-  if (csp.includes("'unsafe-inline'") && csp.includes("script-src")) {
-    vulns.push({ type: "csp", severity: "high", title: "CSP Allows Unsafe Inline Scripts", description: "CSP uses 'unsafe-inline' in script-src, negating XSS protection.", url, remedy: "The 'unsafe-inline' directive completely undermines CSP's XSS protection because it allows any injected <script> tag to execute. Replace it with nonces or hashes:\n\nUsing nonces (recommended):\n1. Generate a random nonce per request on the server\n2. Add it to your CSP header: script-src 'nonce-abc123'\n3. Add it to each script tag: <script nonce=\"abc123\">\n\nNext.js example (middleware.ts):\n\n   import { NextResponse } from 'next/server';\n   import crypto from 'crypto';\n   export function middleware(req) {\n     const nonce = crypto.randomBytes(16).toString('base64');\n     const csp = `script-src 'nonce-${nonce}' 'strict-dynamic';`;\n     const res = NextResponse.next();\n     res.headers.set('Content-Security-Policy', csp);\n     return res;\n   }\n\nUsing hashes:\n1. Hash each inline script: echo -n 'your script content' | openssl dgst -sha256 -binary | base64\n2. Add to CSP: script-src 'sha256-abc123...'\n\nNote: If you use a framework like React or Vue that requires inline scripts, use 'strict-dynamic' with nonces — it automatically trusts scripts loaded by your nonced scripts." });
+// ─── 4. CSP deep analysis ──────────────────────────────────────────
+type CSPPolicy = Map<string, string[]>;
+
+/**
+ * Parse a Content-Security-Policy header value. Multiple enforced policies may be
+ * joined with commas; within one policy the FIRST occurrence of a directive wins
+ * and later duplicates are ignored (W3C CSP3, "parse a serialized CSP").
+ */
+export function parseCSP(csp: string): CSPPolicy[] {
+  return csp.split(",").map((serialized) => {
+    const policy: CSPPolicy = new Map();
+    for (const part of serialized.split(";")) {
+      const tokens = part.trim().split(/\s+/).filter(Boolean);
+      if (!tokens.length) continue;
+      const name = tokens[0].toLowerCase();
+      if (!policy.has(name)) policy.set(name, tokens.slice(1).map((source) => source.toLowerCase()));
+    }
+    return policy;
+  }).filter((policy) => policy.size > 0);
+}
+
+const SCRIPT_FALLBACKS: Record<string, string[]> = {
+  "script-src-elem": ["script-src-elem", "script-src", "default-src"],
+  "script-src-attr": ["script-src-attr", "script-src", "default-src"],
+  "script-src": ["script-src", "default-src"],
+};
+
+/** Sources that govern a script directive, or null when the policy does not restrict it. */
+export function effectiveSources(policy: CSPPolicy, directive: string): string[] | null {
+  for (const name of SCRIPT_FALLBACKS[directive] || [directive, "default-src"]) {
+    const sources = policy.get(name);
+    if (sources) return sources;
   }
-  if (csp.includes("'unsafe-eval'")) {
+  return null;
+}
+
+/** CSP3: 'unsafe-inline' is ignored when the same list has a nonce, a hash, or 'strict-dynamic'. */
+export function allowsInlineScript(sources: string[] | null): boolean {
+  if (!sources) return true;
+  if (!sources.includes("'unsafe-inline'")) return false;
+  return !sources.some((source) => source.startsWith("'nonce-") || /^'sha(?:256|384|512)-/.test(source) || source === "'strict-dynamic'");
+}
+
+export function analyzeCSP(url: string, csp: string): VulnerabilityResult[] {
+  const vulns: VulnerabilityResult[] = [];
+  const policies = parseCSP(csp);
+  if (!policies.length) return vulns;
+  // A behaviour is permitted only if every enforced policy permits it.
+  const every = (test: (policy: CSPPolicy) => boolean) => policies.every(test);
+  const restrictsScripts = (policy: CSPPolicy) => effectiveSources(policy, "script-src-elem") !== null || effectiveSources(policy, "script-src-attr") !== null;
+  const inlineAllowed = policies.some(restrictsScripts)
+    && every((policy) => allowsInlineScript(effectiveSources(policy, "script-src-elem")) || allowsInlineScript(effectiveSources(policy, "script-src-attr")));
+  const evalAllowed = every((policy) => {
+    const sources = effectiveSources(policy, "script-src");
+    return sources !== null && sources.includes("'unsafe-eval'");
+  });
+  const hasDirective = (name: string) => policies.some((p) => p.has(name));
+
+  if (inlineAllowed) {
+    vulns.push({ type: "csp", severity: "high", title: "CSP Allows Unsafe Inline Scripts", description: "The effective script policy allows inline scripts or inline event handlers ('unsafe-inline' without a nonce, hash or 'strict-dynamic'), which removes most CSP protection against injected scripts.", url, remedy: "The 'unsafe-inline' directive completely undermines CSP's XSS protection because it allows any injected <script> tag to execute. Replace it with nonces or hashes:\n\nUsing nonces (recommended):\n1. Generate a random nonce per request on the server\n2. Add it to your CSP header: script-src 'nonce-abc123'\n3. Add it to each script tag: <script nonce=\"abc123\">\n\nNext.js example (middleware.ts):\n\n   import { NextResponse } from 'next/server';\n   import crypto from 'crypto';\n   export function middleware(req) {\n     const nonce = crypto.randomBytes(16).toString('base64');\n     const csp = `script-src 'nonce-${nonce}' 'strict-dynamic';`;\n     const res = NextResponse.next();\n     res.headers.set('Content-Security-Policy', csp);\n     return res;\n   }\n\nUsing hashes:\n1. Hash each inline script: echo -n 'your script content' | openssl dgst -sha256 -binary | base64\n2. Add to CSP: script-src 'sha256-abc123...'\n\nNote: If you use a framework like React or Vue that requires inline scripts, use 'strict-dynamic' with nonces — it automatically trusts scripts loaded by your nonced scripts." });
+  }
+  if (evalAllowed) {
     vulns.push({ type: "csp", severity: "high", title: "CSP Allows Unsafe Eval", description: "CSP uses 'unsafe-eval', allowing dynamic code execution.", url, remedy: "'unsafe-eval' allows eval(), Function(), setTimeout('string'), and similar dynamic code execution — a common XSS attack vector. Remove it and refactor your code:\n\nCommon patterns to fix:\n\n1. Replace eval() with JSON.parse():\n   // Bad: eval('(' + data + ')');\n   // Good: JSON.parse(data);\n\n2. Replace new Function() with proper functions:\n   // Bad: const fn = new Function('a', 'b', 'return a + b');\n   // Good: const fn = (a, b) => a + b;\n\n3. Replace string-based setTimeout/setInterval:\n   // Bad: setTimeout('doSomething()', 1000);\n   // Good: setTimeout(doSomething, 1000);\n\n4. If a library requires eval (e.g., some template engines), consider switching to a CSP-compatible alternative. For example, use Handlebars precompiled templates instead of runtime compilation.\n\n5. For Angular apps, use AOT compilation instead of JIT to eliminate the need for unsafe-eval." });
   }
 
-  const directives = ["default-src", "script-src", "style-src", "img-src", "connect-src", "font-src", "object-src", "media-src", "frame-src"];
-  for (const dir of directives) {
-    if (new RegExp(`${dir}[^;]*\\*`, "i").test(csp)) {
+  const checkedDirectives = ["default-src", "script-src", "style-src", "img-src", "connect-src", "font-src", "object-src", "media-src", "frame-src"];
+  for (const dir of checkedDirectives) {
+    if (every((p) => Boolean(p.get(dir)?.includes("*")))) {
       vulns.push({ type: "csp", severity: "medium", title: `CSP Wildcard in ${dir}`, description: `${dir} uses a wildcard (*), allowing content from any source.`, url, remedy: `A wildcard (*) in ${dir} defeats the purpose of CSP for that resource type — any domain can serve content. Replace it with specific trusted domains.\n\nExample fix:\n\n   # Instead of:\n   ${dir} *\n\n   # Use specific origins:\n   ${dir} 'self' https://cdn.yourdomain.com https://fonts.googleapis.com\n\nCommon patterns:\n- script-src: 'self' plus your CDN and analytics domains\n- style-src: 'self' 'unsafe-inline' (if needed) plus font providers\n- img-src: 'self' data: plus your image CDN\n- connect-src: 'self' plus your API domains\n- font-src: 'self' plus font CDNs like fonts.gstatic.com\n\nTip: Use your browser's DevTools console — CSP violations are logged there, helping you identify exactly which domains to whitelist.` });
       break;
     }
   }
 
-  if (!csp.includes("object-src") || csp.match(/object-src[^;]*\*/)) {
+  const objectRestricted = policies.some((p) => {
+    const sources = p.get("object-src") || p.get("default-src");
+    return Boolean(sources && !sources.includes("*"));
+  });
+  if (!objectRestricted) {
     vulns.push({ type: "csp", severity: "medium", title: "CSP Does Not Restrict Object Sources", description: "Plugin content not restricted.", url, remedy: "Without restricting object-src, attackers can inject Flash, Java applets, or other plugin content that can execute arbitrary code and bypass your other CSP rules.\n\nAdd this to your CSP header:\n\n   object-src 'none'\n\nThis blocks all <object>, <embed>, and <applet> elements. Since Flash is dead and Java applets are obsolete, 'none' is almost always the right choice.\n\nFull CSP example with object-src:\n\n   Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self';\n\nIf you absolutely need to embed PDFs via <object>, use:\n\n   object-src 'self'" });
   }
-  if (!csp.includes("base-uri")) {
+  if (!hasDirective("base-uri")) {
     vulns.push({ type: "csp", severity: "low", title: "CSP Missing base-uri", description: "Attackers can use <base> tags to hijack URLs.", url, remedy: "Without base-uri, an attacker who can inject HTML (even without script execution) can add a <base href=\"https://evil.com\"> tag. This hijacks all relative URLs on the page — links, form actions, and script srcs will resolve against the attacker's domain.\n\nAdd this to your CSP header:\n\n   base-uri 'self'\n\nThis restricts <base> tags to only point to your own origin. In virtually all cases, 'self' is the correct value. Only omit this if you genuinely need <base> tags pointing to external domains (very rare).\n\nExample:\n\n   Content-Security-Policy: default-src 'self'; base-uri 'self'; script-src 'self';" });
   }
-  if (!csp.includes("form-action")) {
+  if (!hasDirective("form-action")) {
     vulns.push({ type: "csp", severity: "low", title: "CSP Missing form-action", description: "Injected forms could submit to external servers.", url, remedy: "Without form-action, an attacker who injects a <form> can set its action to an external server, stealing user input (credentials, personal data) when the form is submitted.\n\nAdd this to your CSP header:\n\n   form-action 'self'\n\nThis ensures all form submissions go to your own origin only.\n\nIf you use third-party payment processors or OAuth redirects, whitelist those specific domains:\n\n   form-action 'self' https://checkout.stripe.com https://accounts.google.com\n\nFull example:\n\n   Content-Security-Policy: default-src 'self'; form-action 'self' https://checkout.stripe.com; base-uri 'self';" });
   }
 
@@ -287,56 +624,92 @@ function analyzeCSP(url: string, csp: string): VulnerabilityResult[] {
 }
 
 // ─── 5. Cookie security ───────────────────────────────────────────
-function checkCookies(url: string, headers: Headers): VulnerabilityResult[] {
-  const vulns: VulnerabilityResult[] = [];
-  const setCookie = headers.get("set-cookie");
-  if (!setCookie) return vulns;
-  const lc = setCookie.toLowerCase();
+interface ParsedCookie { name: string; attributes: Map<string, string> }
 
-  if (!lc.includes("httponly")) vulns.push({ type: "cookies", severity: "medium", title: "Cookies Without HttpOnly", description: "JavaScript can access cookies via XSS.", url, remedy: "Without the HttpOnly flag, any JavaScript running on the page — including injected XSS scripts — can read cookies via document.cookie, stealing session tokens and authentication data.\n\nAdd the HttpOnly flag to all sensitive cookies:\n\nExpress.js:\n\n   res.cookie('session', token, {\n     httpOnly: true,\n     secure: true,\n     sameSite: 'lax'\n   });\n\nNext.js API route:\n\n   res.setHeader('Set-Cookie', 'session=abc123; HttpOnly; Secure; SameSite=Lax; Path=/');\n\nPHP:\n\n   setcookie('session', $token, [\n     'httponly' => true,\n     'secure' => true,\n     'samesite' => 'Lax'\n   ]);\n\nDjango (settings.py):\n\n   SESSION_COOKIE_HTTPONLY = True\n\nNote: Only cookies that need JavaScript access (like a CSRF token read by your frontend) should omit HttpOnly. Session cookies and auth tokens should always have it." });
-  if (!lc.includes("secure")) vulns.push({ type: "cookies", severity: "medium", title: "Cookies Without Secure Flag", description: "Cookies may be sent over HTTP.", url, remedy: "Without the Secure flag, cookies will be sent over unencrypted HTTP connections, allowing attackers on the same network (Wi-Fi sniffing, MITM attacks) to intercept session tokens.\n\nAdd the Secure flag to all cookies:\n\nExpress.js:\n\n   res.cookie('session', token, {\n     secure: true,\n     httpOnly: true,\n     sameSite: 'lax'\n   });\n\nNginx (proxy level):\n\n   proxy_cookie_flags ~ secure httponly;\n\nApache:\n\n   Header always edit Set-Cookie ^(.*)$ \"$1; Secure\"\n\nPHP (php.ini):\n\n   session.cookie_secure = 1\n\nDjango:\n\n   SESSION_COOKIE_SECURE = True\n   CSRF_COOKIE_SECURE = True\n\nRails:\n\n   Rails.application.config.session_store :cookie_store, secure: true\n\nImportant: The Secure flag requires HTTPS. Make sure your site fully supports HTTPS before enabling this, or cookies won't be sent at all." });
-  if (!lc.includes("samesite")) vulns.push({ type: "cookies", severity: "medium", title: "Cookies Without SameSite", description: "Cookies sent with cross-site requests (CSRF risk).", url, remedy: "Without the SameSite attribute, cookies are sent with every request to your site — even if the request originates from a malicious third-party site. This enables CSRF (Cross-Site Request Forgery) attacks.\n\nAdd SameSite to all cookies:\n\nRecommended values:\n- SameSite=Lax — cookies sent on top-level navigations (links) but NOT on cross-site POST/AJAX. Best for most session cookies.\n- SameSite=Strict — cookies never sent cross-site. Use for highly sensitive apps, but breaks login-via-link flows.\n- SameSite=None — cookies sent everywhere (must include Secure flag). Only use for legitimate cross-site scenarios like embedded widgets.\n\nExpress.js:\n\n   res.cookie('session', token, {\n     sameSite: 'lax',\n     httpOnly: true,\n     secure: true\n   });\n\nDjango:\n\n   SESSION_COOKIE_SAMESITE = 'Lax'\n\nPHP:\n\n   setcookie('session', $token, [\n     'samesite' => 'Lax',\n     'httponly' => true,\n     'secure' => true\n   ]);\n\nNote: Modern browsers default to Lax if SameSite is not specified, but older browsers send cookies everywhere. Explicitly setting SameSite protects all users." });
-  if (lc.includes("domain=.")) vulns.push({ type: "cookies", severity: "low", title: "Cookie Scoped to Parent Domain", description: "Cookie accessible to all subdomains.", url, remedy: "When a cookie's Domain attribute starts with a dot (e.g., Domain=.example.com), the cookie is shared across ALL subdomains — including any subdomain an attacker might control (e.g., compromised.example.com, user-content.example.com).\n\nThis means a compromised or untrusted subdomain can read and manipulate your session cookies.\n\nFix — scope cookies to the most specific domain:\n\n1. Remove the Domain attribute entirely (cookie defaults to exact host only):\n\n   Set-Cookie: session=abc123; Path=/; HttpOnly; Secure\n   // Without Domain=, this cookie is ONLY sent to the exact hostname\n\n2. If you must share across subdomains, minimize scope:\n\n   // Instead of Domain=.example.com (ALL subdomains)\n   // Use the most specific subdomain needed\n   Set-Cookie: session=abc123; Domain=app.example.com; Path=/; HttpOnly; Secure\n\n3. If your app runs on a shared hosting platform, never set Domain at all — let the browser default to the exact origin.\n\nBest practice: Use separate cookies for separate subdomains. Don't share session tokens across subdomains unless absolutely necessary." });
+/** One entry per Set-Cookie header; never merge cookies before checking attributes. */
+export function parseSetCookies(headers: Headers): ParsedCookie[] {
+  const raw = typeof headers.getSetCookie === "function" ? headers.getSetCookie() : (headers.get("set-cookie") ? [headers.get("set-cookie")!] : []);
+  return raw.map((line) => {
+    const [pair, ...attributeParts] = line.split(";");
+    const attributes = new Map<string, string>();
+    for (const part of attributeParts) {
+      const [key, ...value] = part.split("=");
+      if (key.trim()) attributes.set(key.trim().toLowerCase(), value.join("=").trim().toLowerCase());
+    }
+    return { name: pair.split("=")[0].trim(), attributes };
+  }).filter((cookie) => cookie.name)
+    .filter((cookie, index, all) => all.findLastIndex((other) => other.name === cookie.name) === index);
+}
+
+function isSessionLikeCookie(name: string) {
+  return /(?:sess|sid|auth|token|jwt|login|remember|account|user)/i.test(name);
+}
+
+export function checkCookies(url: string, headers: Headers): VulnerabilityResult[] {
+  const vulns: VulnerabilityResult[] = [];
+  const cookies = parseSetCookies(headers);
+  if (!cookies.length) return vulns;
+  const isHttps = new URL(url).protocol === "https:";
+  const missingHttpOnly = cookies.filter((cookie) => !cookie.attributes.has("httponly"));
+  const sensitiveWithoutHttpOnly = missingHttpOnly.filter((cookie) => isSessionLikeCookie(cookie.name));
+  const missingSecure = isHttps ? cookies.filter((cookie) => !cookie.attributes.has("secure")) : [];
+  const missingSameSite = cookies.filter((cookie) => !cookie.attributes.has("samesite"));
+  const parentDomain = cookies.filter((cookie) => (cookie.attributes.get("domain") || "").startsWith("."));
+  const names = (list: ParsedCookie[]) => list.map((cookie) => cookie.name).slice(0, 8).join(", ");
+
+  if (missingHttpOnly.length) vulns.push({ type: "cookies", severity: sensitiveWithoutHttpOnly.length ? "medium" : "low", title: "Cookies Without HttpOnly", description: `${missingHttpOnly.length} cookie(s) readable by JavaScript: ${names(missingHttpOnly)}.${sensitiveWithoutHttpOnly.length ? " At least one looks like a session or authentication cookie." : " None look like session cookies; confirm they hold no secrets."}`, url, remedy: "Without the HttpOnly flag, any JavaScript running on the page — including injected XSS scripts — can read cookies via document.cookie, stealing session tokens and authentication data.\n\nAdd the HttpOnly flag to all sensitive cookies:\n\nExpress.js:\n\n   res.cookie('session', token, {\n     httpOnly: true,\n     secure: true,\n     sameSite: 'lax'\n   });\n\nNext.js API route:\n\n   res.setHeader('Set-Cookie', 'session=abc123; HttpOnly; Secure; SameSite=Lax; Path=/');\n\nPHP:\n\n   setcookie('session', $token, [\n     'httponly' => true,\n     'secure' => true,\n     'samesite' => 'Lax'\n   ]);\n\nDjango (settings.py):\n\n   SESSION_COOKIE_HTTPONLY = True\n\nNote: Only cookies that need JavaScript access (like a CSRF token read by your frontend) should omit HttpOnly. Session cookies and auth tokens should always have it." });
+  if (missingSecure.length) vulns.push({ type: "cookies", severity: "medium", title: "Cookies Without Secure Flag", description: `${missingSecure.length} cookie(s) may be sent over plain HTTP: ${names(missingSecure)}.`, url, remedy: "Without the Secure flag, cookies will be sent over unencrypted HTTP connections, allowing attackers on the same network (Wi-Fi sniffing, MITM attacks) to intercept session tokens.\n\nAdd the Secure flag to all cookies:\n\nExpress.js:\n\n   res.cookie('session', token, {\n     secure: true,\n     httpOnly: true,\n     sameSite: 'lax'\n   });\n\nNginx (proxy level):\n\n   proxy_cookie_flags ~ secure httponly;\n\nApache:\n\n   Header always edit Set-Cookie ^(.*)$ \"$1; Secure\"\n\nPHP (php.ini):\n\n   session.cookie_secure = 1\n\nDjango:\n\n   SESSION_COOKIE_SECURE = True\n   CSRF_COOKIE_SECURE = True\n\nRails:\n\n   Rails.application.config.session_store :cookie_store, secure: true\n\nImportant: The Secure flag requires HTTPS. Make sure your site fully supports HTTPS before enabling this, or cookies won't be sent at all." });
+  if (missingSameSite.length) vulns.push({ type: "cookies", severity: "low", title: "Cookies Without SameSite", description: `${missingSameSite.length} cookie(s) rely on the browser default (Lax in modern browsers): ${names(missingSameSite)}.`, url, remedy: "Without the SameSite attribute, cookies are sent with every request to your site — even if the request originates from a malicious third-party site. This enables CSRF (Cross-Site Request Forgery) attacks.\n\nAdd SameSite to all cookies:\n\nRecommended values:\n- SameSite=Lax — cookies sent on top-level navigations (links) but NOT on cross-site POST/AJAX. Best for most session cookies.\n- SameSite=Strict — cookies never sent cross-site. Use for highly sensitive apps, but breaks login-via-link flows.\n- SameSite=None — cookies sent everywhere (must include Secure flag). Only use for legitimate cross-site scenarios like embedded widgets.\n\nExpress.js:\n\n   res.cookie('session', token, {\n     sameSite: 'lax',\n     httpOnly: true,\n     secure: true\n   });\n\nDjango:\n\n   SESSION_COOKIE_SAMESITE = 'Lax'\n\nPHP:\n\n   setcookie('session', $token, [\n     'samesite' => 'Lax',\n     'httponly' => true,\n     'secure' => true\n   ]);\n\nNote: Modern browsers default to Lax if SameSite is not specified, but older browsers send cookies everywhere. Explicitly setting SameSite protects all users." });
+  if (parentDomain.length) vulns.push({ type: "cookies", severity: "low", title: "Cookie Scoped to Parent Domain", description: `Shared with every subdomain: ${names(parentDomain)}.`, url, remedy: "When a cookie's Domain attribute starts with a dot (e.g., Domain=.example.com), the cookie is shared across ALL subdomains — including any subdomain an attacker might control (e.g., compromised.example.com, user-content.example.com).\n\nThis means a compromised or untrusted subdomain can read and manipulate your session cookies.\n\nFix — scope cookies to the most specific domain:\n\n1. Remove the Domain attribute entirely (cookie defaults to exact host only):\n\n   Set-Cookie: session=abc123; Path=/; HttpOnly; Secure\n   // Without Domain=, this cookie is ONLY sent to the exact hostname\n\n2. If you must share across subdomains, minimize scope:\n\n   // Instead of Domain=.example.com (ALL subdomains)\n   // Use the most specific subdomain needed\n   Set-Cookie: session=abc123; Domain=app.example.com; Path=/; HttpOnly; Secure\n\n3. If your app runs on a shared hosting platform, never set Domain at all — let the browser default to the exact origin.\n\nBest practice: Use separate cookies for separate subdomains. Don't share session tokens across subdomains unless absolutely necessary." });
 
   return vulns;
 }
 
+/** Remove comments and string/template literals so sink names in text are not mistaken for code. */
+export function stripJsLiteralsAndComments(code: string): string {
+  let out = "";
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    const next = code[i + 1];
+    if (ch === "/" && next === "/") { while (i < code.length && code[i] !== "\n") i++; out += "\n"; continue; }
+    if (ch === "/" && next === "*") { i += 2; while (i < code.length && !(code[i] === "*" && code[i + 1] === "/")) i++; i++; out += " "; continue; }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      i++;
+      while (i < code.length && code[i] !== ch) { if (code[i] === "\\") i++; i++; }
+      out += '""';
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
 // ─── 6. HTML security checks ──────────────────────────────────────
-function checkHTMLSecurity(url: string, html: string): VulnerabilityResult[] {
+export function checkHTMLSecurity(url: string, html: string): VulnerabilityResult[] {
   const vulns: VulnerabilityResult[] = [];
   const $ = cheerio.load(html);
 
-  // CSRF
-  const forms = $("form");
-  if (forms.length > 0) {
-    let hasCSRF = false;
-    forms.each((_, form) => {
-      if ($(form).find('input[name*="csrf"], input[name*="token"], input[name*="_token"], input[name*="authenticity"]').length > 0) hasCSRF = true;
-    });
-    if (!hasCSRF) vulns.push({ type: "csrf", severity: "high", title: "Forms Without CSRF Protection", description: "Forms lack visible CSRF tokens.", url, remedy: "Without CSRF (Cross-Site Request Forgery) protection, attackers can create a hidden form on their site that auto-submits to YOUR site using your logged-in user's session. This can change passwords, make purchases, or delete accounts — all without the user knowing.\n\nHow to fix by framework:\n\nNext.js / React (using server actions or API routes):\n1. Generate a CSRF token on the server and embed it in your form:\n\n   import crypto from 'crypto';\n   const csrfToken = crypto.randomBytes(32).toString('hex');\n   // Store in session/cookie, then embed in form:\n   <input type=\"hidden\" name=\"_csrf\" value={csrfToken} />\n\n2. Validate on submission:\n   if (req.body._csrf !== session.csrfToken) return res.status(403).json({ error: 'Invalid CSRF token' });\n\nExpress.js (using csurf or csrf-csrf):\n\n   npm install csrf-csrf\n\n   import { doubleCsrf } from 'csrf-csrf';\n   const { generateToken, doubleCsrfProtection } = doubleCsrf({ getSecret: () => 'your-secret' });\n   app.use(doubleCsrfProtection);\n   // In your form route:\n   app.get('/form', (req, res) => {\n     res.render('form', { csrfToken: generateToken(req, res) });\n   });\n\nDjango (built-in):\n   <!-- In your template -->\n   <form method=\"POST\">\n     {% csrf_token %}\n     ...\n   </form>\n\nLaravel (built-in):\n   <form method=\"POST\">\n     @csrf\n     ...\n   </form>\n\nRails (built-in):\n   <%= form_with do |f| %>\n     <!-- csrf_meta_tags automatically included -->\n   <% end %>\n\nAdditionally, setting SameSite=Lax on session cookies provides a strong layer of CSRF defense in modern browsers, as it prevents cookies from being sent on cross-site POST requests." });
-  }
+  // CSRF — evaluated per form. A missing visible token is a review signal, not proof.
+  const tokenName = /(?:^|[_\-.[])(?:csrf|xsrf|_?token|authenticity_token|csrfmiddlewaretoken|__requestverificationtoken|_wpnonce|nonce)(?:$|[_\-.\]])/i;
+  let formsWithoutToken = 0;
+  $("form").each((_, form) => {
+    const method = ($(form).attr("method") || "get").toLowerCase();
+    if (!["post", "put", "patch", "delete"].includes(method)) return;
+    const inputNames = $(form).find("input[name]").map((__, input) => $(input).attr("name") || "").get();
+    // Next.js server actions carry $ACTION_ fields and are protected by an Origin check.
+    if (inputNames.some((name) => tokenName.test(name) || name.startsWith("$ACTION_"))) return;
+    formsWithoutToken += 1;
+  });
+  if (formsWithoutToken > 0) vulns.push({ type: "csrf", severity: "low", title: "Forms Without Visible CSRF Token", description: `${formsWithoutToken} state-changing form(s) have no visible anti-CSRF token. This is a review signal: SameSite cookies, Origin checks or framework protections may still block cross-site submissions.`, url, remedy: "Without CSRF (Cross-Site Request Forgery) protection, attackers can create a hidden form on their site that auto-submits to YOUR site using your logged-in user's session. This can change passwords, make purchases, or delete accounts — all without the user knowing.\n\nHow to fix by framework:\n\nNext.js / React (using server actions or API routes):\n1. Generate a CSRF token on the server and embed it in your form:\n\n   import crypto from 'crypto';\n   const csrfToken = crypto.randomBytes(32).toString('hex');\n   // Store in session/cookie, then embed in form:\n   <input type=\"hidden\" name=\"_csrf\" value={csrfToken} />\n\n2. Validate on submission:\n   if (req.body._csrf !== session.csrfToken) return res.status(403).json({ error: 'Invalid CSRF token' });\n\nExpress.js (using csurf or csrf-csrf):\n\n   npm install csrf-csrf\n\n   import { doubleCsrf } from 'csrf-csrf';\n   const { generateToken, doubleCsrfProtection } = doubleCsrf({ getSecret: () => 'your-secret' });\n   app.use(doubleCsrfProtection);\n   // In your form route:\n   app.get('/form', (req, res) => {\n     res.render('form', { csrfToken: generateToken(req, res) });\n   });\n\nDjango (built-in):\n   <!-- In your template -->\n   <form method=\"POST\">\n     {% csrf_token %}\n     ...\n   </form>\n\nLaravel (built-in):\n   <form method=\"POST\">\n     @csrf\n     ...\n   </form>\n\nRails (built-in):\n   <%= form_with do |f| %>\n     <!-- csrf_meta_tags automatically included -->\n   <% end %>\n\nAdditionally, setting SameSite=Lax on session cookies provides a strong layer of CSRF defense in modern browsers, as it prevents cookies from being sent on cross-site POST requests." });
 
   // Unsafe JS patterns
-  const inlineScripts = $("script:not([src])");
+  const inlineScripts = $('script:not([src]):not([type="application/ld+json"]):not([type="application/json"])');
   let hasUnsafe = false;
   inlineScripts.each((_, s) => {
     const c = $(s).html() || "";
-    if (c.includes("document.write") || c.includes("innerHTML") || c.includes("eval(") || c.includes("outerHTML") || c.includes("insertAdjacentHTML")) hasUnsafe = true;
+    if (!c.includes("__next_f.push") && /(?:document\.write\s*\(|\.innerHTML\s*=(?!=)|\beval\s*\(|\.outerHTML\s*=(?!=)|\.insertAdjacentHTML\s*\()/i.test(stripJsLiteralsAndComments(c))) hasUnsafe = true;
   });
-  if (hasUnsafe) vulns.push({ type: "xss", severity: "high", title: "Unsafe JavaScript Patterns", description: "Dangerous patterns (document.write, innerHTML, eval) detected.", url, remedy: "These JavaScript patterns can introduce XSS (Cross-Site Scripting) vulnerabilities if they process any user-controlled data. Attackers can inject malicious scripts that steal cookies, redirect users, or deface your site.\n\nReplace each pattern with safer alternatives:\n\n1. innerHTML → textContent (for text) or DOM API (for elements):\n   // Bad: element.innerHTML = userInput;\n   // Good: element.textContent = userInput;\n   // If you need HTML: use DOMPurify to sanitize first:\n   import DOMPurify from 'dompurify';\n   element.innerHTML = DOMPurify.sanitize(userInput);\n\n2. document.write → DOM manipulation:\n   // Bad: document.write('<p>' + data + '</p>');\n   // Good: const p = document.createElement('p');\n   //       p.textContent = data;\n   //       document.body.appendChild(p);\n\n3. eval() → JSON.parse() or proper function calls:\n   // Bad: eval(serverResponse);\n   // Good: JSON.parse(serverResponse);\n\n4. outerHTML → replaceWith():\n   // Bad: el.outerHTML = newHTML;\n   // Good: const newEl = document.createElement('div');\n   //       newEl.textContent = data;\n   //       el.replaceWith(newEl);\n\n5. insertAdjacentHTML → insertAdjacentText or createElement:\n   // Bad: el.insertAdjacentHTML('beforeend', userInput);\n   // Good: el.insertAdjacentText('beforeend', userInput);\n\nFor React/Vue/Angular apps, these frameworks handle DOM escaping automatically — avoid using dangerouslySetInnerHTML (React) or v-html (Vue) with user data." });
-
-  // target="_blank"
-  let unsafeLinks = 0;
-  $('a[target="_blank"]').each((_, l) => { if (!($(l).attr("rel") || "").includes("noopener")) unsafeLinks++; });
-  if (unsafeLinks > 0) vulns.push({ type: "xss", severity: "low", title: 'target="_blank" Missing rel="noopener"', description: `${unsafeLinks} link(s) vulnerable to reverse tabnabbing.`, url, remedy: "When a link opens in a new tab with target=\"_blank\" without rel=\"noopener\", the opened page gets a reference to your page via window.opener. A malicious site can then redirect your original tab to a phishing page using window.opener.location = 'https://evil.com/fake-login'.\n\nFix — add rel=\"noopener noreferrer\" to all external target=\"_blank\" links:\n\n   <a href=\"https://example.com\" target=\"_blank\" rel=\"noopener noreferrer\">\n\nReact / Next.js:\n\n   <a href={url} target=\"_blank\" rel=\"noopener noreferrer\">\n     External Link\n   </a>\n\nNote: Modern browsers (Chrome 88+, Firefox 79+, Safari) now default target=\"_blank\" links to noopener behavior. However, adding the attribute explicitly protects users on older browsers.\n\nTo fix all links at once, you can add a global script:\n\n   document.querySelectorAll('a[target=\"_blank\"]').forEach(link => {\n     link.setAttribute('rel', 'noopener noreferrer');\n   });\n\nOr better yet, handle this in your link component template to prevent future occurrences." });
-
-  // Password autocomplete
-  const pw = $('input[type="password"]');
-  if (pw.length > 0) {
-    let bad = false;
-    pw.each((_, el) => { const ac = $(el).attr("autocomplete"); if (!ac || ac === "on") bad = true; });
-    if (bad) vulns.push({ type: "info-disclosure", severity: "info", title: "Password Fields Allow Autocomplete", description: "Browsers may cache credentials.", url, remedy: "When autocomplete is not properly configured on password fields, browsers may store credentials in their autofill database. On shared or public computers, this can expose credentials to the next user.\n\nSet the appropriate autocomplete value based on context:\n\nFor login forms (existing password):\n   <input type=\"password\" autocomplete=\"current-password\" />\n\nFor registration forms (new password):\n   <input type=\"password\" autocomplete=\"new-password\" />\n\nFor sensitive forms where you want NO autocomplete (e.g., admin panels):\n   <input type=\"password\" autocomplete=\"off\" />\n\nReact example:\n   <input type=\"password\" autoComplete=\"current-password\" />\n\nNote: Modern browsers may ignore autocomplete=\"off\" for login forms (they consider password managers a net security benefit). Using \"current-password\" or \"new-password\" gives browsers proper context while still working with password managers, which is actually the recommended approach by security experts and NIST guidelines." });
-  }
+  if (hasUnsafe) vulns.push({ type: "xss", severity: "medium", title: "Unsafe JavaScript Patterns", description: "Inline scripts call DOM sinks (document.write, innerHTML, eval). This is a review signal: it becomes XSS only if user-controlled data reaches the sink.", url, remedy: "These JavaScript patterns can introduce XSS (Cross-Site Scripting) vulnerabilities if they process any user-controlled data. Attackers can inject malicious scripts that steal cookies, redirect users, or deface your site.\n\nReplace each pattern with safer alternatives:\n\n1. innerHTML → textContent (for text) or DOM API (for elements):\n   // Bad: element.innerHTML = userInput;\n   // Good: element.textContent = userInput;\n   // If you need HTML: use DOMPurify to sanitize first:\n   import DOMPurify from 'dompurify';\n   element.innerHTML = DOMPurify.sanitize(userInput);\n\n2. document.write → DOM manipulation:\n   // Bad: document.write('<p>' + data + '</p>');\n   // Good: const p = document.createElement('p');\n   //       p.textContent = data;\n   //       document.body.appendChild(p);\n\n3. eval() → JSON.parse() or proper function calls:\n   // Bad: eval(serverResponse);\n   // Good: JSON.parse(serverResponse);\n\n4. outerHTML → replaceWith():\n   // Bad: el.outerHTML = newHTML;\n   // Good: const newEl = document.createElement('div');\n   //       newEl.textContent = data;\n   //       el.replaceWith(newEl);\n\n5. insertAdjacentHTML → insertAdjacentText or createElement:\n   // Bad: el.insertAdjacentHTML('beforeend', userInput);\n   // Good: el.insertAdjacentText('beforeend', userInput);\n\nFor React/Vue/Angular apps, these frameworks handle DOM escaping automatically — avoid using dangerouslySetInnerHTML (React) or v-html (Vue) with user data." });
 
   // Mixed content
   const httpRes = $('img[src^="http:"], script[src^="http:"], link[href^="http:"], iframe[src^="http:"]');
@@ -364,14 +737,6 @@ function checkHTMLSecurity(url: string, html: string): VulnerabilityResult[] {
   });
   if (depLibs.length > 0) vulns.push({ type: "outdated-lib", severity: "medium", title: "Outdated JavaScript Libraries", description: `Detected: ${depLibs.map((l) => `${l.name} ${l.version}`).join(", ")}.`, url, remedy: "Outdated JavaScript libraries often contain known security vulnerabilities with public exploits. Attackers actively scan for sites using old versions.\n\nUpdate each library to the latest version:\n\n1. Check for updates:\n   npm outdated          # See what's behind\n   npm audit              # Check for known vulnerabilities\n   npm audit fix          # Auto-fix compatible updates\n   npm audit fix --force  # Fix breaking changes (test thoroughly!)\n\n2. Common upgrades:\n   - jQuery < 3.5: npm install jquery@latest (jQuery 3.5+ fixed major XSS in htmlPrefilter)\n   - AngularJS 1.x: Migrate to Angular 2+ (AngularJS is end-of-life since Dec 2021)\n   - Bootstrap < 4: npm install bootstrap@latest (Bootstrap 3 has known XSS in tooltip/popover)\n\n3. If upgrading breaks things, check migration guides:\n   - jQuery: https://jquery.com/upgrade-guide/\n   - Bootstrap: https://getbootstrap.com/docs/5.3/migration/\n\n4. Consider using a CDN with auto-updates like cdnjs or jsDelivr with semver ranges.\n\n5. Add automated dependency scanning:\n   - GitHub Dependabot (free, automatic PRs for security updates)\n   - Snyk: npx snyk test\n   - npm audit in CI/CD pipeline" });
 
-  // Open redirects
-  let redirectParams = 0;
-  $("a[href], form[action]").each((_, el) => {
-    const t = $(el).attr("href") || $(el).attr("action") || "";
-    if (/[?&](redirect|url|next|return|returnUrl|goto|dest|redir|target|continue)=/i.test(t)) redirectParams++;
-  });
-  if (redirectParams > 0) vulns.push({ type: "open-redirect", severity: "medium", title: "Potential Open Redirect Parameters", description: `${redirectParams} URL(s) with redirect-like parameters.`, url, remedy: "Open redirect vulnerabilities allow attackers to craft URLs on YOUR domain that redirect to malicious sites. Since the URL starts with your trusted domain, users and email filters are less likely to suspect it.\n\nExample attack: https://yourdomain.com/login?redirect=https://evil.com/fake-login\n\nFix — always validate redirect destinations:\n\n1. Whitelist approach (most secure):\n\n   const ALLOWED_REDIRECTS = ['/dashboard', '/profile', '/settings'];\n   const redirect = req.query.redirect;\n   if (!ALLOWED_REDIRECTS.includes(redirect)) {\n     redirect = '/dashboard'; // Safe default\n   }\n\n2. Same-origin check:\n\n   function isSafeRedirect(url) {\n     try {\n       const parsed = new URL(url, 'https://yourdomain.com');\n       return parsed.origin === 'https://yourdomain.com';\n     } catch {\n       return false;\n     }\n   }\n\n3. Relative-path only:\n\n   // Only allow paths starting with /\n   if (!redirect.startsWith('/') || redirect.startsWith('//')) {\n     redirect = '/dashboard';\n   }\n\nNext.js example:\n\n   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';\n   // Validate before using in redirect\n   if (!callbackUrl.startsWith('/') || callbackUrl.startsWith('//')) {\n     return NextResponse.redirect('/dashboard');\n   }\n\nImportant: Check for protocol-relative URLs (//evil.com), URL-encoded characters (%2F%2F), and other bypass techniques." });
-
   // Missing meta description
   if (!$('meta[name="description"]').length) vulns.push({ type: "seo", severity: "info", title: "Missing Meta Description", description: "No meta description tag.", url, remedy: "A missing meta description means search engines will auto-generate a snippet from your page content, which often looks poor in search results and reduces click-through rates.\n\nAdd a meta description to every page:\n\n   <meta name=\"description\" content=\"Your compelling page description here. Keep it between 150-160 characters for optimal display in search results.\" />\n\nNext.js App Router (layout.tsx or page.tsx):\n\n   export const metadata = {\n     description: 'Your page description here',\n   };\n\nNext.js Pages Router:\n\n   import Head from 'next/head';\n   <Head>\n     <meta name=\"description\" content=\"Your page description\" />\n   </Head>\n\nReact (react-helmet):\n\n   <Helmet>\n     <meta name=\"description\" content=\"Your page description\" />\n   </Helmet>\n\nBest practices:\n- Keep it between 150-160 characters\n- Include your primary keyword naturally\n- Write a unique description for each page\n- Make it compelling — it's your ad copy in search results\n- Don't stuff keywords — Google penalizes this" });
 
@@ -381,7 +746,7 @@ function checkHTMLSecurity(url: string, html: string): VulnerabilityResult[] {
   const commentRe = /<!--([\s\S]*?)-->/g;
   while ((match = commentRe.exec(html)) !== null) {
     const c = match[1].toLowerCase();
-    if (c.includes("password") || c.includes("api_key") || c.includes("secret") || c.includes("todo") || c.includes("fixme") || c.includes("database") || c.includes("admin") || c.includes("credential")) sensComments++;
+    if (/\b(?:password|api[_-]?key|client[_-]?secret|access[_-]?token|private[_-]?key)\s*[:=]\s*["']?[^\s"']{8,}/i.test(c) && !/example|placeholder|changeme|your[_-]/i.test(c)) sensComments++;
   }
   if (sensComments > 0) vulns.push({ type: "info-disclosure", severity: "low", title: "Sensitive Info in HTML Comments", description: `${sensComments} comment(s) with sensitive keywords.`, url, remedy: "HTML comments are visible to anyone who views your page source. Comments containing passwords, API keys, database names, TODO/FIXME notes, or admin URLs give attackers valuable reconnaissance information.\n\nHow to fix:\n\n1. Search your codebase for HTML comments with sensitive content:\n   grep -rn '<!--' --include='*.html' --include='*.jsx' --include='*.tsx' --include='*.ejs' .\n\n2. Remove or move sensitive comments:\n   - Move TODO/FIXME items to your issue tracker (GitHub Issues, Jira)\n   - Move implementation notes to code comments (// or /* */) in server-side code\n   - Never leave API keys, credentials, or database info in any comments\n   - Remove debug comments before deploying\n\n3. Add a build step to strip HTML comments:\n\n   Webpack (html-webpack-plugin):\n     new HtmlWebpackPlugin({ minify: { removeComments: true } })\n\n   PostHTML:\n     npm install posthtml-remove-comments\n\n4. Add to your CI/CD pipeline — a pre-deploy check for sensitive patterns:\n\n   grep -rn '<!--.*\\(password\\|api_key\\|secret\\|database\\|admin\\|credential\\)' dist/\n   if [ $? -eq 0 ]; then echo 'Sensitive comments found!' && exit 1; fi" });
 
@@ -390,16 +755,6 @@ function checkHTMLSecurity(url: string, html: string): VulnerabilityResult[] {
     const action = $(f).attr("action") || "";
     if (action.startsWith("http://")) vulns.push({ type: "ssl", severity: "high", title: "Form Submits Over HTTP", description: `Form posts to ${action} in plain text.`, url, remedy: "This form sends user data (potentially including passwords, credit cards, or personal information) over unencrypted HTTP. Anyone on the same network can intercept this data using simple tools like Wireshark.\n\nFix — change the form action to HTTPS:\n\n   <!-- Bad -->\n   <form action=\"http://example.com/submit\">\n\n   <!-- Good -->\n   <form action=\"https://example.com/submit\">\n\nIf the form action is dynamically generated:\n\n   // Bad\n   const formAction = `http://${domain}/api/submit`;\n   // Good\n   const formAction = `https://${domain}/api/submit`;\n\nIf the form has no action attribute, it submits to the current page URL. Make sure your page is served over HTTPS.\n\nAdditional steps:\n1. Ensure your entire site runs on HTTPS (see the SSL/TLS findings)\n2. Add the upgrade-insecure-requests CSP directive as a safety net:\n   Content-Security-Policy: upgrade-insecure-requests\n3. Set HSTS headers to prevent HTTP downgrade attacks\n4. Use form-action CSP directive to restrict where forms can submit:\n   Content-Security-Policy: form-action 'self' https:" });
   });
-
-  // Unsandboxed iframes
-  let unsafeIframes = 0;
-  $("iframe[src]").each((_, el) => {
-    const src = $(el).attr("src") || "";
-    if (src.startsWith("http") && !$(el).attr("sandbox")) {
-      try { if (new URL(src).hostname !== new URL(url).hostname) unsafeIframes++; } catch { /* ignore */ }
-    }
-  });
-  if (unsafeIframes > 0) vulns.push({ type: "iframe", severity: "low", title: "External Iframes Without Sandbox", description: `${unsafeIframes} unsandboxed external iframe(s).`, url, remedy: "External iframes without the sandbox attribute have full access to their own origin's capabilities — they can run scripts, submit forms, navigate your top-level page, and access plugins. If the iframed site is compromised, it can attack your users.\n\nAdd the sandbox attribute to restrict iframe capabilities:\n\n   <!-- Most restrictive (recommended starting point) -->\n   <iframe src=\"https://external.com/widget\" sandbox></iframe>\n\n   <!-- Selectively allow needed features -->\n   <iframe src=\"https://external.com/widget\"\n     sandbox=\"allow-scripts allow-same-origin\"\n   ></iframe>\n\nAvailable sandbox values:\n- allow-scripts: Allow JavaScript execution\n- allow-same-origin: Treat content as same-origin (needed for auth)\n- allow-forms: Allow form submission\n- allow-popups: Allow window.open and target=_blank\n- allow-top-navigation: Allow changing parent page URL\n- allow-modals: Allow alert(), confirm(), prompt()\n\nWarning: Never combine allow-scripts and allow-same-origin for untrusted content — the iframe can remove its own sandbox attribute.\n\nFor payment widgets (Stripe, PayPal):\n   <iframe src=\"https://js.stripe.com/...\" sandbox=\"allow-scripts allow-same-origin allow-forms\"></iframe>\n\nAlternative: Use CSP frame-src to control which domains can be iframed:\n   Content-Security-Policy: frame-src 'self' https://trusted-widget.com;" });
 
   // Source map references in HTML
   const srcMapRefs = html.match(/\/\/[#@]\s*sourceMappingURL=\S+/g);
@@ -411,6 +766,30 @@ function checkHTMLSecurity(url: string, html: string): VulnerabilityResult[] {
 }
 
 // ─── 7. Sensitive file exposure ───────────────────────────────────
+export function matchesExpectedSensitiveFile(path: string, contentType: string, text: string) {
+  const sample = text.slice(0, 120_000);
+  const lower = sample.toLowerCase();
+  if (path === "/.env") return /(?:^|\n)[A-Z][A-Z0-9_]{2,}\s*=\s*[^\n]+/.test(sample);
+  if (path === "/.git/config") return /\[core\]|repositoryformatversion|\[remote\s+"origin"\]/i.test(sample);
+  if (path === "/.git/HEAD") return /^(?:ref:\s+refs\/|[a-f0-9]{40}\s*$)/i.test(sample.trim());
+  if (path === "/.DS_Store") return sample.includes("Bud1") || contentType.includes("octet-stream");
+  if (path === "/wp-admin/") return /wp-login|wordpress|user_login|wp-admin/i.test(sample);
+  if (path === "/server-status") return /apache server status|server version:|server uptime:/i.test(sample);
+  if (path === "/phpinfo.php") return /php version|phpinfo\(\)|php logo/i.test(sample);
+  if (path === "/.htaccess") return /rewriteengine|rewriterule|authname|deny from|require all|options\s+[+-]/i.test(sample);
+  if (path.endsWith(".sql")) return /(?:create\s+table|insert\s+into|postgresql database dump|mysql dump)/i.test(sample);
+  if (path.endsWith(".log")) return /(?:stack trace|traceback|fatal error|uncaught exception|\berror\b.*(?:at |line \d+))/i.test(sample);
+  if (path === "/elmah.axd") return /error log for|elmah|error detail/i.test(sample);
+  if (path === "/.svn/entries") return /(?:^|\n)(?:dir|file)\s*(?:\n|$)|svn:/i.test(sample);
+  if (path === "/crossdomain.xml") return /<cross-domain-policy|<allow-access-from/i.test(sample);
+  if (path === "/composer.json") return /"(?:require|autoload|config)"\s*:/i.test(sample);
+  if (path === "/package.json") return /"(?:dependencies|devDependencies|scripts)"\s*:/i.test(sample);
+  if (path === "/Dockerfile") return /(?:^|\n)\s*FROM\s+\S+/i.test(sample);
+  if (path === "/docker-compose.yml") return /(?:^|\n)services\s*:\s*(?:\n|$)/i.test(sample);
+  if (path === "/wp-config.php.bak") return /DB_(?:NAME|USER|PASSWORD|HOST)|AUTH_KEY|table_prefix/i.test(sample);
+  return lower.length > 0;
+}
+
 async function checkSensitiveFiles(baseUrl: string): Promise<VulnerabilityResult[]> {
   const vulns: VulnerabilityResult[] = [];
 
@@ -440,7 +819,7 @@ async function checkSensitiveFiles(baseUrl: string): Promise<VulnerabilityResult
   ];
 
   // Run ALL checks in parallel
-  const checks = files.map(async (file) => {
+  const checks = files.filter((file) => !["/.well-known/security.txt", "/.well-known/openid-configuration"].includes(file.path)).map(async (file) => {
     const fileUrl = new URL(file.path, baseUrl).toString();
     const res = await safeFetch(fileUrl, { redirect: "follow", timeout: 6000 });
     if (!res || res.status !== 200) return null;
@@ -449,7 +828,10 @@ async function checkSensitiveFiles(baseUrl: string): Promise<VulnerabilityResult
     const nonHtml = !file.path.endsWith(".php") && !file.path.endsWith("/") && !file.path.endsWith(".axd");
     if (nonHtml && ct.includes("text/html")) return null;
 
-    try { const text = await res.text(); if (text.trim().length === 0) return null; } catch { return null; }
+    try {
+      const text = await res.text();
+      if (!text.trim() || !matchesExpectedSensitiveFile(file.path, ct, text)) return null;
+    } catch { return null; }
 
     return { type: "sensitive-file", severity: file.severity, title: file.title, description: file.desc, url: fileUrl, remedy: file.remedy } as VulnerabilityResult;
   });
@@ -604,8 +986,7 @@ async function checkAPIEndpoints(baseUrl: string): Promise<VulnerabilityResult[]
   const apiPaths = [
     "/api", "/api/v1", "/api/v2", "/api/users", "/api/admin",
     "/api/config", "/api/health", "/api/status", "/api/debug",
-    "/api/docs", "/api/swagger", "/swagger-ui.html", "/swagger.json",
-    "/openapi.json", "/api-docs", "/graphql", "/graphiql",
+    "/graphql",
     "/api/graphql", "/_debug", "/_profiler",
   ];
 
@@ -627,13 +1008,10 @@ async function checkAPIEndpoints(baseUrl: string): Promise<VulnerabilityResult[]
       return null;
     }
 
-    // Swagger/OpenAPI
-    if ((path.includes("swagger") || path.includes("openapi") || path.includes("api-docs")) && res.status === 200) {
-      return { type: "api-exposure", severity: "medium" as const, title: "API Docs Publicly Accessible", description: `API documentation at ${path}.`, url: apiUrl, remedy: "Your API documentation (Swagger/OpenAPI) is publicly accessible. While useful for developers, it provides attackers with a complete map of your API endpoints, parameters, authentication methods, and data models.\n\nRestrict access:\n\n1. Add authentication to API docs:\n\nExpress + swagger-ui-express:\n\n   const authMiddleware = (req, res, next) => {\n     // Check for admin session or API key\n     if (!req.session?.isAdmin) return res.status(403).send('Forbidden');\n     next();\n   };\n   app.use('/api-docs', authMiddleware, swaggerUi.serve, swaggerUi.setup(spec));\n\n2. Serve docs only in development:\n\n   if (process.env.NODE_ENV !== 'production') {\n     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(spec));\n   }\n\n3. Use IP whitelisting:\n   Nginx:\n   location /swagger { allow 203.0.113.0/24; deny all; }\n\n4. If your API is genuinely public, consider keeping docs available but ensuring all endpoints require proper authentication." };
-    }
-
     // Debug endpoints
     if ((path.includes("debug") || path.includes("profiler")) && res.status === 200) {
+      const debugBody = (await res.text()).slice(0, 150_000);
+      if (!/(?:stack trace|traceback|uncaught exception|debug toolbar|profiler|node_modules|vendor\/[^\s]+\.php)/i.test(debugBody)) return null;
       return { type: "api-exposure", severity: "high" as const, title: "Debug Endpoint Exposed", description: `Debug/profiler at ${path}.`, url: apiUrl, remedy: "Debug and profiler endpoints expose internal application state, request/response details, database queries, performance data, and potentially sensitive configuration. These should NEVER be accessible in production.\n\nFix:\n\n1. Disable debug mode in production:\n   - Django: DEBUG = False in settings.py\n   - Laravel: APP_DEBUG=false in .env\n   - Flask: app.run(debug=False)\n   - Symfony: Remove _profiler routes in production config\n\n2. Remove debug endpoints entirely:\n\n   Express.js:\n   if (process.env.NODE_ENV !== 'production') {\n     app.use('/_debug', debugRouter);\n   }\n\n3. Block at the web server level as a safety net:\n   Nginx:\n   location ~* (debug|profiler|_debug|_profiler) {\n     deny all;\n     return 404;\n   }\n\n4. Use environment-based configuration to ensure debug features are only loaded in development.\n\n5. Set up proper monitoring (Datadog, New Relic, Sentry) instead of relying on exposed debug endpoints." };
     }
 
@@ -656,13 +1034,6 @@ async function checkAPIEndpoints(baseUrl: string): Promise<VulnerabilityResult[]
 // ─── 14. HTTP method testing ──────────────────────────────────────
 async function checkHTTPMethods(baseUrl: string): Promise<VulnerabilityResult[]> {
   const vulns: VulnerabilityResult[] = [];
-
-  const optRes = await safeFetch(baseUrl, { method: "OPTIONS", timeout: 6000 });
-  if (optRes) {
-    const allow = optRes.headers.get("allow") || optRes.headers.get("access-control-allow-methods") || "";
-    const found = ["PUT", "DELETE", "TRACE", "PATCH"].filter((m) => allow.toUpperCase().includes(m));
-    if (found.length > 0) vulns.push({ type: "http-methods", severity: "medium", title: "Dangerous HTTP Methods Allowed", description: `Allows: ${found.join(", ")}.`, url: baseUrl, remedy: "Your server accepts potentially dangerous HTTP methods. PUT and DELETE can modify/remove files, TRACE enables Cross-Site Tracing (XST) attacks that can steal credentials, and PATCH may allow unauthorized modifications.\n\nRestrict to only needed methods:\n\nNginx:\n   # Allow only GET, POST, HEAD\n   if ($request_method !~ ^(GET|POST|HEAD)$) {\n     return 405;\n   }\n\nApache:\n   <LimitExcept GET POST HEAD>\n     Deny from all\n   </LimitExcept>\n\n   # Or specifically disable TRACE:\n   TraceEnable Off\n\nExpress.js (per-route):\n   // Only define the methods you need\n   app.get('/resource', handler);\n   app.post('/resource', handler);\n   // Don't add app.put(), app.delete() unless needed\n\nIIS (web.config):\n   <security>\n     <requestFiltering>\n       <verbs allowUnlisted=\"false\">\n         <add verb=\"GET\" allowed=\"true\" />\n         <add verb=\"POST\" allowed=\"true\" />\n         <add verb=\"HEAD\" allowed=\"true\" />\n       </verbs>\n     </requestFiltering>\n   </security>\n\nNote: If you have a REST API that genuinely needs PUT/DELETE/PATCH, that's fine — just ensure those routes require authentication and proper authorization." });
-  }
 
   const traceRes = await safeFetch(baseUrl, { method: "TRACE", timeout: 6000 });
   if (traceRes?.status === 200) {
@@ -695,6 +1066,83 @@ async function checkSitemap(baseUrl: string): Promise<VulnerabilityResult[]> {
   return vulns;
 }
 
+async function collectSaaSReadiness(baseUrl: string): Promise<VulnerabilityResult[]> {
+  const root = new URL(baseUrl);
+  const urls = {
+    home: root.toString(),
+    robots: new URL("/robots.txt", root).toString(),
+    sitemap: new URL("/sitemap.xml", root).toString(),
+    sitemapIndex: new URL("/sitemap_index.xml", root).toString(),
+    llms: new URL("/llms.txt", root).toString(),
+    securityWellKnown: new URL("/.well-known/security.txt", root).toString(),
+    securityRoot: new URL("/security.txt", root).toString(),
+  };
+
+  const [homeRes, robotsRes, sitemapRes, sitemapIndexRes, llmsRes, securityWellKnownRes, securityRootRes, tls] = await Promise.all([
+    safeFetch(urls.home, { timeout: 8000 }),
+    safeFetch(urls.robots, { timeout: 6000 }),
+    safeFetch(urls.sitemap, { timeout: 6000 }),
+    safeFetch(urls.sitemapIndex, { timeout: 6000 }),
+    safeFetch(urls.llms, { timeout: 6000 }),
+    safeFetch(urls.securityWellKnown, { timeout: 6000 }),
+    safeFetch(urls.securityRoot, { timeout: 6000 }),
+    inspectTlsCertificate(baseUrl),
+  ]);
+
+  const readText = async (response: Response | null) => response?.ok ? (await response.text()).slice(0, 250_000) : "";
+  const [home, robots, sitemap, sitemapIndex, llms, securityWellKnown, securityRoot] = await Promise.all([
+    readText(homeRes), readText(robotsRes), readText(sitemapRes), readText(sitemapIndexRes), readText(llmsRes), readText(securityWellKnownRes), readText(securityRootRes),
+  ]);
+
+  const items: ReadinessItem[] = [tls.item];
+  if (!robots) items.push({ key: "robots", label: "robots.txt", status: "warning", detail: "No readable robots.txt was found at the root.", url: urls.robots });
+  else if (/^\s*disallow:\s*\/\s*$/im.test(robots)) items.push({ key: "robots", label: "robots.txt", status: "warning", detail: "The file appears to block crawling across the site.", url: urls.robots });
+  else items.push({ key: "robots", label: "robots.txt", status: "pass", detail: /sitemap:/i.test(robots) ? "Available and includes a sitemap reference." : "Available, but it does not reference a sitemap.", url: urls.robots });
+
+  const sitemapBody = sitemap || sitemapIndex;
+  const sitemapUrl = sitemap ? urls.sitemap : urls.sitemapIndex;
+  items.push(sitemapBody && /<(urlset|sitemapindex|url|sitemap)[\s>]/i.test(sitemapBody)
+    ? { key: "sitemap", label: "XML sitemap", status: "pass", detail: "A readable XML sitemap was found.", url: sitemapUrl }
+    : { key: "sitemap", label: "XML sitemap", status: "warning", detail: "No readable XML sitemap was found at the common locations.", url: urls.sitemap });
+
+  items.push(llms && /(^|\n)#{1,3}\s+|https?:\/\//i.test(llms)
+    ? { key: "llms", label: "llms.txt", status: "pass", detail: "An AI discovery file with structured content was found.", url: urls.llms }
+    : { key: "llms", label: "llms.txt", status: "warning", detail: "Optional AI discovery file not found or not readable.", url: urls.llms });
+
+  const securityBody = securityWellKnown || securityRoot;
+  const securityUrl = securityWellKnown ? urls.securityWellKnown : urls.securityRoot;
+  items.push(securityBody && /(^|\n)contact:/i.test(securityBody)
+    ? { key: "security", label: "security.txt", status: "pass", detail: "A security contact file was found.", url: securityUrl }
+    : { key: "security", label: "security.txt", status: "warning", detail: "No valid security.txt contact file was found.", url: urls.securityWellKnown });
+
+  if (home && homeRes) {
+    const $ = cheerio.load(home);
+    const canonical = $('link[rel="canonical"]').attr("href");
+    items.push(canonical
+      ? { key: "canonical", label: "Canonical URL", status: "pass", detail: "The homepage declares a canonical URL.", url: new URL(canonical, urls.home).toString() }
+      : { key: "canonical", label: "Canonical URL", status: "warning", detail: "The homepage has no canonical link element.", url: urls.home });
+    const robotsMeta = $('meta[name="robots"]').attr("content") || "";
+    const xRobots = homeRes.headers.get("x-robots-tag") || "";
+    const blocked = /noindex/i.test(`${robotsMeta} ${xRobots}`);
+    items.push({ key: "indexability", label: "Homepage indexability", status: blocked ? "warning" : "pass", detail: blocked ? "The homepage sends a noindex directive." : "No noindex directive was detected on the homepage.", url: urls.home });
+  } else {
+    items.push({ key: "canonical", label: "Canonical URL", status: "unknown", detail: "The homepage could not be read.", url: urls.home });
+    items.push({ key: "indexability", label: "Homepage indexability", status: "unknown", detail: "The homepage could not be read.", url: urls.home });
+  }
+
+  return [
+    ...tls.vulnerabilities,
+    {
+      type: "scan-meta",
+      severity: "info",
+      title: "SaaS readiness snapshot",
+      description: JSON.stringify({ version: 1, items }),
+      url: baseUrl,
+      remedy: "",
+    },
+  ];
+}
+
 // ─── 16. WAF detection ────────────────────────────────────────────
 async function detectWAF(baseUrl: string): Promise<VulnerabilityResult[]> {
   const vulns: VulnerabilityResult[] = [];
@@ -711,8 +1159,6 @@ async function detectWAF(baseUrl: string): Promise<VulnerabilityResult[]> {
 
   if (waf) {
     vulns.push({ type: "waf", severity: "info", title: `WAF Detected: ${waf}`, description: `${waf} WAF is protecting this site.`, url: baseUrl, remedy: "Great — you have a Web Application Firewall (WAF) in place. This provides an additional layer of protection against common attacks like SQL injection, XSS, and DDoS.\n\nTo maximize your WAF protection:\n\n1. Keep WAF rules updated — enable automatic rule updates if available\n2. Review WAF logs regularly for attack patterns\n3. Configure custom rules for your specific application\n4. Enable bot protection and rate limiting\n5. Set up alerting for blocked attacks above a threshold\n\nRemember: A WAF is a defense-in-depth layer, not a replacement for secure coding. Fix vulnerabilities in your application code even if a WAF is in place — WAFs can be bypassed." });
-  } else {
-    vulns.push({ type: "waf", severity: "low", title: "No WAF Detected", description: "No Web Application Firewall detected.", url: baseUrl, remedy: "No Web Application Firewall (WAF) was detected. A WAF provides an additional layer of defense against common web attacks like SQL injection, XSS, and DDoS.\n\nRecommended WAF options:\n\n1. Cloudflare (free tier available):\n   - Sign up at cloudflare.com\n   - Change your nameservers to Cloudflare's\n   - Enable WAF rules in the dashboard\n   - Free tier includes basic DDoS protection and CDN\n\n2. AWS WAF (if on AWS):\n   - Attach to your ALB, CloudFront, or API Gateway\n   - Use AWS Managed Rules for common protections\n   - Pay per rule and per request\n\n3. Vercel (built-in):\n   - If deployed on Vercel, you get DDoS protection automatically\n   - Vercel Firewall available on Pro plan\n\n4. Self-hosted options:\n   - ModSecurity (open source, works with Nginx/Apache)\n   - Install: apt install libapache2-mod-security2\n   - Enable OWASP Core Rule Set (CRS)\n\nNote: A WAF is not a substitute for secure code — it's an additional defense layer. Fix vulnerabilities in your code first, then add a WAF for defense-in-depth." });
   }
 
   return vulns;
@@ -806,7 +1252,7 @@ function calculateScore(vulns: VulnerabilityResult[]): number {
     email: 5,
     "api-exposure": 6,
     "http-methods": 3,
-    waf: 2,
+    waf: 0,
     redirect: 2,
     "source-maps": 3,
     "directory-listing": 3,
@@ -816,6 +1262,7 @@ function calculateScore(vulns: VulnerabilityResult[]): number {
     iframe: 1,
     seo: 0,
     fingerprint: 0,
+    "scan-meta": 0,
   };
 
   const severityMultipliers: Record<string, number> = {
@@ -886,7 +1333,7 @@ export async function scanWebsite(
   }
 
   const allVulns: VulnerabilityResult[] = [];
-  const totalSteps = 16;
+  const totalSteps = 17;
   let currentStepNum = 0;
 
   const report = (
@@ -903,6 +1350,9 @@ export async function scanWebsite(
   currentStepNum = 1;
   report("Discovering pages…", "crawl", "running");
   const pages = await discoverPages(url, 25);
+  if (pages.length === 0) {
+    throw new WebsiteScanError("No public HTML pages could be read. Check that the URL is reachable and that your firewall allows the scanner, then try again.");
+  }
   report(`Found ${pages.length} page(s)`, "crawl", "done", 0, pages.length);
 
   // ── Steps 2-7: Independent checks — PARALLEL BATCH 1 ──────────
@@ -943,17 +1393,18 @@ export async function scanWebsite(
   currentStepNum = 7;
   report("Directory listing complete", "directories", "done", dirV.length);
 
-  // ── Steps 8-12: PARALLEL BATCH 2 (new deep checks) ────────────
+  // ── Steps 8-13: PARALLEL BATCH 2 (new deep checks) ────────────
   currentStepNum = 8;
   report("Probing API endpoints…", "api-probe", "running");
   report("Testing HTTP methods…", "http-methods", "running");
   report("Analyzing sitemap…", "sitemap", "running");
   report("Detecting WAF…", "waf", "running");
   report("Analyzing redirects…", "redirects", "running");
+  report("Checking SaaS readiness…", "readiness", "running");
 
-  const [apiV, methodV, sitemapV, wafV, redirectV] = await Promise.all([
+  const [apiV, methodV, sitemapV, wafV, redirectV, readinessV, corsV] = await Promise.all([
     checkAPIEndpoints(url), checkHTTPMethods(url), checkSitemap(url),
-    detectWAF(url), checkRedirectChain(url),
+    detectWAF(url), checkRedirectChain(url), collectSaaSReadiness(url), checkCorsPolicy(url),
   ]);
 
   allVulns.push(...apiV);
@@ -961,8 +1412,9 @@ export async function scanWebsite(
   report("API scan complete", "api-probe", "done", apiV.length);
 
   allVulns.push(...methodV);
+  allVulns.push(...corsV);
   currentStepNum = 9;
-  report("HTTP methods complete", "http-methods", "done", methodV.length);
+  report("HTTP methods and CORS complete", "http-methods", "done", methodV.length + corsV.length);
 
   allVulns.push(...sitemapV);
   currentStepNum = 10;
@@ -976,24 +1428,30 @@ export async function scanWebsite(
   currentStepNum = 12;
   report("Redirect analysis complete", "redirects", "done", redirectV.length);
 
-  // ── Steps 13-16: Per-page checks ──────────────────────────────
+  allVulns.push(...readinessV);
   currentStepNum = 13;
+  report("SaaS readiness complete", "readiness", "done", readinessV.filter((item) => item.type !== "scan-meta").length);
+
+  // ── Steps 14-17: Per-page checks ──────────────────────────────
+  currentStepNum = 14;
   report("Analyzing security headers…", "headers", "running");
+
+  let pagesAnalyzed = 0;
+  // Cookies are often set on login or app pages, not the homepage: collect them from every page.
+  const cookieHeaders = new Headers();
 
   for (const pageUrl of pages) {
     const res = await safeFetch(pageUrl, { timeout: 15000 });
-    if (!res) continue;
+    if (!res?.ok || !res.headers.get("content-type")?.includes("text/html")) continue;
 
-    if (pageUrl === pages[0]) {
+    for (const cookie of res.headers.getSetCookie?.() ?? []) cookieHeaders.append("set-cookie", cookie);
+
+    if (pagesAnalyzed === 0) {
       const headerVulns = checkSecurityHeaders(pageUrl, res.headers);
       allVulns.push(...headerVulns);
       report("Headers analyzed", "headers", "done", headerVulns.length);
 
-      currentStepNum = 14;
-      report("Auditing cookies…", "cookies", "running");
-      const cookieVulns = checkCookies(pageUrl, res.headers);
-      allVulns.push(...cookieVulns);
-      report("Cookies complete", "cookies", "done", cookieVulns.length);
+      currentStepNum = 15;
 
       report("Scanning CSP…", "csp", "running");
       const csp = res.headers.get("content-security-policy");
@@ -1006,7 +1464,7 @@ export async function scanWebsite(
       }
     }
 
-    currentStepNum = 15;
+    currentStepNum = 16;
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("text/html")) {
       report(`Scanning ${new URL(pageUrl).pathname}…`, "html", "running");
@@ -1014,17 +1472,27 @@ export async function scanWebsite(
       const htmlVulns = checkHTMLSecurity(pageUrl, html);
       allVulns.push(...htmlVulns);
 
-      if (pageUrl === pages[0]) {
+      if (pagesAnalyzed === 0) {
         const techVulns = fingerprintTechnology(pageUrl, html, res.headers);
         allVulns.push(...techVulns);
       }
+      pagesAnalyzed += 1;
     }
+  }
+
+  if (pagesAnalyzed === 0) {
+    throw new WebsiteScanError("The website stopped returning readable HTML before analysis completed. Try again when it is reachable.");
   }
 
   report("HTML analysis complete", "html", "done", 0);
 
+  report("Auditing cookies…", "cookies", "running");
+  const cookieVulns = checkCookies(new URL(url).origin + "/", cookieHeaders);
+  allVulns.push(...cookieVulns);
+  report("Cookies complete", "cookies", "done", cookieVulns.length);
+
   // Source maps
-  currentStepNum = 16;
+  currentStepNum = 17;
   report("Checking source maps…", "source-maps", "running");
   const srcMapV = await checkSourceMaps(url, pages);
   allVulns.push(...srcMapV);
@@ -1039,5 +1507,5 @@ export async function scanWebsite(
     return true;
   });
 
-  return { url, score: calculateScore(unique), vulnerabilities: unique, pagesScanned: pages.length };
+  return { url, score: calculateScore(unique), vulnerabilities: unique, pagesScanned: pagesAnalyzed };
 }

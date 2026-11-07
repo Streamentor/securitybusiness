@@ -28,9 +28,9 @@ import {
   ArrowRightLeft,
   FileCode,
   UserPlus,
-  Ban,
 } from "lucide-react";
 import { toast } from "@/components/Toast";
+import { beginScanSessionVerification } from "@/lib/scan-session-verification";
 
 interface ScanProgress {
   step: string;
@@ -106,7 +106,7 @@ interface ScanningOverlayProps {
 
 export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverlayProps) {
   const router = useRouter();
-  const { data: session, status: authStatus } = useSession();
+  const { status: authStatus } = useSession();
   const [progress, setProgress] = useState<ScanProgress[]>([]);
   const [currentStep, setCurrentStep] = useState<ScanProgress | null>(null);
   const [complete, setComplete] = useState<ScanComplete | null>(null);
@@ -119,18 +119,25 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
 
   // Verify the user actually exists in DB (handles stale JWT after DB reset)
   useEffect(() => {
-    if (authStatus !== "authenticated") {
+    if (!isOpen || authStatus !== "authenticated") return;
+    return beginScanSessionVerification(setVerifiedLoggedIn);
+  }, [isOpen, authStatus]);
+
+  // Reset between runs so users can launch another scan without reloading.
+  useEffect(() => {
+    if (isOpen) return;
+    hasStarted.current = false;
+    const frame = requestAnimationFrame(() => {
+      setProgress([]);
+      setCurrentStep(null);
+      setComplete(null);
+      setError(null);
+      setTotalFound(0);
+      setTerminalLines([]);
       setVerifiedLoggedIn(false);
-      return;
-    }
-    fetch("/api/user/plan")
-      .then((res) => res.json())
-      .then((data) => {
-        // If the API returns "anonymous" despite having a session, the user doesn't exist in DB
-        setVerifiedLoggedIn(data.plan !== "anonymous");
-      })
-      .catch(() => setVerifiedLoggedIn(false));
-  }, [authStatus]);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen]);
 
   const addTerminalLine = useCallback((line: string) => {
     setTerminalLines((prev) => [...prev.slice(-50), line]); // Keep last 50 lines
@@ -141,8 +148,8 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
     hasStarted.current = true;
 
     const startScan = async () => {
-      addTerminalLine(`$ securesaas scan --target ${url}`);
-      addTerminalLine(`[init] SecureSaaS Scanner v2.0 — starting deep scan…`);
+      addTerminalLine(`$ scanmysaas scan --target ${url}`);
+      addTerminalLine(`[init] ScanMySaaS Scanner v2.0 — starting deep scan…`);
       addTerminalLine(`[init] Target: ${url}`);
       addTerminalLine("─".repeat(50));
 
@@ -243,7 +250,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
     };
 
     startScan();
-  }, [isOpen, url, addTerminalLine]);
+  }, [isOpen, url, addTerminalLine, onClose]);
 
   // Auto-scroll terminal
   useEffect(() => {
@@ -414,7 +421,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               <div className="h-3 w-3 rounded-full bg-red-500/80" />
               <div className="h-3 w-3 rounded-full bg-yellow-500/80" />
               <div className="h-3 w-3 rounded-full bg-green-500/80" />
-              <span className="ml-2 text-xs text-gray-500 font-mono">securesaas — scan output</span>
+              <span className="ml-2 text-xs text-gray-500 font-mono">scanmysaas — scan output</span>
             </div>
             <div
               ref={terminalRef}
@@ -512,7 +519,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 )}
               </div>
 
-              {verifiedLoggedIn ? (
+              {authStatus === "authenticated" && verifiedLoggedIn ? (
                 <button
                   onClick={() => router.push(`/scan/${complete.scanId}`)}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
