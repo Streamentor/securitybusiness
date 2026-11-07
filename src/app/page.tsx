@@ -177,7 +177,7 @@ export default function HomePage() {
             <h1 className="display-title text-balance">SaaS security scanner <span className="text-[var(--signal)]">before your next launch.</span></h1>
             <p className="mt-7 max-w-xl text-pretty text-lg leading-8 text-[#a0a9b6]">Shipping with Cursor, Claude, Codex or Lovable? Run a free website vulnerability scan on your deployed app. Find exposed files, unsafe headers and risky cookies, with affected URLs and a clear order for what to verify first.</p>
             <div className="mt-8"><ScannerForm /></div>
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm"><Link href="/repo-scan" className="inline-flex items-center gap-1.5 text-[var(--signal)] hover:underline"><Github className="h-4 w-4" /> Scan a public GitHub repo</Link><Link href="/guides/saas-launch-security-checklist" className="text-[#a0a9b6] hover:text-white hover:underline">SaaS launch security checklist</Link></div>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm"><Link href="/repo-scan" className="inline-flex items-center gap-1.5 text-[var(--signal)] hover:underline"><Github className="h-4 w-4" /> Scan your GitHub repo (public or private)</Link><Link href="/guides/saas-launch-security-checklist" className="text-[#a0a9b6] hover:text-white hover:underline">SaaS launch security checklist</Link></div>
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#778191]">
               <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-[var(--signal)]" /> 60+ checks</span>
               <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-[var(--signal)]" /> Up to 25 pages</span>
@@ -216,12 +216,12 @@ export default function HomePage() {
           <div className="relative">
             <p className="eyebrow">Built with Codex, Claude, or Cursor?</p>
             <h2 className="section-title mt-4 text-balance">Scan the code before the public app.</h2>
-            <p className="mt-5 text-sm leading-7 text-[#8f99a7]">The website scanner sees what reached production. The repository scanner checks a public GitHub repository for committed environment files, secret patterns, risky GitHub Actions, exposed client keys, weak Supabase signals, and unsafe build settings. Verified findings can be copied as technical fix prompts for your coding agent.</p>
+            <p className="mt-5 text-sm leading-7 text-[#8f99a7]">The website scanner sees what reached production. The repository scanner checks your public or private GitHub repository for committed environment files, secret patterns, risky GitHub Actions, exposed client keys, weak Supabase signals, and unsafe build settings. Verified findings can be copied as technical fix prompts for your coding agent.</p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Link href="/repo-scan" className="button-primary"><Github className="h-4 w-4" /> Scan a public repo</Link>
+              <Link href="/repo-scan?tab=private" className="button-primary"><Github className="h-4 w-4" /> Connect your repository</Link>
               <Link href="/vibe-coding-security" className="button-secondary">Vibe coding security guide <ArrowRight className="h-4 w-4" /></Link>
             </div>
-            <p className="mt-4 text-xs leading-5 text-[#667181]">Read-only. No clone, package install, build, or code execution. Private repository connection is coming later.</p>
+            <p className="mt-4 text-xs leading-5 text-[#667181]">Read-only GitHub App you control. No clone, package install, build, or code execution. Public repositories are free; private repositories are included in Starter and Pro.</p>
           </div>
           <div className="relative mt-10 grid gap-3 sm:grid-cols-2 lg:mt-0">
             {[
