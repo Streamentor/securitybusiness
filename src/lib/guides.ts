@@ -511,7 +511,12 @@ export const guides: Guide[] = [
       },
       {
         heading: "Keep privileged keys on the server",
-        paragraphs: ["Supabase publishable keys and legacy anon keys are intended for public clients when RLS is correct. Secret keys and legacy service-role keys bypass RLS and belong only in controlled backend code. Never give them a NEXT_PUBLIC_, VITE_, or REACT_APP_ prefix."],
+        paragraphs: ["Supabase publishable keys (sb_publishable_…) and legacy anon keys are intended for public clients when RLS is correct. Secret keys (sb_secret_…) and legacy service-role keys bypass RLS and belong only in controlled backend code. Never give them a NEXT_PUBLIC_, VITE_, or REACT_APP_ prefix.", "Supabase is retiring the legacy anon and service_role keys by the end of 2026. Create the new publishable and secret keys, deploy them, then disable the legacy keys in Settings > API Keys. If a service-role key was ever committed, treat the switch as a rotation."],
+        bullets: [
+          "Only the publishable or anon key appears in browser code.",
+          "The secret or service-role key is read from a server-side environment variable.",
+          "Legacy keys are disabled once the new keys are live.",
+        ],
       },
       {
         heading: "Review server routes and edge functions too",
@@ -575,11 +580,11 @@ export const guides: Guide[] = [
     sections: [
       {
         heading: "1. Secrets and API keys",
-        paragraphs: ["Leaked keys are the fastest way to lose a database or a payment account. Check the repository and the built JavaScript, not only the current .env file. Automated: the GitHub repo scan flags committed .env files, provider tokens, private keys, hardcoded secrets and secret-looking public variables, without showing the value."],
+        paragraphs: ["Leaked keys are the fastest way to lose a database or a payment account. Check the repository and the built JavaScript, not only the current .env file. Automated: the GitHub repo scan flags committed .env files, Supabase secret and service-role keys, Stripe, OpenAI, AWS and GitHub tokens, private keys, hardcoded secrets and secret-looking public variables, without showing the value."],
         bullets: [
           "No .env file, private key or database URL is committed, including in Git history.",
           "No secret uses a public prefix such as NEXT_PUBLIC_, VITE_ or REACT_APP_.",
-          "Service-role, Stripe secret and OpenAI keys are only read in server code.",
+          "Supabase secret (service-role), Stripe secret and OpenAI keys are only read in server code.",
           "Any key that was ever committed has been rotated, not just deleted.",
           ".gitignore covers .env* and GitHub push protection is on.",
         ],

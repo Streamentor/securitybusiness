@@ -1,5 +1,5 @@
 import "server-only";
-import { repositorySecretPatterns } from "@/lib/secret-patterns";
+import { jwtRole, repositorySecretPatterns } from "@/lib/secret-patterns";
 
 import { analyzeAgentSecurityFile, analyzeDependencyHygiene, extractDependencyInventory, isAgentSecurityFile } from "@/lib/repo-security-rules";
 import type { RepoRuleCategory } from "@/lib/repo-security-rules";
@@ -297,14 +297,21 @@ function scanSecretPatterns(path: string, content: string, findings: RepoFinding
     }
   }
 
+  const jwt = /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g;
+  for (let match = jwt.exec(content); match; match = jwt.exec(content)) {
+    if (jwtRole(match[0]) !== "service_role") continue;
+    addFinding(findings, { severity: "critical", category: "secrets", title: "Supabase service-role key committed", description: "A JWT with the service_role claim is present in the repository. This key bypasses every Row Level Security policy. The value is never included in this report.", file: path, line: lineOf(content, match.index), remedy: "Rotate the key in Supabase (Settings > API Keys) and move to the new secret key format. Remove it from Git history, load it only in server code from a secret store, and never pass it to createClient in browser code." });
+  }
+
   const publicSecret = /\b(?:NEXT_PUBLIC|VITE|REACT_APP)_[A-Z0-9_]*(?:SECRET|PRIVATE|SERVICE_ROLE|PASSWORD|TOKEN)[A-Z0-9_]*\s*=\s*["']?([^\s"']{8,})/g;
   for (let match = publicSecret.exec(content); match; match = publicSecret.exec(content)) {
     addFinding(findings, { severity: "critical", category: "client-code", title: "Secret-like value exposed through a public environment variable", description: "A client-bundled environment variable name contains a secret, private, service-role, password, or token marker.", file: path, line: lineOf(content, match.index), remedy: "Remove the value from the public environment namespace and rotate it. Public prefixes such as NEXT_PUBLIC_, VITE_, and REACT_APP_ intentionally place values in browser code. Call the privileged service from a server route instead." });
   }
 
-  const genericAssignment = /\b([A-Z][A-Z0-9_]{2,}(?:SECRET|API_KEY|ACCESS_TOKEN|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*)\s*[:=]\s*["']([^"'\n]{16,})["']/g;
+  const genericAssignment = /\b([A-Z][A-Z0-9_]{2,}(?:SECRET|API_KEY|ACCESS_TOKEN|PASSWORD|PRIVATE_KEY|SERVICE_ROLE_KEY)[A-Z0-9_]*)\s*[:=]\s*["']([^"'\n]{16,})["']/g;
   for (let match = genericAssignment.exec(content); match; match = genericAssignment.exec(content)) {
     const value = match[2];
+    if (/^eyJ/.test(value) && jwtRole(value) === "service_role") continue;
     if (/example|placeholder|changeme|your[_-]|process\.env|import\.meta|\$\{|test[_-]?key/i.test(value)) continue;
     addFinding(findings, { severity: "high", category: "secrets", title: "Potential hardcoded secret", description: `A secret-like variable named ${match[1]} has a literal value in source code. The value is never included in this report.`, file: path, line: lineOf(content, match.index), remedy: "Confirm whether the value is real. If it is, rotate it, remove it from Git history, and load it from a server-side secret store. Add a pre-commit secret check and GitHub push protection before the next release." });
   }

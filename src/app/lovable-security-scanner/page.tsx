@@ -10,7 +10,7 @@ const PATH = "/lovable-security-scanner";
 
 export const metadata: Metadata = {
   title: { absolute: "Lovable Security Scan: Find Security Issues in Your Lovable App" },
-  description: "Free Lovable security scan. Check your published Lovable app and the GitHub repo it syncs to for Supabase tables without RLS, exposed service-role keys, missing headers and leaked source maps.",
+  description: "Free Lovable security scan. Check your published Lovable app and the GitHub repo it syncs to for Supabase tables without RLS, exposed secret or service-role keys, missing headers and leaked source maps.",
   alternates: { canonical: PATH },
   openGraph: {
     title: "Lovable Security Scan: Find Security Issues in Your Lovable App",
@@ -35,8 +35,8 @@ const issueGroups: Array<{ severity: string; tone: string; summary: string; issu
     tone: "text-red-300 border-red-400/30 bg-red-400/[0.08]",
     summary: "These are the issues behind most real Lovable data leaks.",
     issues: [
-      { icon: Database, title: "Supabase tables without Row Level Security", copy: "A table created in a SQL migration without ALTER TABLE … ENABLE ROW LEVEL SECURITY can be read through the Supabase Data API by anyone holding the public anon key, which ships in every Lovable bundle.", coverage: ["Repo scan", "Manual test"] },
-      { icon: KeyRound, title: "Service-role or secret key in client code", copy: "The service-role key bypasses every RLS policy. If it lands in a VITE_ variable, a hardcoded string or a committed .env file, your whole database is public.", coverage: ["Repo scan"] },
+      { icon: Database, title: "Supabase tables without Row Level Security", copy: "A table created in a SQL migration without ALTER TABLE … ENABLE ROW LEVEL SECURITY can be read through the Supabase Data API by anyone holding the public publishable (anon) key, which ships in every Lovable bundle.", coverage: ["Repo scan", "Manual test"] },
+      { icon: KeyRound, title: "Secret or service-role key in client code", copy: "The secret key (sb_secret_…) and the legacy service-role key bypass every RLS policy. If either lands in a VITE_ variable, a hardcoded string or a committed .env file, your whole database is public.", coverage: ["Repo scan"] },
     ],
   },
   {
@@ -71,9 +71,9 @@ const steps = [
 
 const faqs = [
   { question: "Is Lovable secure?", answer: "The Lovable platform can be used to build secure apps, but security of the app you generate is your responsibility. Most incidents in Lovable apps come from the generated Supabase setup: tables without Row Level Security, policies that are too broad, privileged keys reachable from the browser, and server functions that trust user input. Check those before you put real user data in the app." },
-  { question: "Doesn't Lovable already have a security scan?", answer: "Lovable runs its own security checks inside the editor before you publish, and they are worth using. ScanMySaaS is an independent second check: it scans the deployed app from the outside the way a visitor or attacker sees it, and reads the GitHub repository Lovable syncs to, including SQL migrations and environment files, with a report you can rescan and share." },
+  { question: "Doesn't Lovable already have a security scan?", answer: "Yes, and you should use it. Lovable runs a Quick scan of database rules and dependencies when you open the publish dialog, and a Deep scan of your code that you start yourself from the Security view. ScanMySaaS is an independent second check with a different view: it scans the deployed app from the outside, the way a visitor or attacker sees it, including headers, cookies, TLS and exposed files that live on hosting rather than in code. It also reads the synced GitHub repository, so changes made outside Lovable in Cursor or Claude Code are covered, and gives you a report you can rescan and share." },
   { question: "How do I check if my Lovable app has RLS enabled?", answer: "In the Supabase dashboard, open Table Editor and look for tables marked as unrestricted or without RLS. In code, every create table statement in supabase/migrations should be followed by an enable row level security statement. The ScanMySaaS repo scan flags tables created in migrations without visible RLS enablement. Then test with two accounts: user A must not be able to read or change user B's rows." },
-  { question: "Is the Supabase anon key in my Lovable app a problem?", answer: "No, the anon or publishable key is designed to be public, and it will always be visible in a Lovable app's JavaScript. It is only safe when every exposed table has RLS with correct policies. The service-role or secret key is different: it bypasses RLS and must never appear in client code or the repository." },
+  { question: "Is the Supabase anon key in my Lovable app a problem?", answer: "No. The publishable key (sb_publishable_…, which replaces the legacy anon key) is designed to be public and will always be visible in a Lovable app's JavaScript. It is only safe when every exposed table has RLS with correct policies. The secret key (sb_secret_…, which replaces the legacy service_role key) is different: it bypasses RLS and must never appear in client code or the repository. Supabase is retiring the legacy anon and service_role keys by the end of 2026, so this is a good moment to rotate to the new keys." },
   { question: "Can I scan a private Lovable GitHub repository?", answer: "Yes. Sign in, install the ScanMySaaS GitHub App on the repository Lovable created, and pick it from the list. The app only requests read access to contents and metadata. The scan runs in the background, so you can leave the page and come back to the report." },
   { question: "Is the Lovable security scan free?", answer: "The first website scan and public repository scans are free, with no credit card. Private repositories and the AI logic review, which reads server routes and edge functions for missing authorization, are included in the paid plans." },
 ];
@@ -119,7 +119,7 @@ export default function LovableSecurityScannerPage() {
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-[#b4bdc9]"><ScanSearch className="h-3.5 w-3.5 text-[var(--signal)]" /> Built for Lovable + Supabase apps · free to start</div>
           <h1 className="display-title mt-7 text-balance">Lovable security scan <span className="text-[var(--signal)]">before your users find the gaps.</span></h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-[#9aa4b1]">Check the Lovable app you published and the GitHub repo it syncs to. Find Supabase tables without RLS, service-role keys in client code, missing headers and public source maps, with a fix prompt you can paste straight into Lovable.</p>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-[#9aa4b1]">Check the Lovable app you published and the GitHub repo it syncs to. Find Supabase tables without RLS, secret keys in client code, missing headers and public source maps, with a fix prompt you can paste straight into Lovable.</p>
         </div>
         <div className="mt-9"><ScannerForm /></div>
         <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#778191]">
@@ -159,10 +159,10 @@ export default function LovableSecurityScannerPage() {
 
     <section className="app-shell py-20 sm:py-28">
       <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
-        <div><p className="eyebrow">Second opinion</p><h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Lovable&apos;s built-in check and an outside scan answer different questions.</h2></div>
+        <div><p className="eyebrow">Second opinion</p><h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Use Lovable&apos;s security scan. Then check from the outside.</h2></div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <article className="surface-muted rounded-2xl p-6"><h3 className="font-semibold">Lovable&apos;s security check</h3><ul className="mt-4 space-y-3 text-sm leading-6 text-[#8f99a7]">{["Runs inside the editor before publishing", "Looks at the project as Lovable sees it", "Fixes stay inside the same chat"].map((item) => <li key={item} className="flex gap-2"><CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-[#6f7a89]" />{item}</li>)}</ul></article>
-          <article className="rounded-2xl border border-[var(--signal)]/25 bg-[var(--signal)]/[0.05] p-6"><h3 className="font-semibold">ScanMySaaS</h3><ul className="mt-4 space-y-3 text-sm leading-6 text-[#b3bbc5]">{["Scans the deployed app from the outside, like an attacker", "Reads the synced GitHub repo, migrations and env files", "Shareable report, history and rescans to prove fixes"].map((item) => <li key={item} className="flex gap-2"><CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-[var(--signal)]" />{item}</li>)}</ul></article>
+          <article className="surface-muted rounded-2xl p-6"><h3 className="font-semibold">Lovable&apos;s security check</h3><ul className="mt-4 space-y-3 text-sm leading-6 text-[#8f99a7]">{["Quick scan of database rules and dependencies when you publish", "Deep scan of your code, started on demand", "Fixes run inside the same project"].map((item) => <li key={item} className="flex gap-2"><CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-[#6f7a89]" />{item}</li>)}</ul></article>
+          <article className="rounded-2xl border border-[var(--signal)]/25 bg-[var(--signal)]/[0.05] p-6"><h3 className="font-semibold">ScanMySaaS</h3><ul className="mt-4 space-y-3 text-sm leading-6 text-[#b3bbc5]">{["Scans the deployed app from the outside: headers, cookies, TLS, exposed files", "Reads the synced GitHub repo, including edits made outside Lovable", "Shareable report, history and rescans to prove fixes"].map((item) => <li key={item} className="flex gap-2"><CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-[var(--signal)]" />{item}</li>)}</ul></article>
           <div className="flex items-start gap-3 rounded-2xl border border-white/[0.08] p-5 sm:col-span-2"><Bot className="mt-0.5 h-5 w-5 shrink-0 text-[var(--signal)]" /><p className="text-sm leading-6 text-[#8f99a7]">On paid plans, the AI logic review reads server routes and edge functions in the repository and flags code that changes data without checking who is signed in, with the exact file and line.</p></div>
         </div>
       </div>
