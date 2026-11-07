@@ -4,7 +4,7 @@ import { repoFaqs } from "@/lib/site-content";
 const SITE_URL = "https://www.scanmysaas.com";
 
 export const metadata: Metadata = {
-  title: { absolute: "GitHub Repo Scanner: Scan Repos for Secrets & Vulnerabilities" },
+  title: { absolute: "GitHub Repo Security Scanner: Free Scan for Secrets & Vulnerabilities" },
   description: "Free GitHub repo scanner. Scan public or private repos (read-only) for committed .env files, API keys, risky GitHub Actions, Supabase RLS gaps and vulnerable dependencies.",
   alternates: { canonical: "/repo-scan" },
   openGraph: {

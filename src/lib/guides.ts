@@ -33,7 +33,7 @@ export const guides: Guide[] = [
     relatedChecks: ["Public security headers", "Exposed files", "Cookie settings", "Repository secret patterns"],
     intro: [
       "Before you send Product Hunt visitors or your first paying customers to a new SaaS, check what each person is allowed to do. A successful signup and checkout demonstrate the happy path. They do not show whether a different account can read a private document or unlock a paid feature without paying.",
-      "Use this vibe coding security checklist on an app you own or are authorized to test. It combines manual checks behind login with a review of the deployed public surface. Keep evidence for each result, fix the failures, and repeat the same checks on the release you intend to launch.",
+      "Use this launch checklist on an app you own or are authorized to test. It combines manual checks behind login with a review of the deployed public surface. Keep evidence for each result, fix the failures, and repeat the same checks on the release you intend to launch.",
     ],
     sections: [
       {
@@ -479,14 +479,17 @@ export const guides: Guide[] = [
   },
   {
     slug: "supabase-security-for-vibe-coded-apps",
-    title: "Supabase security for vibe-coded apps",
-    description: "Protect a Supabase app with Row Level Security, correct key placement, tenant-aware policies, storage rules, and server-only administrative access.",
+    title: "Supabase security checklist for vibe-coded apps",
+    seoTitle: "Supabase Security: RLS, API Keys & Storage Checklist (2026)",
+    description: "A Supabase security checklist for apps built with Lovable, Bolt, Cursor or Claude: Row Level Security, anon vs service-role keys, tenant-aware policies, storage buckets, edge functions and how to test each one.",
     eyebrow: "Database security",
-    readTime: "10 min read",
+    readTime: "12 min read",
+    publishedAt: "2026-08-13",
+    updatedAt: "2026-11-07",
     relatedChecks: ["Row Level Security", "Service-role keys", "Public environment variables", "SQL migrations"],
     intro: [
       "Supabase makes a browser-to-database product possible with very little code. The safety of that design depends on Row Level Security and the difference between a publishable key and a privileged server key.",
-      "A working login screen proves authentication. It does not prove that one user cannot read or update another user's rows.",
+      "A working login screen proves authentication. It does not prove that one user cannot read or update another user's rows. Use this Supabase security checklist on a project you own, in the order below: the first two items cause most real data leaks.",
     ],
     sections: [
       {
@@ -511,13 +514,184 @@ export const guides: Guide[] = [
         paragraphs: ["Supabase publishable keys and legacy anon keys are intended for public clients when RLS is correct. Secret keys and legacy service-role keys bypass RLS and belong only in controlled backend code. Never give them a NEXT_PUBLIC_, VITE_, or REACT_APP_ prefix."],
       },
       {
-        heading: "Review server routes too",
-        paragraphs: ["A server route using a privileged Supabase client becomes its own authorization boundary. Verify the signed-in user, check the tenant and role, validate the input, then perform the administrative query. The service key will not repair a missing authorization check."],
+        heading: "Review server routes and edge functions too",
+        paragraphs: ["A server route or edge function using a privileged Supabase client becomes its own authorization boundary. Verify the signed-in user from the JWT, check the tenant and role, validate the input, then perform the administrative query. Never accept a user ID or role from the request body as proof of identity. The service key will not repair a missing authorization check."],
+        bullets: [
+          "Read the user from supabase.auth.getUser() with the request's token, not from a field the browser sends.",
+          "Return 401 for no session and 403 for the wrong tenant or role before touching data.",
+          "Keep functions that need the service-role key small, and log what they change.",
+        ],
+      },
+      {
+        heading: "Lock down storage buckets",
+        paragraphs: ["Storage objects are rows in storage.objects and follow the same RLS model. A public bucket serves every file to anyone with the URL. For user uploads such as documents, invoices or avatars that should stay private, use a private bucket with policies that tie the object path to the owner, for example a folder named after auth.uid()."],
+        bullets: [
+          "Mark a bucket public only when every file in it is meant to be public.",
+          "Add select, insert, update and delete policies on storage.objects scoped to the bucket and owner.",
+          "Use short-lived signed URLs to share private files.",
+        ],
+      },
+      {
+        heading: "Check database functions and views",
+        paragraphs: ["Functions declared SECURITY DEFINER run with the privileges of their owner and can bypass RLS. Views in an exposed schema can also expose rows from tables that have RLS, depending on how they are created. Review both whenever an AI tool adds a migration."],
+        bullets: [
+          "Prefer SECURITY INVOKER functions; when DEFINER is required, set a fixed search_path and check auth.uid() inside.",
+          "Create views with security_invoker = true so the caller's RLS applies.",
+          "Revoke execute on sensitive functions from anon when they are not meant to be public.",
+        ],
+      },
+      {
+        heading: "Test it like an attacker would",
+        paragraphs: ["The anon key and project URL are in your JavaScript, so assume anyone can call the Data API directly. Using a project you own, send requests with only the anon key, then as user A against user B's rows, and confirm the denied cases. Run Supabase's Security Advisor in the dashboard to catch tables without RLS and risky functions, and scan the repository so new migrations are checked before they ship."],
+        bullets: [
+          "Anonymous request to a private table: returns no rows, not an error you ignore.",
+          "User A updating user B's row: zero rows changed.",
+          "Security Advisor shows no RLS-disabled tables in exposed schemas.",
+          "Repository scan shows no tables created without RLS and no secret keys in client code.",
+        ],
       },
     ],
     sources: [
       { label: "Supabase: Row Level Security", url: "https://supabase.com/docs/guides/database/postgres/row-level-security" },
       { label: "Supabase: Securing your data and API keys", url: "https://supabase.com/docs/guides/database/secure-data" },
+      { label: "Supabase: Storage access control", url: "https://supabase.com/docs/guides/storage/security/access-control" },
+      { label: "Supabase: Database advisors", url: "https://supabase.com/docs/guides/database/database-advisors" },
+    ],
+  },
+  {
+    slug: "vibe-coding-security-checklist",
+    title: "Vibe coding security checklist: 47 checks before you ship",
+    seoTitle: "Vibe Coding Security Checklist: 47 Checks Before You Ship (2026)",
+    description: "A practical vibe coding security checklist for apps built with Lovable, Cursor, Bolt, Claude Code or Codex: secrets, auth, ownership checks, Supabase RLS, payments, headers and what you can automate.",
+    eyebrow: "Checklist",
+    readTime: "11 min read",
+    publishedAt: "2026-11-07",
+    updatedAt: "2026-11-07",
+    relatedChecks: ["Committed secrets and public env vars", "Supabase tables without RLS", "Security headers and CSP", "Exposed files and source maps", "Cookie flags", "GitHub Actions permissions"],
+    intro: [
+      "AI coding tools build what you ask for. They rarely add what you did not ask for: ownership checks, rate limits, a strict CSP, or a rule that keeps the service-role key on the server. The app works, so it looks finished. This vibe coding security checklist covers the gaps that show up again and again in AI-built apps.",
+      "Work through it in order on an app you own. Each section says which checks a scanner can automate and which need a quick manual test with two accounts. Mark every item Pass, Fail or Not applicable; an untested item is not a pass.",
+    ],
+    sections: [
+      {
+        heading: "1. Secrets and API keys",
+        paragraphs: ["Leaked keys are the fastest way to lose a database or a payment account. Check the repository and the built JavaScript, not only the current .env file. Automated: the GitHub repo scan flags committed .env files, provider tokens, private keys, hardcoded secrets and secret-looking public variables, without showing the value."],
+        bullets: [
+          "No .env file, private key or database URL is committed, including in Git history.",
+          "No secret uses a public prefix such as NEXT_PUBLIC_, VITE_ or REACT_APP_.",
+          "Service-role, Stripe secret and OpenAI keys are only read in server code.",
+          "Any key that was ever committed has been rotated, not just deleted.",
+          ".gitignore covers .env* and GitHub push protection is on.",
+        ],
+      },
+      {
+        heading: "2. Authentication",
+        paragraphs: ["Use the auth provider your stack ships with instead of a hand-rolled login. Then check the edges AI tools tend to skip."],
+        bullets: [
+          "Email verification is required before an account can use paid or shared features.",
+          "Login, signup and password reset are rate limited.",
+          "Password reset tokens expire and work once.",
+          "Logging out invalidates the session on the server, not only in the browser.",
+          "Admin pages check the role on the server, not by hiding a link.",
+        ],
+      },
+      {
+        heading: "3. Ownership checks on every request",
+        paragraphs: ["The most common serious bug in vibe-coded apps is an endpoint that loads a record by ID without checking it belongs to the signed-in user. Test it manually: sign in as user A, replay a request with user B's record ID, and confirm it is denied and B's data is unchanged. On paid plans, the AI logic review reads server routes in the repository and flags handlers that change data without an authorization check."],
+        bullets: [
+          "Every read, update, delete and export checks ownership or tenant membership on the server.",
+          "User and tenant IDs come from the session, never from the request body.",
+          "Paid features are enforced on the server, not only in the UI.",
+          "Invitations and role changes check the inviter's role.",
+        ],
+      },
+      {
+        heading: "4. Database rules (Supabase, Firebase)",
+        paragraphs: ["If the browser talks to the database directly, the database rules are your authorization layer. Automated: the repo scan flags Supabase tables created in migrations without Row Level Security. Whether a policy is correct still needs a two-account test. The Supabase security checklist covers each step."],
+        bullets: [
+          "RLS is enabled on every table in an exposed schema.",
+          "No policy uses using (true) for data that belongs to a user or tenant.",
+          "Storage buckets with private files are private and have owner policies.",
+          "SECURITY DEFINER functions check auth.uid() inside.",
+          "Firebase rules do not allow read or write: if true outside local testing.",
+        ],
+      },
+      {
+        heading: "5. Payments and webhooks",
+        paragraphs: ["Payment code is where a small mistake becomes free usage or double charges."],
+        bullets: [
+          "Stripe webhooks verify the signature before doing anything.",
+          "Webhook handlers are idempotent, so a retried event does not grant credits twice.",
+          "Plan and price come from your server or Stripe, never from the client.",
+          "Access is granted after a confirmed payment event, not after a redirect to a success page.",
+        ],
+      },
+      {
+        heading: "6. Inputs, APIs and AI features",
+        paragraphs: ["Treat every input as hostile, including text that will be sent to an LLM."],
+        bullets: [
+          "Server-side validation on every API route, with a schema library such as Zod.",
+          "Database access uses parameterized queries or an ORM, never string concatenation.",
+          "File uploads check type and size and are stored outside the web root.",
+          "CORS allows only your own origins, and never * together with credentials.",
+          "Expensive endpoints, including AI calls, have per-user rate limits and spending caps.",
+          "Prompts never contain secrets, and model output is never executed as code or SQL.",
+        ],
+      },
+      {
+        heading: "7. HTTPS and security headers",
+        paragraphs: ["These are invisible in the UI and easy to forget. Automated: the website scan checks TLS, HTTPS redirects, HSTS and evaluates the Content-Security-Policy the way browsers enforce it."],
+        bullets: [
+          "HTTPS everywhere, HTTP redirects to HTTPS, and HSTS is set.",
+          "A Content-Security-Policy without unsafe-inline for scripts, or with nonces or hashes.",
+          "Clickjacking protection with frame-ancestors or X-Frame-Options.",
+          "X-Content-Type-Options: nosniff and a Referrer-Policy are set.",
+        ],
+      },
+      {
+        heading: "8. Exposed files and source maps",
+        paragraphs: ["Build tools and hosting defaults can publish more than you meant to. Automated: the website scan requests known sensitive paths and confirms exposures by content, not just a 200 status."],
+        bullets: [
+          "/.env, /.git/config and database dumps return 404.",
+          "Production source maps are not public.",
+          "Debug endpoints, GraphQL introspection and directory listings are off in production.",
+        ],
+      },
+      {
+        heading: "9. Cookies and sessions",
+        paragraphs: ["Automated: the website scan checks every cookie it sees across crawled pages."],
+        bullets: [
+          "Session cookies are Secure, HttpOnly and SameSite=Lax or Strict.",
+          "Auth tokens are not stored in localStorage when a cookie session is available.",
+          "Sessions expire and are rotated after login.",
+        ],
+      },
+      {
+        heading: "10. Dependencies and GitHub Actions",
+        paragraphs: ["AI agents add packages and workflows quickly. Automated: the repo scan flags write-all workflow tokens, unpinned actions, pull_request_target workflows that run untrusted code, and known vulnerable dependencies."],
+        bullets: [
+          "Every dependency is real and needed; remove packages the AI added and never used.",
+          "npm audit or an equivalent runs in CI.",
+          "Workflows declare least-privilege permissions and pin actions to a commit SHA.",
+          "Agent and MCP configuration does not allow destructive commands without review.",
+        ],
+      },
+      {
+        heading: "11. Before every release",
+        paragraphs: ["Security is not a one-time pass. A new prompt can undo an old fix. Scan the repository before merging, scan the live URL after deploying, and rescan after a fix to prove it reached production."],
+        bullets: [
+          "Repository scan is clean of critical and high findings.",
+          "Website scan of the production URL is clean of critical and high findings.",
+          "Two-account ownership tests still pass on the release build.",
+          "Errors and logs never print tokens or personal data.",
+        ],
+      },
+    ],
+    sources: [
+      { label: "OWASP Top 10", url: "https://owasp.org/www-project-top-ten/" },
+      { label: "OWASP Authorization Cheat Sheet", url: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html" },
+      { label: "Supabase: Row Level Security", url: "https://supabase.com/docs/guides/database/postgres/row-level-security" },
+      { label: "Stripe: Verify webhook signatures", url: "https://docs.stripe.com/webhooks#verify-events" },
     ],
   },
 ];

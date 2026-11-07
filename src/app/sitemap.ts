@@ -60,6 +60,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.85,
     },
+    {
+      url: `${baseUrl}/lovable-security-scanner`,
+      lastModified: new Date("2026-11-07"),
+      changeFrequency: "monthly",
+      priority: 0.85,
+    },
     ...guides.map((guide) => ({
       url: `${baseUrl}/guides/${guide.slug}`,
       lastModified: new Date(guide.updatedAt || "2026-08-13"),

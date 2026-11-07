@@ -17,6 +17,8 @@ export function SiteFooter() {
           <Link href="/repo-scan" className="text-[#aeb7c4] hover:text-white">GitHub repo scanner</Link>
           <Link href="/free-website-vulnerability-scanner" className="text-[#aeb7c4] hover:text-white">Free website vulnerability scanner</Link>
           <Link href="/vibe-coding-security" className="text-[#aeb7c4] hover:text-white">Vibe coding security</Link>
+          <Link href="/lovable-security-scanner" className="text-[#aeb7c4] hover:text-white">Lovable security scan</Link>
+          <Link href="/guides/vibe-coding-security-checklist" className="text-[#aeb7c4] hover:text-white">Vibe coding security checklist</Link>
           <Link href="/#coverage" className="text-[#aeb7c4] hover:text-white">Security checks</Link>
           <Link href="/#demo" className="text-[#aeb7c4] hover:text-white">Product demo</Link>
           <Link href="/guides" className="text-[#aeb7c4] hover:text-white">SaaS security guides</Link>

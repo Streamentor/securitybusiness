@@ -23,6 +23,8 @@
 - [Free website vulnerability scanner](https://www.scanmysaas.com/free-website-vulnerability-scanner) — Free online website security scan of up to 25 pages.
 - [GitHub repo scanner](https://www.scanmysaas.com/repo-scan) — Read-only scans of public and private GitHub repositories.
 - [Vibe coding security](https://www.scanmysaas.com/vibe-coding-security) — Security workflow for SaaS apps built with Codex, Claude, Cursor, and other coding agents.
+- [Lovable security scan](https://www.scanmysaas.com/lovable-security-scanner) — Scan a Lovable app and its synced GitHub repo for Supabase RLS gaps, exposed keys, headers and source maps.
+- [Vibe coding security checklist](https://www.scanmysaas.com/guides/vibe-coding-security-checklist) — 47 checks for AI-built apps before launch.
 - [Extended machine-readable product guide](https://www.scanmysaas.com/llms-full.txt) — Detailed coverage, plan, workflow, and safe-use information.
 - [Pricing](https://www.scanmysaas.com/pricing) — Current plans, scan credits, rollover limits, and paid features.
 - [Create an account](https://www.scanmysaas.com/register) — Registration for saving scan reports and managing a plan.
