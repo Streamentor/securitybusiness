@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe, getCreditsForPlan, getPlanFromPriceId } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 import Stripe from "stripe";
+import { grantInvoiceCredits } from "@/lib/billing-credit-store";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -19,8 +20,8 @@ export async function POST(req: NextRequest) {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
-  } catch (err) {
-    console.error("Webhook signature verification failed:", err);
+  } catch {
+    console.error("Webhook signature verification failed");
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
         break;
     }
   } catch (error) {
-    console.error("Webhook handler error:", error);
+    console.error("Webhook handler error:", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
@@ -112,27 +113,13 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     return;
   }
 
-  const user = await prisma.user.findFirst({
-    where: { stripeSubscriptionId: subscriptionId },
-    select: { id: true, credits: true },
-  });
-
-  if (!user) {
-    console.error("No user found for subscription:", subscriptionId);
-    return;
-  }
-
   const monthlyCredits = getCreditsForPlan(plan);
-  const maxRollover = monthlyCredits * 2;
-  const newCredits = Math.min(user.credits + monthlyCredits, maxRollover);
   const periodEnd = subscription.items.data[0]?.current_period_end;
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      credits: newCredits,
-      currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
-    },
+  await grantInvoiceCredits({
+    invoiceId: invoice.id,
+    subscriptionId,
+    credits: monthlyCredits,
+    periodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
   });
 }
 

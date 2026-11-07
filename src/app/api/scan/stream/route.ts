@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
+import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { prisma } from "@/lib/db";
-import { scanWebsite, ScanProgress, validateScanTarget, VulnerabilityResult, WebsiteScanError } from "@/lib/scanner";
+import { scanWebsite, type ScanProgress, validateScanTarget, type VulnerabilityResult, WebsiteScanError } from "@/lib/scanner";
 import { admitWebsiteScan } from "@/lib/scan-gate";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest) {
   const userId = admission.userId;
   let creditReserved = admission.creditReserved;
 
+  const creator = !userId ? prepareCreator(req) : null;
+
   // Create the readable stream
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
           },
         });
         scanId = scan.id;
+        if (creator) await recordReportCreator(scan.id, creator.hash);
 
         send("scan-created", { scanId: scan.id });
 
@@ -153,7 +157,8 @@ export async function POST(req: NextRequest) {
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
+      "Cache-Control": "private, no-store, no-transform",
+      ...(creator ? {"Set-Cookie": creator.cookie} : {}),
       Connection: "keep-alive",
     },
   });

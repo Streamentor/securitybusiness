@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { registerHooks, stripTypeScriptTypes } from "node:module";
 
 const sourceRoot = new URL("../src/", import.meta.url);
@@ -67,6 +68,8 @@ const fixture = {
 };
 const report = () => ({ id: "fixture-scan", url: "https://example.com", status: "completed", userId: null, overallScore: 40, vulnerabilities: fixture.findings });
 fixture.db = {
+  $executeRawUnsafe: async () => 0,
+  websiteReportAccess: {findUnique: async () => ({creatorHash: createHash("sha256").update("a".repeat(43)).digest("hex")}), create: async () => ({})},
   user: {
     findUnique: async () => ({ plan: fixture.plan, credits: fixture.credits }),
     updateMany: async () => { fixture.reservations += 1; return { count: 1 }; },
@@ -85,7 +88,7 @@ globalThis.scanRemediationFixture = fixture;
 try {
   const { GET } = await import("../src/app/api/scan/[id]/route.ts");
   const { POST } = await import("../src/app/api/scan/route.ts");
-  const getReport = () => GET(new Request("https://scanmysaas.example/api/scan/fixture-scan?plan=pro&findingId=low"), { params: Promise.resolve({ id: "fixture-scan" }) });
+  const getReport = () => GET(new Request("https://scanmysaas.example/api/scan/fixture-scan?plan=pro&findingId=low", {headers: {cookie: `scan-report-creator=${"a".repeat(43)}`}}), { params: Promise.resolve({ id: "fixture-scan" }) });
   const postScan = () => POST(new Request("https://scanmysaas.example/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: "https://example.com", plan: "pro", canViewRemedies: true, findingId: "low" }) }));
 
   assertOneFreeFix((await (await getReport()).json()).vulnerabilities);

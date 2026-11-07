@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { scanWebsite, validateScanTarget, WebsiteScanError } from "@/lib/scanner";
+import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { auth } from "@/lib/auth";
 import { admitWebsiteScan } from "@/lib/scan-gate";
 import { applyWebsiteRemediationAccess } from "@/lib/scan-remediation";
@@ -39,6 +40,8 @@ export async function POST(req: NextRequest) {
     userPlan = admission.plan;
     creditReserved = admission.creditReserved;
 
+    const creator = !userId ? prepareCreator(req) : null;
+
     // Create scan record
     const scan = await prisma.scan.create({
       data: {
@@ -47,6 +50,8 @@ export async function POST(req: NextRequest) {
         userId,
       },
     });
+
+    if (creator) await recordReportCreator(scan.id, creator.hash);
 
     // Run the scan
     try {
@@ -93,7 +98,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ...updatedScan,
         vulnerabilities: applyWebsiteRemediationAccess(updatedScan.vulnerabilities, userPlan),
-      });
+      }, {headers: {"Cache-Control": "private, no-store", ...(creator ? {"Set-Cookie": creator.cookie} : {})}});
     } catch (scanError) {
       console.error("Scan execution error:", scanError);
       if (userId && creditReserved) {
