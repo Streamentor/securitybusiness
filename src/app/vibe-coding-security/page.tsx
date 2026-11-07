@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import {BoundaryMap} from "@/components/visuals/BoundaryMap";
+import {VibeHeroArt} from "@/components/visuals/VibeHeroArt";
+
 
 const SITE_URL = "https://www.scanmysaas.com";
 
@@ -56,12 +59,13 @@ export default function VibeCodingSecurityPage() {
       <div className="pointer-events-none absolute inset-0 -z-10 hairline-grid [mask-image:linear-gradient(to_bottom,black,transparent_82%)]" />
       <div className="app-shell grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-end lg:gap-16">
         <div><div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-[#b4bdc9]"><Bot className="h-3.5 w-3.5 text-[var(--signal)]" /> Built with Codex, Claude, Cursor, or another coding agent</div><h1 className="display-title mt-7 text-balance">Vibe coding security scanner <span className="text-[var(--signal)]">before users find the gaps.</span></h1></div>
-        <div><p className="text-lg leading-8 text-[#9aa4b1]">A working AI-built app can still commit a live credential, trust the browser with an admin key, skip tenant isolation, or give a deployment workflow more access than it needs. Scan the repository and the public app as two separate attack surfaces.</p><div className="mt-7 flex flex-col gap-3 sm:flex-row"><Link href="/repo-scan" className="button-primary"><Github className="h-4 w-4" /> Scan a GitHub repository</Link><Link href="/#scan" className="button-secondary"><Globe2 className="h-4 w-4" /> Scan the deployed app</Link></div></div>
+        <div><VibeHeroArt /><p className="text-lg leading-8 text-[#9aa4b1]">A working AI-built app can still commit a live credential, trust the browser with an admin key, skip tenant isolation, or give a deployment workflow more access than it needs. Scan the repository and the public app as two separate attack surfaces.</p><div className="mt-7 flex flex-col gap-3 sm:flex-row"><Link href="/repo-scan" className="button-primary"><Github className="h-4 w-4" /> Scan a GitHub repository</Link><Link href="/#scan" className="button-secondary"><Globe2 className="h-4 w-4" /> Scan the deployed app</Link></div></div>
       </div>
     </section>
 
     <section className="app-shell py-20 sm:py-28">
       <div className="max-w-3xl"><p className="eyebrow">Five boundaries to verify</p><h2 className="section-title mt-4 text-balance">The code can pass tests and still cross the wrong boundary.</h2><p className="mt-5 text-sm leading-7 text-[#8f99a7]">Research on AI-generated code has found that functional success does not guarantee security. The useful response is a repeatable review at the places where authority changes hands.</p></div>
+      <BoundaryMap />
       <div className="mt-12 divide-y divide-white/[0.08] border-y border-white/[0.08]">{boundaries.map((boundary, index) => <article key={boundary.title} className="grid gap-3 py-6 sm:grid-cols-[2.5rem_2rem_13rem_1fr] sm:items-center"><boundary.icon className="h-5 w-5 text-[var(--signal)]" /><span className="font-mono text-xs text-[#596473]">{String(index + 1).padStart(2, "0")}</span><h3 className="font-semibold">{boundary.title}</h3><p className="text-sm leading-6 text-[#87919f]">{boundary.copy}</p></article>)}</div>
     </section>
 

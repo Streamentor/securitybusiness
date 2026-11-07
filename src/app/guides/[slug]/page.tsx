@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock3 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { GuideCover } from "@/components/visuals/GuideCover";
+import { GuideFigure } from "@/components/visuals/GuideFigure";
 import { getGuide, guides } from "@/lib/guides";
 
 const SITE_URL = "https://www.scanmysaas.com";
@@ -34,7 +36,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
-      { "@type": "Article", "@id": `${url}#article`, headline: guide.title, description: guide.description, datePublished: guide.publishedAt || "2026-08-13", dateModified: guide.updatedAt || "2026-08-13", author: { "@type": "Organization", name: "ScanMySaaS Editorial Team", url: SITE_URL }, publisher: { "@type": "Organization", name: "ScanMySaaS", url: SITE_URL }, mainEntityOfPage: url, inLanguage: "en-US" },
+      { "@type": "Article", "@id": `${url}#article`, headline: guide.title, ...(guide.cover ? {image: `${SITE_URL}${guide.cover}`} : {}), description: guide.description, datePublished: guide.publishedAt || "2026-08-13", dateModified: guide.updatedAt || "2026-08-13", author: { "@type": "Organization", name: "ScanMySaaS Editorial Team", url: SITE_URL }, publisher: { "@type": "Organization", name: "ScanMySaaS", url: SITE_URL }, mainEntityOfPage: url, inLanguage: "en-US" },
       { "@type": "BreadcrumbList", itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
         { "@type": "ListItem", position: 2, name: "Guides", item: `${SITE_URL}/guides` },
@@ -62,6 +64,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
 
         <div className="app-shell grid gap-12 py-12 lg:grid-cols-[minmax(0,1fr)_17rem] lg:py-16">
           <div className="max-w-3xl">
+            <GuideCover src={guide.cover} alt={guide.coverAlt} priority />
             <div className="space-y-5 text-lg leading-8 text-[#b3bbc5]">{guide.intro.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
             <Link href={isRepositoryGuide ? "/repo-scan" : "/free-website-vulnerability-scanner"} className="mt-8 flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-4 text-sm text-[#cfd6de] transition hover:border-[var(--signal)]/30 hover:text-white"><span>{isRepositoryGuide ? "Check your repository for these issues with the free GitHub repo scanner." : "Check your site for these issues with the free website vulnerability scanner."}</span><span className="shrink-0 font-semibold text-[var(--signal)]">Scan now →</span></Link>
             <div className="mt-12 space-y-12">
@@ -69,6 +72,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
                 <section key={section.heading}>
                   <h2 className="text-2xl font-semibold tracking-[-0.035em] text-white sm:text-3xl">{section.heading}</h2>
                   <div className="mt-5 space-y-4 text-[0.98rem] leading-8 text-[#a3acb8]">{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
+                  <GuideFigure kind={section.figure} />
                   {section.bullets && <ul className="mt-6 space-y-3">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-3 text-sm leading-6 text-[#a3acb8]"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[var(--signal)]" /><span>{bullet}</span></li>)}</ul>}
                 </section>
               ))}

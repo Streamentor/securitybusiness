@@ -3,6 +3,9 @@ import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Bot, CheckCircle2, Cookie, Database, FileCode2, Github, Globe2, HardDrive, KeyRound, RefreshCw, ScanSearch, Server, ShieldAlert, ShieldCheck, Wand2 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import {LovableStackDiagram} from "@/components/visuals/LovableStackDiagram";
+import {ProductFigure} from "@/components/visuals/ProductFigure";
+
 import { ScannerForm } from "@/components/ScannerForm";
 
 const SITE_URL = "https://www.scanmysaas.com";
@@ -134,6 +137,7 @@ export default function LovableSecurityScannerPage() {
         <div className="max-w-2xl"><p className="eyebrow">By severity</p><h2 className="section-title mt-4 text-balance">Common Lovable security issues.</h2><p className="mt-5 text-sm leading-7 text-[#8f99a7]">Lovable apps share a recognizable stack: a React front end talking directly to Supabase. That makes the failure modes predictable. Each issue below is tagged with how it gets caught.</p></div>
         <div className="flex flex-wrap gap-2">{(Object.keys(coverageStyle) as Coverage[]).map((label) => <CoverageTag key={label} label={label} />)}</div>
       </div>
+      <LovableStackDiagram />
       <div className="mt-12 space-y-10">{issueGroups.map((group) => <div key={group.severity}>
         <div className="flex flex-wrap items-center gap-3"><span className={`rounded-md border px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-[.12em] ${group.tone}`}>{group.severity}</span><p className="text-sm text-[#7f8998]">{group.summary}</p></div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">{group.issues.map((issue) => <article key={issue.title} className="surface-muted flex flex-col rounded-2xl p-6 sm:p-7">
@@ -154,6 +158,7 @@ export default function LovableSecurityScannerPage() {
           <h3 className="mt-8 text-lg font-semibold">{step.title}</h3>
           <p className="mt-3 text-sm leading-6 text-[#87919f]">{step.copy}</p>
         </li>)}</ol>
+        <ProductFigure id="repo-report" />
       </div>
     </section>
 

@@ -30,6 +30,9 @@ import { ScannerForm } from "@/components/ScannerForm";
 import { ToastContainer } from "@/components/Toast";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import {ScanFlowDiagram} from "@/components/visuals/ScanFlowDiagram";
+import {ProductFigure} from "@/components/visuals/ProductFigure";
+
 import { homeFaqs, productFeatures } from "@/lib/site-content";
 import { guides } from "@/lib/guides";
 
@@ -228,6 +231,8 @@ export default function HomePage() {
         </div>
       </section>
 
+      <div className="app-shell pb-20"><ProductFigure id="rescan-comparison" /></div>
+
       <section id="guides" className="border-y border-white/[0.07] bg-[#0a0e14] py-24 sm:py-32">
         <div className="app-shell">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
@@ -250,6 +255,7 @@ export default function HomePage() {
               { n: "03", title: "Work down the risk", copy: "Open the report, address priority findings, then run a fresh scan." },
             ].map((step) => <article key={step.n} className="bg-[#0d1219] p-7 sm:p-9"><p className="font-mono text-xs text-[var(--signal)]">STEP {step.n}</p><h3 className="mt-12 text-xl font-semibold">{step.title}</h3><p className="mt-3 text-sm leading-6 text-[#8f99a7]">{step.copy}</p></article>)}
           </div>
+          <ScanFlowDiagram maxPages={25} checkCount="60+" />
         </div>
       </section>
 

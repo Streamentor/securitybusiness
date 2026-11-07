@@ -1,5 +1,6 @@
 export interface GuideSection {
   heading: string;
+  figure?: "header-anatomy" | "cert-timeline" | "leak-timeline" | "pr-target" | "crawl-flow" | "rls-flow" | "boundary-map";
   paragraphs: string[];
   bullets?: string[];
 }
@@ -9,6 +10,8 @@ export interface Guide {
   title: string;
   /** Optional search title; the on-page H1 keeps `title`. */
   seoTitle?: string;
+  cover?: string;
+  coverAlt?: string;
   description: string;
   eyebrow: string;
   readTime: string;
@@ -23,6 +26,8 @@ export interface Guide {
 export const guides: Guide[] = [
   {
     slug: "saas-launch-security-checklist",
+    cover: "/images/guides/saas-launch-security-checklist.webp",
+    coverAlt: "",
     title: "SaaS launch security checklist for vibe-coded apps",
     seoTitle: "SaaS Security Checklist Before Launch (2026, Vibe-Coded Apps)",
     description: "Check tenant isolation, Supabase RLS, sessions, Stripe webhooks, and public exposure before your SaaS launch, with a find, fix, and retest worksheet.",
@@ -145,6 +150,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "security-headers-for-saas",
+    cover: "/images/guides/security-headers-for-saas.webp",
+    coverAlt: "",
     title: "Security headers for SaaS: what to add first",
     seoTitle: "HTTP Security Headers Checklist for SaaS (CSP, HSTS, X-Frame)",
     description: "A practical guide to CSP, HSTS, clickjacking protection, MIME sniffing, referrer policy, and permissions policy for SaaS teams.",
@@ -158,6 +165,7 @@ export const guides: Guide[] = [
     sections: [
       {
         heading: "Start with the headers that close clear gaps",
+        figure: "header-anatomy",
         paragraphs: ["For most SaaS products, four headers deserve attention first. They cover transport, framing, content interpretation, and script execution."],
         bullets: [
           "Strict-Transport-Security tells supporting browsers to return over HTTPS after the first secure visit.",
@@ -194,6 +202,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "ssl-tls-checklist-for-saas",
+    cover: "/images/guides/ssl-tls-checklist-for-saas.webp",
+    coverAlt: "",
     title: "SSL and TLS checklist for a production SaaS",
     seoTitle: "SSL/TLS Checklist for SaaS: Certificates, HSTS & HTTPS Redirects",
     description: "Check certificate trust and expiry, HTTPS redirects, HSTS, mixed content, cookies, and redirect chains before they become incidents.",
@@ -207,6 +217,7 @@ export const guides: Guide[] = [
     sections: [
       {
         heading: "Verify the certificate as a customer sees it",
+        figure: "cert-timeline",
         paragraphs: ["Check the production hostname with Server Name Indication, confirm the certificate chain is trusted, and record the expiry date. If your platform renews certificates automatically, alerting still matters. DNS changes, failed challenges, or an abandoned custom domain can interrupt renewal."],
         bullets: [
           "The certificate covers the exact hostname users visit.",
@@ -240,6 +251,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "robots-txt-and-sitemap-for-saas",
+    cover: "/images/guides/robots-txt-and-sitemap-for-saas.webp",
+    coverAlt: "",
     title: "robots.txt and XML sitemaps for SaaS websites",
     seoTitle: "robots.txt & Sitemap for SaaS: Fix \"Blocked by robots.txt\" Errors",
     description: "Configure robots.txt and XML sitemaps without leaking private routes or accidentally blocking the public pages that should rank.",
@@ -264,6 +277,7 @@ export const guides: Guide[] = [
       },
       {
         heading: "Build a sitemap from pages worth indexing",
+        figure: "crawl-flow",
         paragraphs: [
           "Include canonical, indexable URLs that return a successful response. Exclude dashboard screens, search results, temporary campaign variants, redirected URLs, and routes that carry private identifiers.",
           "The sitemap should agree with the page. A URL marked noindex or canonicalized to another page should not be listed as if it were a primary result.",
@@ -301,6 +315,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "llms-txt-for-saas",
+    cover: "/images/guides/llms-txt-for-saas.webp",
+    coverAlt: "",
     title: "llms.txt for SaaS: useful file, realistic expectations",
     description: "What an llms.txt file can communicate, what it cannot guarantee, and how to publish a concise version for a SaaS product.",
     eyebrow: "AI discovery",
@@ -343,6 +359,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "exposed-files-and-source-maps",
+    cover: "/images/guides/exposed-files-and-source-maps.webp",
+    coverAlt: "",
     title: "Exposed files and source maps in production",
     description: "Find and remove public environment files, Git metadata, backups, debug pages, and JavaScript source maps from a SaaS deployment.",
     eyebrow: "Application exposure",
@@ -388,6 +406,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "github-secret-scanning-for-vibe-coded-apps",
+    cover: "/images/guides/github-secret-scanning-for-vibe-coded-apps.webp",
+    coverAlt: "",
     title: "GitHub secret scanning for vibe-coded apps",
     description: "What to do when an AI-built app commits an .env file, API key, database URL, private key, or service credential to GitHub.",
     eyebrow: "Repository security",
@@ -400,6 +420,7 @@ export const guides: Guide[] = [
     sections: [
       {
         heading: "Assume the value was copied",
+        figure: "leak-timeline",
         paragraphs: ["Do not wait for evidence that someone used the key. Rotate an exposed database password, API token, signing secret, or private key from the provider that issued it. Check audit logs and narrow the replacement credential to the permissions the app actually needs."],
         bullets: [
           "Revoke or rotate the credential at its source.",
@@ -437,6 +458,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "github-actions-security-for-vibe-coded-apps",
+    cover: "/images/guides/github-actions-security-for-vibe-coded-apps.webp",
+    coverAlt: "",
     title: "GitHub Actions security for vibe-coded apps",
     description: "Review workflow token permissions, pull_request_target, secret handling, third-party actions, and release jobs before an AI-generated workflow reaches production.",
     eyebrow: "CI and deployment",
@@ -453,6 +476,7 @@ export const guides: Guide[] = [
       },
       {
         heading: "Treat pull request code as hostile input",
+        figure: "pr-target",
         paragraphs: [
           "The pull_request_target event runs in the context of the base repository. That makes it useful for trusted labeling or commenting, but dangerous when the job checks out and executes code from a fork. A contributor can change a build script, test command, or package hook and use the privileged job to reach secrets or a writable token.",
           "Use pull_request for untrusted builds. If you need a privileged follow-up action, split it into a separate workflow that consumes a small, verified artifact and never executes pull request code.",
@@ -479,6 +503,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "supabase-security-for-vibe-coded-apps",
+    cover: "/images/guides/supabase-security-for-vibe-coded-apps.webp",
+    coverAlt: "",
     title: "Supabase security checklist for vibe-coded apps",
     seoTitle: "Supabase Security: RLS, API Keys & Storage Checklist (2026)",
     description: "A Supabase security checklist for apps built with Lovable, Bolt, Cursor or Claude: Row Level Security, anon vs service-role keys, tenant-aware policies, storage buckets, edge functions and how to test each one.",
@@ -494,6 +520,7 @@ export const guides: Guide[] = [
     sections: [
       {
         heading: "Enable RLS on every exposed table",
+        figure: "rls-flow",
         paragraphs: ["Supabase says Row Level Security must be enabled on tables in an exposed schema such as public. Tables created in the dashboard receive RLS by default, but raw SQL migrations need an explicit ALTER TABLE statement. Check migrations, not only the current dashboard state."],
         bullets: [
           "Enable RLS before production data is written.",
@@ -565,6 +592,8 @@ export const guides: Guide[] = [
   },
   {
     slug: "vibe-coding-security-checklist",
+    cover: "/images/guides/vibe-coding-security-checklist.webp",
+    coverAlt: "",
     title: "Vibe coding security checklist: 47 checks before you ship",
     seoTitle: "Vibe Coding Security Checklist: 47 Checks Before You Ship (2026)",
     description: "A practical vibe coding security checklist for apps built with Lovable, Cursor, Bolt, Claude Code or Codex: secrets, auth, ownership checks, Supabase RLS, payments, headers and what you can automate.",
@@ -602,6 +631,7 @@ export const guides: Guide[] = [
       },
       {
         heading: "3. Ownership checks on every request",
+        figure: "boundary-map",
         paragraphs: ["The most common serious bug in vibe-coded apps is an endpoint that loads a record by ID without checking it belongs to the signed-in user. Test it manually: sign in as user A, replay a request with user B's record ID, and confirm it is denied and B's data is unchanged. On paid plans, the AI logic review reads server routes in the repository and flags handlers that change data without an authorization check."],
         bullets: [
           "Every read, update, delete and export checks ownership or tenant membership on the server.",

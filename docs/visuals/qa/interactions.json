@@ -1,0 +1,30 @@
+[
+  {
+    "route": "free-website-vulnerability-scanner",
+    "heroOrder": {
+      "h1": 363,
+      "form": 615,
+      "image": 805
+    },
+    "ctaReturnsToInput": true,
+    "ctaHidesOnForm": true,
+    "input": {
+      "focused": "INPUT",
+      "viewportTop": 70
+    }
+  },
+  {
+    "route": "repo-scan",
+    "heroOrder": {
+      "h1": 312,
+      "form": 640,
+      "image": 1144
+    },
+    "ctaReturnsToInput": true,
+    "ctaHidesOnForm": true,
+    "input": {
+      "focused": "INPUT",
+      "viewportTop": 94
+    }
+  }
+]

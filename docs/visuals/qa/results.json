@@ -1,0 +1,1076 @@
+[
+  {
+    "route": "/",
+    "width": 1440,
+    "title": "SaaS Security Scanner: Free Website & GitHub Repo Scan | ScanMySaaS",
+    "h1": "SaaS security scanner before your next launch.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 144,
+        "y": 3441.375,
+        "width": 1152,
+        "height": 281.328125,
+        "label": "Rescan after a fix and see what is resolved. This real comparison shows no changes between the two scans."
+      },
+      {
+        "x": 144,
+        "y": 5282.609375,
+        "width": 1152,
+        "height": 486.875,
+        "label": "What happens when you press Scan."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Two scans of stefbuilds.com compared: zero resolved, zero new and four still-open finding groups, with score 91 unchanged.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Frescan-comparison.webp&w=1080&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "home-1440.png"
+  },
+  {
+    "route": "/free-website-vulnerability-scanner",
+    "width": 1440,
+    "title": "Free Website Vulnerability Scanner: Online Security Scan | ScanMySaaS",
+    "h1": "Free website vulnerability scanner for your live app.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 740,
+        "y": 205,
+        "width": 604,
+        "height": 525.125,
+        "label": "A real website scan: score, severity breakdown, scanned pages and prioritized findings."
+      },
+      {
+        "x": 144,
+        "y": 2137.78125,
+        "width": 1152,
+        "height": 486.875,
+        "label": "What happens when you press Scan."
+      },
+      {
+        "x": 144,
+        "y": 4391.65625,
+        "width": 1152,
+        "height": 353,
+        "label": "Two views of your appWebsite scan seesTLS and HTTPSHeaders and cookiesExposed fi"
+      },
+      {
+        "x": 144,
+        "y": 4944.65625,
+        "width": 1152,
+        "height": 901.6875,
+        "label": "Each finding has the affected URL, the fix and a prompt for your AI coding tool. Excerpt from a real scan."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Website security report for stefbuilds.com showing its score, severity breakdown and seven scanned pages.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Fwebsite-report.webp&w=640&q=75"
+      },
+      {
+        "alt": "Expanded website finding with affected URL, observation, remediation and a copyable fix prompt.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Fwebsite-finding.webp&w=1080&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "free-website-vulnerability-scanner-1440.png"
+  },
+  {
+    "route": "/repo-scan",
+    "width": 1440,
+    "title": "GitHub Repo Security Scanner: Free Scan for Secrets & Vulnerabilities",
+    "h1": "GitHub repo scanner for vibe-coded apps.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 727.328125,
+        "width": 608,
+        "height": 463.765625,
+        "label": "Findings point to the file and line. Real report excerpt; private repository identity omitted."
+      },
+      {
+        "x": 736,
+        "y": 727.328125,
+        "width": 608,
+        "height": 703.328125,
+        "label": "Runs in the background. You can leave the page."
+      },
+      {
+        "x": 144,
+        "y": 2859.375,
+        "width": 1152,
+        "height": 353,
+        "label": "Two views of your appWebsite scan seesTLS and HTTPSHeaders and cookiesExposed fi"
+      },
+      {
+        "x": 144,
+        "y": 3873.234375,
+        "width": 1152,
+        "height": 510.875,
+        "label": "Never clones, installs or runs your code. Selected source files are read in memory; paid AI review has its own disclosed processing limits."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Repository report showing score, scan coverage and two findings with package-lock.json line references; private repository identity is outside the crop.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Frepo-report.webp&w=640&q=75"
+      },
+      {
+        "alt": "A running scan of Streamentor/securitybusiness with seven stages, AI logic review active and the message You can leave this page.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Frepo-loader.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "repo-scan-1440.png"
+  },
+  {
+    "route": "/lovable-security-scanner",
+    "width": 1440,
+    "title": "Lovable Security Scan: Find Security Issues in Your Lovable App",
+    "h1": "Lovable security scan before your users find the gaps.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 144,
+        "y": 1161.78125,
+        "width": 1152,
+        "height": 568.5,
+        "label": "Illustrative permission model, not a scan result. Exposure also depends on table grants, roles and policies; verify the actual request path."
+      },
+      {
+        "x": 144,
+        "y": 4175.046875,
+        "width": 1152,
+        "height": 806.5,
+        "label": "Findings point to the file and line. Real report excerpt; private repository identity omitted."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Repository report showing score, scan coverage and two findings with package-lock.json line references; private repository identity is outside the crop.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Frepo-report.webp&w=1080&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "lovable-security-scanner-1440.png"
+  },
+  {
+    "route": "/vibe-coding-security",
+    "width": 1440,
+    "title": "Vibe Coding Security Scanner for AI-Built Apps | ScanMySaaS",
+    "h1": "Vibe coding security scanner before users find the gaps.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 144,
+        "y": 1201.453125,
+        "width": 1152,
+        "height": 580.875,
+        "label": "Where authority changes handsSecurity review flow1 \u00b7 SECRETSBrowserPublic bundle"
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fart%2Fvibe-coding-building.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "vibe-coding-security-1440.png"
+  },
+  {
+    "route": "/pricing",
+    "width": 1440,
+    "title": "Vulnerability Scanner Pricing: Free, $29 & $79 Plans | ScanMySaaS",
+    "h1": "Pay for scans, not security theater.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 2136.859375,
+        "width": 608,
+        "height": 574.53125,
+        "label": "Starter and Pro: connect the read-only GitHub App and choose a private repository."
+      },
+      {
+        "x": 736,
+        "y": 2136.859375,
+        "width": 608,
+        "height": 331.890625,
+        "label": "Starter and Pro: AI findings include code evidence and still need verification. Excerpt from a real scan."
+      },
+      {
+        "x": 144,
+        "y": 2831.390625,
+        "width": 1152,
+        "height": 262,
+        "label": "Priority is a starting point for verificationCriticalVerify potentially severe e"
+      }
+    ],
+    "images": [
+      {
+        "alt": "Connected GitHub App repository picker filtered to the public securitybusiness repository, with AI review enabled; private repository names are excluded.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Fprivate-repo-picker.webp&w=640&q=75"
+      },
+      {
+        "alt": "AI finding marked Needs verification and high confidence, with a file and line, explanation and code evidence; private repository identity is outside the crop.",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fproduct%2Fai-review-finding.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "pricing-1440.png"
+  },
+  {
+    "route": "/guides",
+    "width": 1440,
+    "title": "SaaS Security Guides | ScanMySaaS",
+    "h1": "Fix the surface your customers can see.",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsaas-launch-security-checklist.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsecurity-headers-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fssl-tls-checklist-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Frobots-txt-and-sitemap-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fllms-txt-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fexposed-files-and-source-maps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-secret-scanning-for-vibe-coded-apps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-actions-security-for-vibe-coded-apps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsupabase-security-for-vibe-coded-apps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fvibe-coding-security-checklist.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides-1440.png"
+  },
+  {
+    "route": "/guides/saas-launch-security-checklist",
+    "width": 1440,
+    "title": "SaaS Security Checklist Before Launch (2026, Vibe-Coded Apps) | ScanMySaaS",
+    "h1": "SaaS launch security checklist for vibe-coded apps",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsaas-launch-security-checklist.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--saas-launch-security-checklist-1440.png"
+  },
+  {
+    "route": "/guides/security-headers-for-saas",
+    "width": 1440,
+    "title": "HTTP Security Headers Checklist for SaaS (CSP, HSTS, X-Frame) | ScanMySaaS",
+    "h1": "Security headers for SaaS: what to add first",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 1627.640625,
+        "width": 768,
+        "height": 555,
+        "label": "Illustrative response, not a copy-paste production policy. Inventory required resources and test report-only CSP before enforcement."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsecurity-headers-for-saas.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--security-headers-for-saas-1440.png"
+  },
+  {
+    "route": "/guides/ssl-tls-checklist-for-saas",
+    "width": 1440,
+    "title": "SSL/TLS Checklist for SaaS: Certificates, HSTS & HTTPS Redirects | ScanMySaaS",
+    "h1": "SSL and TLS checklist for a production SaaS",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 1595.640625,
+        "width": 768,
+        "height": 337.28125,
+        "label": "Conceptual timeline, not to scale. Use the actual certificate dates and renewal configuration."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fssl-tls-checklist-for-saas.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--ssl-tls-checklist-for-saas-1440.png"
+  },
+  {
+    "route": "/guides/robots-txt-and-sitemap-for-saas",
+    "width": 1440,
+    "title": "robots.txt & Sitemap for SaaS: Fix \"Blocked by robots.txt\" Errors | ScanMySaaS",
+    "h1": "robots.txt and XML sitemaps for SaaS websites",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 2063.640625,
+        "width": 768,
+        "height": 359.734375,
+        "label": "A sitemap helps discovery; it does not grant crawl permission or guarantee indexing."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Frobots-txt-and-sitemap-for-saas.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--robots-txt-and-sitemap-for-saas-1440.png"
+  },
+  {
+    "route": "/guides/llms-txt-for-saas",
+    "width": 1440,
+    "title": "llms.txt for SaaS: useful file, realistic expectations | ScanMySaaS",
+    "h1": "llms.txt for SaaS: useful file, realistic expectations",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fllms-txt-for-saas.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--llms-txt-for-saas-1440.png"
+  },
+  {
+    "route": "/guides/exposed-files-and-source-maps",
+    "width": 1440,
+    "title": "Exposed files and source maps in production | ScanMySaaS",
+    "h1": "Exposed files and source maps in production",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fexposed-files-and-source-maps.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--exposed-files-and-source-maps-1440.png"
+  },
+  {
+    "route": "/guides/github-secret-scanning-for-vibe-coded-apps",
+    "width": 1440,
+    "title": "GitHub secret scanning for vibe-coded apps | ScanMySaaS",
+    "h1": "GitHub secret scanning for vibe-coded apps",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 1627.640625,
+        "width": 768,
+        "height": 359.734375,
+        "label": "Deleting the file is not enough. Revoke or rotate first; coordinate any history rewrite with collaborators."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-secret-scanning-for-vibe-coded-apps.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--github-secret-scanning-for-vibe-coded-apps-1440.png"
+  },
+  {
+    "route": "/guides/github-actions-security-for-vibe-coded-apps",
+    "width": 1440,
+    "title": "GitHub Actions security for vibe-coded apps | ScanMySaaS",
+    "h1": "GitHub Actions security for vibe-coded apps",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 1907.640625,
+        "width": 768,
+        "height": 611.59375,
+        "label": "The dangerous combination is trusted credentials plus executing untrusted PR code. This is a workflow illustration, not a scanner finding."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-actions-security-for-vibe-coded-apps.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--github-actions-security-for-vibe-coded-apps-1440.png"
+  },
+  {
+    "route": "/guides/supabase-security-for-vibe-coded-apps",
+    "width": 1440,
+    "title": "Supabase Security: RLS, API Keys & Storage Checklist (2026) | ScanMySaaS",
+    "h1": "Supabase security checklist for vibe-coded apps",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 1691.640625,
+        "width": 768,
+        "height": 425,
+        "label": "Example policy: auth.uid() = owner_id. Test anonymous, owner and different-user access with synthetic records."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsupabase-security-for-vibe-coded-apps.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--supabase-security-for-vibe-coded-apps-1440.png"
+  },
+  {
+    "route": "/guides/vibe-coding-security-checklist",
+    "width": 1440,
+    "title": "Vibe Coding Security Checklist: 47 Checks Before You Ship (2026) | ScanMySaaS",
+    "h1": "Vibe coding security checklist: 47 checks before you ship",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 96,
+        "y": 2539.640625,
+        "width": 768,
+        "height": 453.734375,
+        "label": "Where authority changes handsSecurity review flow1 \u00b7 SECRETSBrowserPublic bundle"
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fvibe-coding-security-checklist.webp&w=828&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--vibe-coding-security-checklist-1440.png"
+  },
+  {
+    "route": "/",
+    "width": 390,
+    "title": "SaaS Security Scanner: Free Website & GitHub Repo Scan | ScanMySaaS",
+    "h1": "SaaS security scanner before your next launch.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 6040.125,
+        "width": 358,
+        "height": 396.96875,
+        "label": "Rescan after a fix and see what is resolved. This real comparison shows no changes between the two scans."
+      },
+      {
+        "x": 16,
+        "y": 9397.625,
+        "width": 358,
+        "height": 1045.796875,
+        "label": "What happens when you press Scan."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Two scans of stefbuilds.com compared: zero resolved, zero new and four still-open finding groups, with score 91 unchanged.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/rescan-comparison-mobile.webp"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "home-390.png"
+  },
+  {
+    "route": "/free-website-vulnerability-scanner",
+    "width": 390,
+    "title": "Free Website Vulnerability Scanner: Online Security Scan | ScanMySaaS",
+    "h1": "Free website vulnerability scanner for your live app.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 805,
+        "width": 358,
+        "height": 852.90625,
+        "label": "A real website scan: score, severity breakdown, scanned pages and prioritized findings."
+      },
+      {
+        "x": 16,
+        "y": 4052.171875,
+        "width": 358,
+        "height": 1045.796875,
+        "label": "What happens when you press Scan."
+      },
+      {
+        "x": 16,
+        "y": 8422.96875,
+        "width": 358,
+        "height": 737,
+        "label": "Two views of your appWebsite scan seesTLS and HTTPSHeaders and cookiesExposed fi"
+      },
+      {
+        "x": 16,
+        "y": 9359.96875,
+        "width": 358,
+        "height": 931.96875,
+        "label": "Each finding has the affected URL, the fix and a prompt for your AI coding tool. Excerpt from a real scan."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Website security report for stefbuilds.com showing its score, severity breakdown and seven scanned pages.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/website-report-mobile.webp"
+      },
+      {
+        "alt": "Expanded website finding with affected URL, observation, remediation and a copyable fix prompt.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/website-finding-mobile.webp"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "free-website-vulnerability-scanner-390.png"
+  },
+  {
+    "route": "/repo-scan",
+    "width": 390,
+    "title": "GitHub Repo Security Scanner: Free Scan for Secrets & Vulnerabilities",
+    "h1": "GitHub repo scanner for vibe-coded apps.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 1144,
+        "width": 358,
+        "height": 1744.40625,
+        "label": "Findings point to the file and line. Real report excerpt; private repository identity omitted."
+      },
+      {
+        "x": 16,
+        "y": 2960.40625,
+        "width": 358,
+        "height": 1019.34375,
+        "label": "Runs in the background. You can leave the page."
+      },
+      {
+        "x": 16,
+        "y": 6091.28125,
+        "width": 358,
+        "height": 737,
+        "label": "Two views of your appWebsite scan seesTLS and HTTPSHeaders and cookiesExposed fi"
+      },
+      {
+        "x": 16,
+        "y": 7975.546875,
+        "width": 358,
+        "height": 953.390625,
+        "label": "Never clones, installs or runs your code. Selected source files are read in memory; paid AI review has its own disclosed processing limits."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Repository report showing score, scan coverage and two findings with package-lock.json line references; private repository identity is outside the crop.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/repo-report-mobile.webp"
+      },
+      {
+        "alt": "A running scan of Streamentor/securitybusiness with seven stages, AI logic review active and the message You can leave this page.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/repo-loader-mobile.webp"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "repo-scan-390.png"
+  },
+  {
+    "route": "/lovable-security-scanner",
+    "width": 390,
+    "title": "Lovable Security Scan: Find Security Issues in Your Lovable App",
+    "h1": "Lovable security scan before your users find the gaps.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 1186.765625,
+        "width": 358,
+        "height": 1223,
+        "label": "Illustrative permission model, not a scan result. Exposure also depends on table grants, roles and policies; verify the actual request path."
+      },
+      {
+        "x": 16,
+        "y": 7271.53125,
+        "width": 358,
+        "height": 1744.40625,
+        "label": "Findings point to the file and line. Real report excerpt; private repository identity omitted."
+      }
+    ],
+    "images": [
+      {
+        "alt": "Repository report showing score, scan coverage and two findings with package-lock.json line references; private repository identity is outside the crop.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/repo-report-mobile.webp"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "lovable-security-scanner-390.png"
+  },
+  {
+    "route": "/vibe-coding-security",
+    "width": 390,
+    "title": "Vibe Coding Security Scanner for AI-Built Apps | ScanMySaaS",
+    "h1": "Vibe coding security scanner before users find the gaps.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 1197.265625,
+        "width": 358,
+        "height": 859,
+        "label": "Where authority changes handsSecurity review flow1 \u00b7 SECRETSBrowserPublic bundle"
+      }
+    ],
+    "images": [],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "vibe-coding-security-390.png"
+  },
+  {
+    "route": "/pricing",
+    "width": 390,
+    "title": "Vulnerability Scanner Pricing: Free, $29 & $79 Plans | ScanMySaaS",
+    "h1": "Pay for scans, not security theater.",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 3511.265625,
+        "width": 358,
+        "height": 850.421875,
+        "label": "Starter and Pro: connect the read-only GitHub App and choose a private repository."
+      },
+      {
+        "x": 16,
+        "y": 4433.6875,
+        "width": 358,
+        "height": 663.96875,
+        "label": "Starter and Pro: AI findings include code evidence and still need verification. Excerpt from a real scan."
+      },
+      {
+        "x": 16,
+        "y": 5217.65625,
+        "width": 358,
+        "height": 560,
+        "label": "Priority is a starting point for verificationCriticalVerify potentially severe e"
+      }
+    ],
+    "images": [
+      {
+        "alt": "Connected GitHub App repository picker filtered to the public securitybusiness repository, with AI review enabled; private repository names are excluded.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/private-repo-picker-mobile.webp"
+      },
+      {
+        "alt": "AI finding marked Needs verification and high confidence, with a file and line, explanation and code evidence; private repository identity is outside the crop.",
+        "loaded": true,
+        "src": "http://localhost:3117/images/product/ai-review-finding-mobile.webp"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "pricing-390.png"
+  },
+  {
+    "route": "/guides",
+    "width": 390,
+    "title": "SaaS Security Guides | ScanMySaaS",
+    "h1": "Fix the surface your customers can see.",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsaas-launch-security-checklist.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsecurity-headers-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fssl-tls-checklist-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Frobots-txt-and-sitemap-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fllms-txt-for-saas.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fexposed-files-and-source-maps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-secret-scanning-for-vibe-coded-apps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-actions-security-for-vibe-coded-apps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsupabase-security-for-vibe-coded-apps.webp&w=640&q=75"
+      },
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fvibe-coding-security-checklist.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides-390.png"
+  },
+  {
+    "route": "/guides/saas-launch-security-checklist",
+    "width": 390,
+    "title": "SaaS Security Checklist Before Launch (2026, Vibe-Coded Apps) | ScanMySaaS",
+    "h1": "SaaS launch security checklist for vibe-coded apps",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsaas-launch-security-checklist.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--saas-launch-security-checklist-390.png"
+  },
+  {
+    "route": "/guides/security-headers-for-saas",
+    "width": 390,
+    "title": "HTTP Security Headers Checklist for SaaS (CSP, HSTS, X-Frame) | ScanMySaaS",
+    "h1": "Security headers for SaaS: what to add first",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 1640.078125,
+        "width": 358,
+        "height": 865,
+        "label": "Illustrative response, not a copy-paste production policy. Inventory required resources and test report-only CSP before enforcement."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsecurity-headers-for-saas.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--security-headers-for-saas-390.png"
+  },
+  {
+    "route": "/guides/ssl-tls-checklist-for-saas",
+    "width": 390,
+    "title": "SSL/TLS Checklist for SaaS: Certificates, HSTS & HTTPS Redirects | ScanMySaaS",
+    "h1": "SSL and TLS checklist for a production SaaS",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 1704.078125,
+        "width": 358,
+        "height": 798.59375,
+        "label": "Conceptual timeline, not to scale. Use the actual certificate dates and renewal configuration."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fssl-tls-checklist-for-saas.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--ssl-tls-checklist-for-saas-390.png"
+  },
+  {
+    "route": "/guides/robots-txt-and-sitemap-for-saas",
+    "width": 390,
+    "title": "robots.txt & Sitemap for SaaS: Fix \"Blocked by robots.txt\" Errors | ScanMySaaS",
+    "h1": "robots.txt and XML sitemaps for SaaS websites",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 2340.796875,
+        "width": 358,
+        "height": 805,
+        "label": "A sitemap helps discovery; it does not grant crawl permission or guarantee indexing."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Frobots-txt-and-sitemap-for-saas.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--robots-txt-and-sitemap-for-saas-390.png"
+  },
+  {
+    "route": "/guides/llms-txt-for-saas",
+    "width": 390,
+    "title": "llms.txt for SaaS: useful file, realistic expectations | ScanMySaaS",
+    "h1": "llms.txt for SaaS: useful file, realistic expectations",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fllms-txt-for-saas.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--llms-txt-for-saas-390.png"
+  },
+  {
+    "route": "/guides/exposed-files-and-source-maps",
+    "width": 390,
+    "title": "Exposed files and source maps in production | ScanMySaaS",
+    "h1": "Exposed files and source maps in production",
+    "overflow": false,
+    "figures": [],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fexposed-files-and-source-maps.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--exposed-files-and-source-maps-390.png"
+  },
+  {
+    "route": "/guides/github-secret-scanning-for-vibe-coded-apps",
+    "width": 390,
+    "title": "GitHub secret scanning for vibe-coded apps | ScanMySaaS",
+    "h1": "GitHub secret scanning for vibe-coded apps",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 1640.078125,
+        "width": 358,
+        "height": 1085.796875,
+        "label": "Deleting the file is not enough. Revoke or rotate first; coordinate any history rewrite with collaborators."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-secret-scanning-for-vibe-coded-apps.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--github-secret-scanning-for-vibe-coded-apps-390.png"
+  },
+  {
+    "route": "/guides/github-actions-security-for-vibe-coded-apps",
+    "width": 390,
+    "title": "GitHub Actions security for vibe-coded apps | ScanMySaaS",
+    "h1": "GitHub Actions security for vibe-coded apps",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 2108.078125,
+        "width": 358,
+        "height": 1177.1875,
+        "label": "The dangerous combination is trusted credentials plus executing untrusted PR code. This is a workflow illustration, not a scanner finding."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fgithub-actions-security-for-vibe-coded-apps.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--github-actions-security-for-vibe-coded-apps-390.png"
+  },
+  {
+    "route": "/guides/supabase-security-for-vibe-coded-apps",
+    "width": 390,
+    "title": "Supabase Security: RLS, API Keys & Storage Checklist (2026) | ScanMySaaS",
+    "h1": "Supabase security checklist for vibe-coded apps",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 1772.796875,
+        "width": 358,
+        "height": 1205,
+        "label": "Example policy: auth.uid() = owner_id. Test anonymous, owner and different-user access with synthetic records."
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fsupabase-security-for-vibe-coded-apps.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--supabase-security-for-vibe-coded-apps-390.png"
+  },
+  {
+    "route": "/guides/vibe-coding-security-checklist",
+    "width": 390,
+    "title": "Vibe Coding Security Checklist: 47 Checks Before You Ship (2026) | ScanMySaaS",
+    "h1": "Vibe coding security checklist: 47 checks before you ship",
+    "overflow": false,
+    "figures": [
+      {
+        "x": 16,
+        "y": 3156.796875,
+        "width": 358,
+        "height": 859,
+        "label": "Where authority changes handsSecurity review flow1 \u00b7 SECRETSBrowserPublic bundle"
+      }
+    ],
+    "images": [
+      {
+        "alt": "",
+        "loaded": true,
+        "src": "http://localhost:3117/_next/image?url=%2Fimages%2Fguides%2Fvibe-coding-security-checklist.webp&w=640&q=75"
+      }
+    ],
+    "textOverflow": [],
+    "errors": [],
+    "screenshot": "guides--vibe-coding-security-checklist-390.png"
+  }
+]
