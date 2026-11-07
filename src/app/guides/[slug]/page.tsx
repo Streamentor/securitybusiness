@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const guide = getGuide(slug);
   if (!guide) return {};
   return {
-    title: guide.title,
+    title: guide.seoTitle ? { absolute: `${guide.seoTitle} | ScanMySaaS` } : guide.title,
     description: guide.description,
     alternates: { canonical: `/guides/${guide.slug}` },
     openGraph: { type: "article", title: guide.title, description: guide.description, url: `/guides/${guide.slug}`, publishedTime: guide.publishedAt || "2026-08-13", modifiedTime: guide.updatedAt || "2026-08-13" },
@@ -63,6 +63,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
         <div className="app-shell grid gap-12 py-12 lg:grid-cols-[minmax(0,1fr)_17rem] lg:py-16">
           <div className="max-w-3xl">
             <div className="space-y-5 text-lg leading-8 text-[#b3bbc5]">{guide.intro.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
+            <Link href={isRepositoryGuide ? "/repo-scan" : "/free-website-vulnerability-scanner"} className="mt-8 flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-4 text-sm text-[#cfd6de] transition hover:border-[var(--signal)]/30 hover:text-white"><span>{isRepositoryGuide ? "Check your repository for these issues with the free GitHub repo scanner." : "Check your site for these issues with the free website vulnerability scanner."}</span><span className="shrink-0 font-semibold text-[var(--signal)]">Scan now →</span></Link>
             <div className="mt-12 space-y-12">
               {guide.sections.map((section) => (
                 <section key={section.heading}>

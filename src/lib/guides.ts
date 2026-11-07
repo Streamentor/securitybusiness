@@ -7,6 +7,8 @@ export interface GuideSection {
 export interface Guide {
   slug: string;
   title: string;
+  /** Optional search title; the on-page H1 keeps `title`. */
+  seoTitle?: string;
   description: string;
   eyebrow: string;
   readTime: string;
@@ -22,6 +24,7 @@ export const guides: Guide[] = [
   {
     slug: "saas-launch-security-checklist",
     title: "SaaS launch security checklist for vibe-coded apps",
+    seoTitle: "SaaS Security Checklist Before Launch (2026, Vibe-Coded Apps)",
     description: "Check tenant isolation, Supabase RLS, sessions, Stripe webhooks, and public exposure before your SaaS launch, with a find, fix, and retest worksheet.",
     eyebrow: "Before you launch",
     readTime: "9 min read",
@@ -143,6 +146,7 @@ export const guides: Guide[] = [
   {
     slug: "security-headers-for-saas",
     title: "Security headers for SaaS: what to add first",
+    seoTitle: "HTTP Security Headers Checklist for SaaS (CSP, HSTS, X-Frame)",
     description: "A practical guide to CSP, HSTS, clickjacking protection, MIME sniffing, referrer policy, and permissions policy for SaaS teams.",
     eyebrow: "Browser security",
     readTime: "8 min read",
@@ -191,6 +195,7 @@ export const guides: Guide[] = [
   {
     slug: "ssl-tls-checklist-for-saas",
     title: "SSL and TLS checklist for a production SaaS",
+    seoTitle: "SSL/TLS Checklist for SaaS: Certificates, HSTS & HTTPS Redirects",
     description: "Check certificate trust and expiry, HTTPS redirects, HSTS, mixed content, cookies, and redirect chains before they become incidents.",
     eyebrow: "Transport security",
     readTime: "7 min read",
@@ -236,9 +241,11 @@ export const guides: Guide[] = [
   {
     slug: "robots-txt-and-sitemap-for-saas",
     title: "robots.txt and XML sitemaps for SaaS websites",
+    seoTitle: "robots.txt & Sitemap for SaaS: Fix \"Blocked by robots.txt\" Errors",
     description: "Configure robots.txt and XML sitemaps without leaking private routes or accidentally blocking the public pages that should rank.",
     eyebrow: "Technical SEO",
-    readTime: "7 min read",
+    readTime: "8 min read",
+    updatedAt: "2026-11-07",
     relatedChecks: ["robots.txt", "XML sitemap", "Indexability", "Canonical URL"],
     intro: [
       "robots.txt and an XML sitemap solve different problems. One gives crawlers instructions. The other gives search engines a clean list of canonical public URLs. Neither file protects a private page.",
@@ -270,6 +277,20 @@ export const guides: Guide[] = [
           "Login may be crawlable but rarely needs high sitemap priority.",
           "Authenticated dashboards should not rely on robots.txt for privacy.",
           "Staging hosts should require access control and stay outside public sitemaps.",
+        ],
+      },
+      {
+        heading: "Fix \"Sitemap contains URLs which are blocked by robots.txt\"",
+        paragraphs: [
+          "Search Console reports this when a URL listed in your sitemap matches a Disallow rule in robots.txt. The two files disagree: the sitemap asks for the page to be indexed while robots.txt tells crawlers not to fetch it. Decide which one is right for each URL.",
+          "If the page should rank, remove or narrow the Disallow rule that matches it (a broad rule such as Disallow: /app or a wildcard often catches public pages by accident). If the page should stay out of search, remove it from the sitemap instead; to keep it out of the index entirely, allow crawling and serve a noindex directive, because a blocked page cannot show its noindex.",
+          "A related warning is a sitemap that robots.txt does not reference. Add a Sitemap: line with the absolute URL of your canonical sitemap, for example Sitemap: https://www.example.com/sitemap.xml, and make sure that URL returns 200 on the same host and protocol as your canonical pages.",
+        ],
+        bullets: [
+          "Test each reported URL against your robots.txt rules (most specific matching rule wins).",
+          "Keep only canonical, indexable 200 URLs in the sitemap; drop redirects and noindex pages.",
+          "Reference the sitemap in robots.txt with an absolute URL on the canonical host.",
+          "Resubmit the sitemap in Search Console and validate the fix.",
         ],
       },
       {

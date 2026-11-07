@@ -14,7 +14,8 @@ export function SiteFooter() {
         <div className="grid content-start gap-3 text-sm">
           <p className="eyebrow !text-[#778191]">Product</p>
           <Link href="/#product" className="text-[#aeb7c4] hover:text-white">Sample report</Link>
-          <Link href="/repo-scan" className="text-[#aeb7c4] hover:text-white">GitHub repository scanner</Link>
+          <Link href="/repo-scan" className="text-[#aeb7c4] hover:text-white">GitHub repo scanner</Link>
+          <Link href="/free-website-vulnerability-scanner" className="text-[#aeb7c4] hover:text-white">Free website vulnerability scanner</Link>
           <Link href="/vibe-coding-security" className="text-[#aeb7c4] hover:text-white">Vibe coding security</Link>
           <Link href="/#coverage" className="text-[#aeb7c4] hover:text-white">Security checks</Link>
           <Link href="/#demo" className="text-[#aeb7c4] hover:text-white">Product demo</Link>

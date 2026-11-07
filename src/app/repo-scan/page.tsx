@@ -23,6 +23,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { RepoReport, type RepoReportResult } from "@/components/RepoReport";
 import { PrivateRepoPanel } from "@/components/PrivateRepoPanel";
+import { repoFaqs, repoScanSteps } from "@/lib/site-content";
 
 const checks = [
   { icon: KeyRound, title: "Secrets and credentials", copy: "Committed .env files, private keys, provider tokens, database URLs, and secret-like literals." },
@@ -82,7 +83,7 @@ export default function RepositoryScannerPage() {
       <div className="app-shell grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-16">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-[#b4bdc9]"><Github className="h-3.5 w-3.5 text-[var(--signal)]" /> Read-only public and private repository scan</div>
-          <h1 className="display-title mt-7 text-balance">GitHub security scanner <span className="text-[var(--signal)]">for vibe-coded apps.</span></h1>
+          <h1 className="display-title mt-7 text-balance">GitHub repo scanner <span className="text-[var(--signal)]">for vibe-coded apps.</span></h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-[#9aa4b1]">Check a public or private repository for the mistakes AI coding agents cannot see after deployment: committed secrets, unsafe workflows, exposed client keys, missing database boundaries, and risky code patterns.</p>
           <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#778191]"><span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--signal)]" /> We never execute repository code</span><span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--signal)]" /> Secret values stay out of the report</span></div>
         </div>
@@ -110,6 +111,15 @@ export default function RepositoryScannerPage() {
     {!result && <>
       <section className="app-shell py-20 sm:py-28"><div className="max-w-2xl"><p className="eyebrow">What the repo scan checks</p><h2 className="section-title mt-4 text-balance">The mistakes hidden behind a working demo.</h2></div><div className="mt-12 grid gap-4 md:grid-cols-2">{checks.map((check) => <article key={check.title} className="surface-muted rounded-2xl p-6 sm:p-7"><check.icon className="h-5 w-5 text-[var(--signal)]" /><h3 className="mt-8 text-xl font-semibold tracking-[-0.025em]">{check.title}</h3><p className="mt-3 text-sm leading-6 text-[#87919f]">{check.copy}</p></article>)}</div></section>
       <section className="border-y border-white/[0.07] bg-[#0a0e14] py-20"><div className="app-shell grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><p className="eyebrow">Two scans, two surfaces</p><h2 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Scan the repository before launch. Scan the public app after launch.</h2><p className="mt-5 max-w-2xl text-sm leading-7 text-[#8f99a7]">Repository checks catch secrets and configuration mistakes. The website scanner checks the deployed headers, TLS, cookies, files, routes, and browser-facing behavior.</p></div><Link href="/#scan" className="button-secondary shrink-0">Open website scanner <ArrowRight className="h-4 w-4" /></Link></div></section>
+      <section className="app-shell py-20 sm:py-24">
+        <div className="max-w-2xl"><p className="eyebrow">How to scan a GitHub repository</p><h2 className="section-title mt-4 text-balance">Scan a repo in three steps.</h2></div>
+        <ol className="mt-10 grid gap-4 md:grid-cols-3">{repoScanSteps.map((step, index) => <li key={step.title} className="surface-muted rounded-2xl p-6"><span className="font-mono text-sm text-[var(--signal)]">0{index + 1}</span><h3 className="mt-3 text-lg font-semibold">{step.title}</h3><p className="mt-2 text-sm leading-7 text-[#8f99a7]">{step.copy}</p></li>)}</ol>
+      </section>
+      <section className="app-shell pb-20 sm:pb-28">
+        <div className="max-w-2xl"><p className="eyebrow">Repo scanner FAQ</p><h2 className="section-title mt-4 text-balance">Questions about scanning your repository.</h2></div>
+        <div className="mt-10 divide-y divide-white/[0.08] border-y border-white/[0.08]">{repoFaqs.map((faq) => <details key={faq.question} className="group py-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium text-white">{faq.question}<span className="text-[#6e7988] transition group-open:rotate-45">+</span></summary><p className="mt-3 max-w-3xl text-sm leading-7 text-[#9aa4b1]">{faq.answer}</p></details>)}</div>
+        <p className="mt-8 text-sm text-[#8f99a7]">Shipping with AI tools? Read the <Link href="/vibe-coding-security" className="text-[var(--signal)] hover:underline">vibe coding security guide</Link>, or run the <Link href="/free-website-vulnerability-scanner" className="text-[var(--signal)] hover:underline">free website vulnerability scanner</Link> on your live app.</p>
+      </section>
     </>}
 
     {result && <RepoReport result={result} onReset={() => { setResult(null); setRepository(""); setAuthorized(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}

@@ -1,4 +1,5 @@
 "use client";
+import { pricingFaqs } from "@/lib/site-content";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -47,15 +48,7 @@ const plans = [
   },
 ];
 
-const faqs = [
-  ["What counts as a scan credit?", "One credit runs a new crawl and security report for one website. A scan can cover up to 25 reachable pages on that site."],
-  ["Do unused credits roll over?", "Yes. Starter can hold up to 20 credits and Pro can hold up to 60. New monthly credits are added up to that cap."],
-  ["Why pay if the first report is free?", "The free report shows the score, affected URLs, severity, and descriptions, plus one prioritized fix when an actionable finding is available. Paid plans unlock remediation for the remaining findings and give you credits to verify fixes over time."],
-  ["How does private repository access work?", "You install the ScanMySaaS GitHub App on the repositories you choose. It can only read repository contents and metadata. Files are read in memory for the scan and discarded; only the report is saved, and it is visible only to your account. You can revoke access on GitHub at any time."],
-  ["How does AI logic review handle my code?", "On Starter and Pro, selected source files are sent to OpenAI for analysis using store: false. AI findings need verification. You can opt out in your dashboard; rule-based scans still run. Input and monthly token budgets apply, with a higher monthly budget on Pro. If AI is unavailable or the budget is exhausted, your rule-based report still completes."],
-  ["Can I change or cancel my plan?", "Yes. Subscribers can open the Stripe billing portal from the dashboard to manage or cancel billing."],
-  ["Is the result a security certification?", "No. It is an automated outside-in assessment, not a certification or penetration test. Use it as a fast feedback layer in a broader security process."],
-];
+
 
 export default function PricingPage() {
   const { data: session } = useSession();
@@ -151,7 +144,7 @@ export default function PricingPage() {
         <div className="app-shell grid gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
           <div><p className="eyebrow">Pricing FAQ</p><h2 className="section-title mt-4">No fine print.</h2></div>
           <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
-            {faqs.map(([question, answer]) => <details key={question} className="group py-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium"><span>{question}</span><ChevronDown className="h-4 w-4 text-[#727d8c] transition group-open:rotate-180" /></summary><p className="max-w-2xl pt-4 text-sm leading-7 text-[#8f99a7]">{answer}</p></details>)}
+            {pricingFaqs.map(([question, answer]) => <details key={question} className="group py-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium"><span>{question}</span><ChevronDown className="h-4 w-4 text-[#727d8c] transition group-open:rotate-180" /></summary><p className="max-w-2xl pt-4 text-sm leading-7 text-[#8f99a7]">{answer}</p></details>)}
           </div>
         </div>
       </section>

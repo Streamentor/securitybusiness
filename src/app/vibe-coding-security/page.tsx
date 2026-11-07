@@ -18,8 +18,8 @@ import { SiteFooter } from "@/components/SiteFooter";
 const SITE_URL = "https://www.scanmysaas.com";
 
 export const metadata: Metadata = {
-  title: "Vibe Coding Security for AI-Built SaaS Apps",
-  description: "Secure a vibe-coded app built with Codex, Claude, Cursor, or another AI coding agent. Scan GitHub secrets, workflows, Supabase RLS, client exposure, and the deployed website.",
+  title: { absolute: "Vibe Coding Security Scanner for AI-Built Apps | ScanMySaaS" },
+  description: "Vibe coding security scanner for apps built with Lovable, Cursor, Bolt, Claude Code or Codex. Scan your GitHub repo and live site for secrets, Supabase RLS gaps and missing auth checks.",
   alternates: { canonical: "/vibe-coding-security" },
   openGraph: { type: "article", title: "Vibe Coding Security for AI-Built SaaS Apps", description: "A practical security workflow for AI-built SaaS apps, from GitHub repository checks to the deployed website.", url: "/vibe-coding-security" },
 };
@@ -34,9 +34,9 @@ const boundaries = [
 
 const faqs = [
   { question: "Is vibe coding insecure?", answer: "AI-assisted code is not automatically insecure. The risk appears when generated code is accepted without reviewing secrets, authorization, database access, workflows, dependencies, and production behavior. Treat generated code as unreviewed code and verify its security boundaries before release." },
-  { question: "Can a website scanner find a committed .env file in GitHub?", answer: "Only if the file is also publicly deployed. The current ScanMySaaS repository scanner checks security-relevant files in the repository's current tree. GitHub secret scanning should remain enabled because it can also detect supported secrets in Git history, issues, pull requests, discussions, and wikis." },
-  { question: "Does the public repository scanner execute code?", answer: "No. ScanMySaaS reads a bounded set of security-relevant text files from a public GitHub repository. It does not clone, install dependencies, run builds, or execute repository code." },
-  { question: "How should private repositories be scanned?", answer: "Use a GitHub App with access limited to selected repositories and read-only metadata and contents permissions. Private repository support is planned for ScanMySaaS after the public read-only scanner is validated." },
+  { question: "Can a website scanner find a committed .env file in GitHub?", answer: "Only if the file is also publicly deployed. The ScanMySaaS GitHub repo scanner reads security-relevant files from one pinned commit of your repository and flags committed .env files, private keys and API keys with the file and line. Keep GitHub secret scanning and push protection enabled as well, and rotate any credential that was ever committed." },
+  { question: "Does the public repository scanner execute code?", answer: "No. ScanMySaaS reads a bounded set of security-relevant text files through the GitHub API. It does not clone the repository, install dependencies, run builds or execute repository code." },
+  { question: "How should private repositories be scanned?", answer: "Through a GitHub App limited to the repositories you choose, with read-only contents and metadata permissions. ScanMySaaS works this way on Starter and Pro: files are read in memory and discarded, the report is saved privately to your account, and an AI review checks the riskiest files for missing authorization and business-logic gaps." },
 ];
 
 const jsonLd = {
@@ -55,7 +55,7 @@ export default function VibeCodingSecurityPage() {
     <section className="relative overflow-hidden border-b border-white/[0.07] py-16 sm:py-24">
       <div className="pointer-events-none absolute inset-0 -z-10 hairline-grid [mask-image:linear-gradient(to_bottom,black,transparent_82%)]" />
       <div className="app-shell grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-end lg:gap-16">
-        <div><div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-[#b4bdc9]"><Bot className="h-3.5 w-3.5 text-[var(--signal)]" /> Built with Codex, Claude, Cursor, or another coding agent</div><h1 className="display-title mt-7 text-balance">Vibe coding security <span className="text-[var(--signal)]">before users find the gaps.</span></h1></div>
+        <div><div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-[#b4bdc9]"><Bot className="h-3.5 w-3.5 text-[var(--signal)]" /> Built with Codex, Claude, Cursor, or another coding agent</div><h1 className="display-title mt-7 text-balance">Vibe coding security scanner <span className="text-[var(--signal)]">before users find the gaps.</span></h1></div>
         <div><p className="text-lg leading-8 text-[#9aa4b1]">A working AI-built app can still commit a live credential, trust the browser with an admin key, skip tenant isolation, or give a deployment workflow more access than it needs. Scan the repository and the public app as two separate attack surfaces.</p><div className="mt-7 flex flex-col gap-3 sm:flex-row"><Link href="/repo-scan" className="button-primary"><Github className="h-4 w-4" /> Scan a GitHub repository</Link><Link href="/#scan" className="button-secondary"><Globe2 className="h-4 w-4" /> Scan the deployed app</Link></div></div>
       </div>
     </section>
@@ -77,6 +77,15 @@ export default function VibeCodingSecurityPage() {
       </div>
     </section>
 
+    <section className="app-shell py-20 sm:py-28">
+      <div className="max-w-2xl"><p className="eyebrow">By tool</p><h2 className="section-title mt-4 text-balance">What to check for each AI coding tool.</h2><p className="mt-5 text-sm leading-7 text-[#8f99a7]">The same mistakes show up across tools, but each stack has a usual weak spot. Scan the repository with the <Link href="/repo-scan" className="text-[var(--signal)] hover:underline">GitHub repo scanner</Link> and the live app with the <Link href="/free-website-vulnerability-scanner" className="text-[var(--signal)] hover:underline">free website vulnerability scanner</Link>.</p></div>
+      <div className="mt-10 grid gap-4 md:grid-cols-2">{[
+        { tool: "Lovable and Bolt with Supabase", copy: "Tables created without row level security, the service-role key reachable from client code, storage buckets left public, and edge functions that trust a user ID sent from the browser." },
+        { tool: "Cursor", copy: "API routes that read or update a record by ID without checking it belongs to the signed-in user, admin pages protected only in the UI, and secrets pasted into config files during debugging." },
+        { tool: "Claude Code and Codex", copy: "Broad GitHub Actions permissions, unpinned actions, agent and MCP configuration that allows destructive commands, and webhook handlers that skip signature verification or idempotency." },
+        { tool: "Any Next.js or React app", copy: "Server-only keys exposed through NEXT_PUBLIC variables, public source maps, missing security headers, permissive CORS and paid features enforced only on the client." },
+      ].map((item) => <article key={item.tool} className="surface-muted rounded-2xl p-6 sm:p-7"><h3 className="text-lg font-semibold">{item.tool}</h3><p className="mt-3 text-sm leading-7 text-[#8f99a7]">{item.copy}</p></article>)}</div>
+    </section>
     <section className="app-shell py-20 sm:py-28">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"><div className="max-w-2xl"><p className="eyebrow">Practical security guides</p><h2 className="section-title mt-4">Fix the risky parts first.</h2></div><Link href="/guides" className="button-secondary">All guides <ArrowRight className="h-4 w-4" /></Link></div>
       <div className="mt-10 grid gap-4 lg:grid-cols-3">{[
