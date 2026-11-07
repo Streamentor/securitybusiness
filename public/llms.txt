@@ -7,7 +7,7 @@
 - One free scan with no credit card required.
 - Each scan can crawl up to 25 reachable pages on a website the user owns or is authorized to test.
 - Checks cover SSL and HTTPS behavior, security headers, cookies and forms, exposed files, client-side patterns, CORS, redirects, DNS and email-security signals, and other publicly observable risks.
-- The free public GitHub repository scanner reads a bounded set of security-relevant text files from the current repository tree and checks for committed environment files, credential patterns, unsafe GitHub Actions, client-side secret exposure, Supabase RLS signals, wildcard CORS, unsafe code sinks, and public source-map settings.
+- The free public GitHub repository scanner reads a bounded set of security-relevant text files from one pinned commit of the default branch, or of a branch, tag or commit given in the URL, and checks for committed environment files, credential patterns, unsafe GitHub Actions, client-side secret exposure, Supabase RLS signals, wildcard CORS, unsafe code sinks, and public source-map settings.
 - Repository scans do not clone a repository, install packages, run builds, execute code, or reveal matched secret values. Results are returned to the browser and are not saved by the product.
 - Findings can be copied as technical prompts for Codex, Claude, Cursor, or another coding agent. Prompts require the agent to verify the signal, make a minimal fix, add regression tests, avoid exposing secrets, and report residual risk.
 - The repository scanner currently supports public GitHub repositories only and does not scan full Git history. A least-privilege private repository connection is planned but is not currently offered.

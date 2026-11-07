@@ -35,6 +35,10 @@ export interface RepoScanResult {
     fullName: string;
     url: string;
     defaultBranch: string;
+    /** Branch, tag or commit the user asked for (defaults to the default branch). */
+    ref: string;
+    /** Every file in this report was read from this exact commit. */
+    commitSha: string;
     visibility: "public";
     latestPush: string | null;
   };
@@ -48,6 +52,8 @@ export interface RepoScanResult {
   coverage: {
     candidateFiles: number;
     filesSkipped: number;
+    /** Highest-risk supported files that did not fit the file budget. */
+    skippedHighRiskFiles: string[];
     agentFilesScanned: number;
     dependencyManifests: number;
     dependenciesChecked: number;
@@ -94,17 +100,25 @@ export class GitHubScannerError extends Error {
   }
 }
 
-export function parseGitHubRepository(input: string) {
-  const trimmed = input.trim().replace(/\.git$/, "");
+export function parseGitHubRepository(input: string): { owner: string; repo: string; refCandidates: string[] } {
+  let trimmed = input.trim();
   let owner = "";
   let repo = "";
+  let refPath: string[] = [];
+  let explicitRef = "";
+  const at = /^[^/:]+\/[^/@]+@(.+)$/.exec(trimmed);
+  if (at) { explicitRef = at[1]; trimmed = trimmed.slice(0, trimmed.length - at[1].length - 1); }
+  trimmed = trimmed.replace(/\.git$/, "");
 
   if (/^https?:\/\//i.test(trimmed)) {
     let parsed: URL;
     try { parsed = new URL(trimmed); } catch { throw new GitHubScannerError("invalid_repository", "Enter a valid GitHub repository URL."); }
     if (parsed.hostname.toLowerCase() !== "github.com") throw new GitHubScannerError("invalid_repository", "Only github.com repository URLs are supported.");
-    const parts = parsed.pathname.split("/").filter(Boolean);
+    const parts = parsed.pathname.split("/").filter(Boolean).map((part) => { try { return decodeURIComponent(part); } catch { return part; } });
     [owner, repo] = parts;
+    if (repo) repo = repo.replace(/\.git$/, "");
+    // /tree/<ref>, /blob/<ref>/<path>, /commit/<sha>
+    if (["tree", "blob", "commit", "commits"].includes(parts[2]) && parts.length > 3) refPath = parts.slice(3);
   } else {
     [owner, repo] = trimmed.split("/").filter(Boolean);
   }
@@ -113,7 +127,12 @@ export function parseGitHubRepository(input: string) {
   if (!owner || !repo || !validPart.test(owner) || !validPart.test(repo)) {
     throw new GitHubScannerError("invalid_repository", "Use a GitHub URL such as https://github.com/owner/repository.");
   }
-  return { owner, repo };
+  // Branch names may contain "/", so try the longest prefix first (bounded).
+  const refCandidates = explicitRef ? [explicitRef] : refPath.map((_, index) => refPath.slice(0, refPath.length - index).join("/")).slice(0, 4);
+  if (refCandidates.some((ref) => !/^[A-Za-z0-9._\/-]{1,200}$/.test(ref) || ref.includes(".."))) {
+    throw new GitHubScannerError("invalid_repository", "The branch, tag or commit in this URL is not valid.");
+  }
+  return { owner, repo, refCandidates };
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 10_000) {
@@ -161,12 +180,26 @@ function isCandidateFile(item: GitTreeItem, includeOversized = false) {
   if (/\.(min\.js|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|eot|pdf|zip|gz|mp4|mov|mp3|lock)$/i.test(path)) return false;
   if (/^\.env($|\.)/.test(basename) || [".gitignore", ".npmrc", ".pypirc", ".netrc", "dockerfile", "package.json", "vercel.json", "netlify.toml", "supabase.toml"].includes(basename)) return true;
   if (path.startsWith(".github/workflows/") && /\.ya?ml$/.test(path)) return true;
-  return /\.(ts|tsx|js|jsx|mjs|cjs|py|rb|go|java|kt|php|cs|rs|sql|prisma|ya?ml|json|toml|ini|conf|config|properties|pem|key)$/i.test(path);
+  return /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|vue|svelte|astro|html?|py|rb|go|java|kt|php|cs|rs|sql|prisma|graphql|gql|rules|ya?ml|json|toml|ini|conf|config|properties|tf|sh|pem|key)$/i.test(path);
 }
 
 function fileByteLimit(path: string) {
   const basename = path.toLowerCase().split("/").pop() || "";
   return ["package-lock.json", "npm-shrinkwrap.json", "cargo.lock"].includes(basename) ? MAX_MANIFEST_BYTES : MAX_FILE_BYTES;
+}
+
+/** Higher means more security-relevant application code (auth, API, payments, data access). */
+export function riskScore(path: string) {
+  const lower = path.toLowerCase();
+  let score = 0;
+  if (/(^|\/)(api|routes?|controllers?|handlers?|server|actions?|functions|edge-functions|trpc|graphql)(\/|$)/.test(lower) || /(^|\/)route\.(t|j)sx?$/.test(lower)) score += 4;
+  if (/(^|\/)(middleware|proxy)\.(t|j)sx?$/.test(lower)) score += 6;
+  if (/(auth|session|login|signup|register|password|permission|role|admin|acl|policy|jwt|oauth|token|secret|crypto)/.test(lower)) score += 4;
+  if (/(webhook|stripe|payment|billing|checkout|subscription|invoice)/.test(lower)) score += 4;
+  if (/(supabase|prisma|db|database|sql|query|repository|model|schema|firebase|firestore|rules)/.test(lower)) score += 2;
+  if (/(upload|file|storage|fetch|proxy|redirect|url|email|mail)/.test(lower)) score += 1;
+  if (/(^|\/)(components?|ui|styles?|icons?|assets|stories|__tests__|tests?|spec|e2e|fixtures?|mocks?|docs?)(\/|$)/.test(lower) || /\.(test|spec|stories)\.[a-z]+$/.test(lower)) score -= 3;
+  return score;
 }
 
 function candidatePriority(path: string) {
@@ -186,12 +219,19 @@ function rawUrl(owner: string, repo: string, branch: string, path: string) {
   return `${GITHUB_RAW}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodedPath}`;
 }
 
+function compareCandidates(a: GitTreeItem, b: GitTreeItem) {
+  return candidatePriority(a.path) - candidatePriority(b.path)
+    || riskScore(b.path) - riskScore(a.path)
+    || (a.size ?? 0) - (b.size ?? 0)
+    || a.path.localeCompare(b.path);
+}
+
 async function fetchRepositoryFiles(owner: string, repo: string, branch: string, items: GitTreeItem[]) {
   const candidateCount = items.filter((item) => isCandidateFile(item, true)).length;
-  const selected = items
+  const ranked = items
     .filter((item) => isCandidateFile(item))
-    .sort((a, b) => candidatePriority(a.path) - candidatePriority(b.path) || (a.size ?? 0) - (b.size ?? 0))
-    .slice(0, MAX_FILES);
+    .sort(compareCandidates);
+  const selected = ranked.slice(0, MAX_FILES);
   const files: Array<{ path: string; content: string }> = [];
   let totalBytes = 0;
 
@@ -219,7 +259,9 @@ async function fetchRepositoryFiles(owner: string, repo: string, branch: string,
     if (totalBytes >= MAX_TOTAL_BYTES) break;
   }
 
-  return { files, totalBytes, candidateCount };
+  const loadedPaths = new Set(files.map((file) => file.path));
+  const skippedHighRiskFiles = ranked.filter((item) => !loadedPaths.has(item.path) && riskScore(item.path) >= 4).slice(0, 15).map((item) => item.path);
+  return { files, totalBytes, candidateCount, skippedHighRiskFiles };
 }
 
 function lineOf(content: string, index: number) {
@@ -397,20 +439,39 @@ function pruneCache() {
   while (scanCache.size > 100) scanCache.delete(scanCache.keys().next().value!);
 }
 
+/** Resolve a branch, tag or commit to an immutable commit SHA. */
+async function resolveCommit(owner: string, repo: string, candidates: string[]): Promise<{ ref: string; commitSha: string }> {
+  for (const candidate of candidates) {
+    if (/^[0-9a-f]{40}$/i.test(candidate)) return { ref: candidate, commitSha: candidate.toLowerCase() };
+    try {
+      const commit = await githubJson<{ sha?: unknown }>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${candidate.split("/").map(encodeURIComponent).join("/")}`);
+      if (typeof commit.sha === "string" && /^[0-9a-f]{40}$/i.test(commit.sha)) return { ref: candidate, commitSha: commit.sha.toLowerCase() };
+      return { ref: candidate, commitSha: candidate };
+    } catch (error) {
+      if (error instanceof GitHubScannerError && error.code === "not_found" && candidate !== candidates[candidates.length - 1]) continue;
+      if (error instanceof GitHubScannerError && error.code === "not_found") throw new GitHubScannerError("not_found", `The branch, tag or commit "${candidate}" was not found in this public repository.`);
+      throw error;
+    }
+  }
+  throw new GitHubScannerError("invalid_repository", "No branch, tag or commit could be resolved.");
+}
+
 export async function scanPublicGitHubRepository(input: string): Promise<RepoScanResult> {
-  const { owner, repo } = parseGitHubRepository(input);
-  const cacheKey = `${owner.toLowerCase()}/${repo.toLowerCase()}`;
+  const { owner, repo, refCandidates } = parseGitHubRepository(input);
   pruneCache();
-  const cached = scanCache.get(cacheKey);
 
   const repository = await githubJson<GitHubRepository>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
   if (repository.private) throw new GitHubScannerError("private_repository", "Private repository scanning requires the upcoming GitHub App connection.");
+  const { ref, commitSha } = await resolveCommit(owner, repo, refCandidates.length ? refCandidates : [repository.default_branch]);
+  const cacheKey = `${owner.toLowerCase()}/${repo.toLowerCase()}@${commitSha}`;
+  const cached = scanCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() && cached.result.repository.latestPush === repository.pushed_at && cached.result.repository.defaultBranch === repository.default_branch) return cached.result;
-  const tree = await githubJson<GitTreeResponse>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`);
+  // Pin the tree and every raw file read to one commit so a push mid-scan cannot mix versions.
+  const tree = await githubJson<GitTreeResponse>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(commitSha)}?recursive=1`);
   if (!Array.isArray(tree.tree)) throw new GitHubScannerError("upstream_unavailable", "GitHub returned an invalid repository tree.");
   if (tree.tree.length > 100_000) throw new GitHubScannerError("repository_too_large", "This repository is too large for the public scanner.");
 
-  const loaded = await fetchRepositoryFiles(owner, repo, repository.default_branch, tree.tree);
+  const loaded = await fetchRepositoryFiles(owner, repo, commitSha, tree.tree);
   if (!loaded.files.length) {
     throw new GitHubScannerError("upstream_unavailable", "No supported repository files could be read. The repository may be empty, use unsupported file types, or be temporarily unavailable. Try again with a repository containing source or configuration files.");
   }
@@ -447,7 +508,7 @@ export async function scanPublicGitHubRepository(input: string): Promise<RepoSca
   findings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity] || a.file.localeCompare(b.file) || (a.line ?? 0) - (b.line ?? 0));
   const { score, risk } = scoreFindings(findings);
   const result: RepoScanResult = {
-    repository: { owner, name: repository.name, fullName: repository.full_name, url: repository.html_url, defaultBranch: repository.default_branch, visibility: "public", latestPush: repository.pushed_at },
+    repository: { owner, name: repository.name, fullName: repository.full_name, url: repository.html_url, defaultBranch: repository.default_branch, ref, commitSha, visibility: "public", latestPush: repository.pushed_at },
     score,
     risk,
     filesInRepository: tree.tree.filter((item) => item.type === "blob").length,
@@ -458,6 +519,7 @@ export async function scanPublicGitHubRepository(input: string): Promise<RepoSca
     coverage: {
       candidateFiles: loaded.candidateCount,
       filesSkipped: loaded.candidateCount - loaded.files.length,
+      skippedHighRiskFiles: loaded.skippedHighRiskFiles,
       agentFilesScanned: loaded.files.filter((file) => isAgentSecurityFile(file.path)).length,
       dependencyManifests: dependencyInventory.manifests,
       dependenciesChecked: dependencyScan.dependenciesChecked,

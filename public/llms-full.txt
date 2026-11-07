@@ -8,7 +8,7 @@ The user enters a public website URL that they own or are authorized to test. Sc
 
 The scanner checks publicly observable signals. It does not sign in to the target, exploit vulnerabilities, certify a website as secure, or replace a manual penetration test.
 
-ScanMySaaS also offers a read-only scanner for public GitHub repositories. It reads a bounded set of security-relevant text files from the current repository tree and checks committed environment files, provider credential patterns, GitHub Actions permissions, risky pull request workflows, client-side secret prefixes, database URLs, Supabase RLS signals, wildcard CORS, unsafe browser sinks, and public production source-map settings. It does not clone the repository, install dependencies, run a build, execute code, search full Git history, or return a matched secret value.
+ScanMySaaS also offers a read-only scanner for public GitHub repositories. It reads a bounded set of security-relevant text files from one pinned commit of the default branch, or of a branch, tag or commit given in the URL, and checks committed environment files, provider credential patterns, GitHub Actions permissions, risky pull request workflows, client-side secret prefixes, database URLs, Supabase RLS signals, wildcard CORS, unsafe browser sinks, and public production source-map settings. It does not clone the repository, install dependencies, run a build, execute code, search full Git history, or return a matched secret value.
 
 Public repository scan results are returned to the browser and are not saved by ScanMySaaS. Private repositories are not supported yet. Future private access is intended to use a GitHub App with selected-repository access and read-only metadata and contents permissions.
 
