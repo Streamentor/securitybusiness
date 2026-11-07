@@ -7,7 +7,7 @@ export const homeFaqs = [
   {
     question: "What is the difference between the website scan and the GitHub repo scan?",
     answer:
-      "The website scan only sees what is publicly reachable on your deployed app. The GitHub repo scanner reads your source code, public or private through a read-only GitHub App, and finds issues an outside scan cannot see, such as committed .env files, API keys in code, unsafe workflows and missing ownership checks, with the exact file and line. Use both: scan the code before launch and the live site after each release.",
+      "The website scan only sees what is publicly reachable on your deployed app. The GitHub repo scanner reads your source code, public or private through a read-only GitHub App, and finds issues an outside scan cannot see, such as committed .env files, API keys in code and unsafe GitHub Actions, with the exact file and line. On Starter and Pro, an AI review also looks for missing ownership checks in server code. Use both: scan the code before launch and the live site after each release.",
   },
   {
     question: "How do I scan a SaaS application for security vulnerabilities?",
@@ -15,19 +15,14 @@ export const homeFaqs = [
       "Enter a public URL you own or are authorized to test. ScanMySaaS crawls up to 25 reachable pages, runs more than 60 automated website vulnerability checks, and returns a prioritized report with severity, affected URLs, and finding descriptions.",
   },
   {
-    question: "How does a website vulnerability scanner work?",
-    answer:
-      "A website vulnerability scanner inspects the public surface of a web application for observable security issues and misconfigurations. ScanMySaaS checks transport security, response headers, cookies, forms, exposed files, client-side code, redirects, DNS and email-security signals, then groups the findings by severity.",
-  },
-  {
     question: "What types of vulnerability does the scanner detect?",
     answer:
-      "The scanner looks for SSL and HTTPS problems, missing or unsafe security headers, risky cookie settings, exposed environment or backup files, CORS mistakes, open redirects, source maps, outdated client-side libraries, unsafe JavaScript patterns, and other publicly observable web application risks.",
+      "SSL and HTTPS problems, missing or weak security headers, risky cookie flags, exposed environment, Git and backup files, CORS that reflects untrusted origins with credentials, redirect problems (no HTTP to HTTPS redirect, HTTPS downgrades, long redirect chains), public source maps, old jQuery, AngularJS or Bootstrap builds, unsafe inline JavaScript, and missing SPF or DMARC records. It does not send attack payloads such as SQL injection or XSS tests.",
   },
   {
-    question: "Is ScanMySaaS a free website vulnerability scanner?",
+    question: "Is the SaaS security scanner free?",
     answer:
-      "Yes. Your first scan is free, requires no credit card, and can inspect up to 25 reachable pages. The free report includes the security score, severity breakdown, affected URLs, finding descriptions, and one prioritized fix when an actionable finding is available. Paid plans add remediation for all findings, monthly credits, rescans, saved history, and score trends.",
+      "Yes. Your first scan is free, requires no credit card, and can inspect up to 25 reachable pages. The free report includes the security score, severity breakdown, affected URLs, finding descriptions, and one prioritized fix when an actionable finding is available. A free account keeps the report and gives you one free rescan of the same site within 7 days, with a list of what was fixed and what is new. Paid plans add a fix for every finding and monthly credits for more scans.",
   },
   {
     question: "How is ScanMySaaS different from Burp Suite or Nikto?",
@@ -64,7 +59,7 @@ export const productFeatures = [
   },
   {
     title: "Rescans and score trends",
-    copy: "Run a fresh scan after a release and track whether the security score improves over time.",
+    copy: "Run a fresh scan after a release and track whether the security score improves over time. Free accounts get one verification rescan within 7 days; later rescans use credits.",
   },
 ] as const;
 

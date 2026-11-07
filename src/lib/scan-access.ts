@@ -48,7 +48,7 @@ export function decideScanAccess(input: {
 
   if (!userId) {
     if (prior.length) {
-      return { allowed: false, status: 403, error: "This domain was already scanned on a free plan. Sign in to use your own free scan, or upgrade to Starter or Pro for unlimited scans." };
+      return { allowed: false, status: 403, error: "This domain was already scanned on a free plan. Sign in to use your own free scan, or upgrade to Starter or Pro for monthly scan credits." };
     }
     return { allowed: true, kind: "first", consumesCredit: false };
   }
@@ -70,7 +70,7 @@ export function decideScanAccess(input: {
   if (credits <= 0) return { allowed: false, status: 403, error: NO_CREDITS };
   const otherAccounts = new Set(prior.filter((scan) => scan.userId).map((scan) => scan.userId));
   if (otherAccounts.size >= MAX_FREE_ACCOUNTS_PER_HOST) {
-    return { allowed: false, status: 403, error: "This domain has reached its free scan limit. Upgrade to Starter or Pro for unlimited scans of any domain." };
+    return { allowed: false, status: 403, error: "This domain has reached its free scan limit. Upgrade to Starter or Pro for monthly scan credits you can use on any domain." };
   }
   return { allowed: true, kind: "first", consumesCredit: true };
 }
