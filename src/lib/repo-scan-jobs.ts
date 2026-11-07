@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db";
 import { ensureRepoTables } from "@/lib/repo-store";
 import { getGitHubAppConfig, getInstallationToken, GitHubAppError } from "@/lib/github-app";
-import { GitHubScannerError, parseGitHubRepository, scanGitHubRepository, type RepoScanResult } from "@/lib/github-scanner";
+import { GitHubScannerError, parseGitHubRepository, riskScore, scanGitHubRepository, type RepoScanResult } from "@/lib/github-scanner";
+import { canReviewWithAI, resultForEntitlement, reviewRepositoryWithAI, scoreReviewedFindings, type ReviewFile } from "@/lib/ai-review";
+import { getAIReviewPreference, reserveAIReviewTokens, settleAIReviewTokens } from "@/lib/ai-review-store";
 import type { Prisma } from "@/generated/prisma/client";
 
 export const PRIVATE_REPO_PLANS = new Set(["starter", "pro"]);
@@ -106,20 +108,42 @@ export async function createRepoScanJob(userId: string, input: string): Promise<
 }
 
 export async function runRepoScanJob(id: string): Promise<void> {
+  const started = Date.now();
   await ensureRepoTables();
   const job = await prisma.repoScan.findUnique({ where: { id } });
   if (!job || job.status !== "queued") return;
-  await prisma.repoScan.update({ where: { id }, data: { status: "running", startedAt: new Date(), stage: "resolving" } });
+  const claim = await prisma.repoScan.updateMany({where: {id, status: "queued"}, data: {status: "running", startedAt: new Date(), stage: "resolving"}});
+  if (claim.count !== 1) return;
   try {
     const accessToken = job.installationId ? await getInstallationToken(job.installationId) : undefined;
     const input = job.requestedRef ? `${job.repository}@${job.requestedRef}` : job.repository;
+    let files: ReviewFile[] = [];
     const result: RepoScanResult = await scanGitHubRepository(input, {
+      onFilesLoaded: (loaded) => { files = [...loaded].sort((a, b) => riskScore(b.path) - riskScore(a.path)); },
       accessToken,
-      onStage: (stage) => prisma.repoScan.update({ where: { id }, data: { stage } }).then(() => undefined),
+      onStage: (stage) => stage === "scoring" ? Promise.resolve() : prisma.repoScan.update({ where: { id }, data: { stage } }).then(() => undefined),
     });
+    const month = new Date().toISOString().slice(0, 7);
+    let ai;
+    try {
+      const user = await prisma.user.findUnique({where: {id: job.userId}, select: {plan: true, role: true}});
+      const enabled = user && canReviewWithAI(user) && process.env.OPENAI_API_KEY ? await getAIReviewPreference(job.userId) : true;
+      if (user && canReviewWithAI(user) && enabled && process.env.OPENAI_API_KEY) await prisma.repoScan.update({where: {id}, data: {stage: "ai-review"}});
+      ai = await reviewRepositoryWithAI({user: {...(user || {plan: "free"}), enabled}, files, findings: result.findings, timeoutMs: 110_000 - (Date.now() - started)}, {
+        reserve: (tokens, cap) => reserveAIReviewTokens(job.userId, month, tokens, cap),
+        settle: (reserved, charged) => settleAIReviewTokens(job.userId, month, reserved, charged),
+      });
+    } catch {
+      ai = {status: "failed", note: "AI review was unavailable. Rule-based checks completed.", findings: [], model: null, inputTokens: 0, outputTokens: 0, filesReviewed: 0};
+    } finally { files = []; }
+    result.findings.push(...ai.findings);
+    Object.assign(result, scoreReviewedFindings(result.findings));
+    result.aiReview = {status: ai.status, note: ai.note, findingsCount: ai.findings.length, filesReviewed: ai.filesReviewed};
+    await prisma.repoScan.update({where: {id}, data: {stage: "scoring"}});
     await prisma.repoScan.update({
       where: { id },
       data: {
+        aiModel: ai.model, aiInputTokens: ai.model ? ai.inputTokens : null, aiOutputTokens: ai.model ? ai.outputTokens : null, aiFindingsCount: ai.findings.length,
         status: "completed",
         stage: "done",
         completedAt: new Date(),
@@ -139,22 +163,33 @@ export async function runRepoScanJob(id: string): Promise<void> {
 
 export async function getRepoScanForUser(id: string, userId: string) {
   await ensureRepoTables();
-  const job = await prisma.repoScan.findFirst({ where: { id, userId } });
+  let job = await prisma.repoScan.findFirst({ where: { id, userId } });
   if (!job) return null;
   if (isStale(job)) {
     const message = "The scan took too long and was stopped. Try again; very large repositories may need a branch with fewer files.";
     await prisma.repoScan.update({ where: { id }, data: { status: "failed", stage: "failed", error: message, completedAt: new Date() } });
-    return { ...job, status: "failed", stage: "failed", error: message };
+    job = { ...job, status: "failed", stage: "failed", error: message };
+  }
+  const user = await prisma.user.findUnique({where: {id: userId}, select: {plan: true, role: true}});
+  if (!user || !canReviewWithAI(user)) {
+    const result = job.result ? resultForEntitlement(job.result as unknown as RepoScanResult, false) : null;
+    return {...job, result, score: result?.score ?? job.score, risk: result?.risk ?? job.risk, findingsCount: result?.findings.length ?? job.findingsCount,
+      aiModel: null, aiInputTokens: null, aiOutputTokens: null, aiFindingsCount: result?.aiReview?.findingsCount ?? 0};
   }
   return job;
 }
 
 export async function listRepoScansForUser(userId: string, take = 20) {
   await ensureRepoTables();
-  return prisma.repoScan.findMany({
+  const rows = await prisma.repoScan.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
     take,
-    select: { id: true, repository: true, requestedRef: true, commitSha: true, visibility: true, status: true, stage: true, score: true, risk: true, findingsCount: true, error: true, createdAt: true, completedAt: true },
+    select: { id: true, repository: true, requestedRef: true, commitSha: true, visibility: true, status: true, stage: true, score: true, risk: true, findingsCount: true, result: true, error: true, createdAt: true, completedAt: true },
+  });
+  const user = await prisma.user.findUnique({where: {id: userId}, select: {plan: true, role: true}});
+  return rows.map(({result: stored, ...row}) => {
+    const result = stored && (!user || !canReviewWithAI(user)) ? resultForEntitlement(stored as unknown as RepoScanResult, false) : null;
+    return result ? {...row, score: result.score, risk: result.risk, findingsCount: result.findings.length} : row;
   });
 }

@@ -43,3 +43,6 @@ next-env.d.ts
 /src/generated/prisma
 *.db
 src/lib/scanner.ts.bak
+
+# Local, owner-authorized AI benchmark evidence (may include private paths).
+/benchmark-results/

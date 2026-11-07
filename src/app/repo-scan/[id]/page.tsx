@@ -29,6 +29,7 @@ const STAGES = [
   { key: "reading-files", label: "Reading the highest-risk files first", hint: "Auth, API routes, payments, configs and workflows." },
   { key: "analyzing", label: "Checking secrets, workflows and code patterns", hint: "Secret values never enter the report." },
   { key: "dependencies", label: "Matching exact dependency versions against OSV", hint: "Known vulnerabilities in your lockfiles." },
+  { key: "ai-review", label: "Reviewing application logic with AI", hint: "Selected files only. Findings still need verification." },
   { key: "scoring", label: "Scoring and prioritising findings", hint: "Building fix prompts for your coding agent." },
 ];
 

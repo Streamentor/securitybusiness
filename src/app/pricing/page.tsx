@@ -30,7 +30,7 @@ const plans = [
     credits: "10 credits / month",
     rollover: "Up to 20",
     accent: true,
-    features: ["Everything in Free", "Private GitHub repository scans (read-only)", "Step-by-step remediation", "Resolved / new findings after each rescan", "Scan history and score trends", "Credits roll over"],
+    features: ["Everything in Free", "Private GitHub repository scans (read-only)", "AI logic review (monthly token limits)", "Step-by-step remediation", "Resolved / new findings after each rescan", "Scan history and score trends", "Credits roll over"],
     cta: "Choose Starter",
   },
   {
@@ -52,6 +52,7 @@ const faqs = [
   ["Do unused credits roll over?", "Yes. Starter can hold up to 20 credits and Pro can hold up to 60. New monthly credits are added up to that cap."],
   ["Why pay if the first report is free?", "The free report shows the score, affected URLs, severity, and descriptions, plus one prioritized fix when an actionable finding is available. Paid plans unlock remediation for the remaining findings and give you credits to verify fixes over time."],
   ["How does private repository access work?", "You install the ScanMySaaS GitHub App on the repositories you choose. It can only read repository contents and metadata. Files are read in memory for the scan and discarded; only the report is saved, and it is visible only to your account. You can revoke access on GitHub at any time."],
+  ["How does AI logic review handle my code?", "On Starter and Pro, selected source files are sent to OpenAI for analysis using store: false. AI findings need verification. You can opt out in your dashboard; rule-based scans still run. Input and monthly token budgets apply, with a higher monthly budget on Pro. If AI is unavailable or the budget is exhausted, your rule-based report still completes."],
   ["Can I change or cancel my plan?", "Yes. Subscribers can open the Stripe billing portal from the dashboard to manage or cancel billing."],
   ["Is the result a security certification?", "No. It is an automated outside-in assessment, not a certification or penetration test. Use it as a fast feedback layer in a broader security process."],
 ];
@@ -123,7 +124,7 @@ export default function PricingPage() {
         </div>
 
         <div className="mt-16 overflow-hidden rounded-2xl border border-white/[0.08]">
-          <div className="border-b border-white/[0.08] bg-white/[0.025] px-6 py-5"><h2 className="text-lg font-semibold">What changes when you upgrade</h2><p className="mt-1 text-sm text-[#7f8998]">The scanner stays the same. The context and frequency improve.</p></div>
+          <div className="border-b border-white/[0.08] bg-white/[0.025] px-6 py-5"><h2 className="text-lg font-semibold">What changes when you upgrade</h2><p className="mt-1 text-sm text-[#7f8998]">Paid plans add AI logic review of selected repository files, alongside remediation and repeat checks.</p></div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[42rem] text-left text-sm">
               <thead className="text-xs text-[#778191]"><tr><th className="px-6 py-4 font-medium">Capability</th><th className="px-5 py-4 font-medium">Free</th><th className="px-5 py-4 font-medium">Starter</th><th className="px-5 py-4 font-medium">Pro</th></tr></thead>
@@ -137,6 +138,7 @@ export default function PricingPage() {
                   ["Free verification rescan", "Within 7 days", "Uses credits", "Uses credits"],
                   ["Public GitHub repository scans", true, true, true],
                   ["Private GitHub repository scans", false, true, true],
+                  ["AI logic review", false, "Monthly token limit", "Higher monthly token limit"],
                   ["Credit rollover", false, "20 max", "60 max"],
                 ].map((row) => <tr key={String(row[0])}>{row.map((value, index) => <td key={index} className={index === 0 ? "px-6 py-4 font-medium text-white" : "px-5 py-4"}>{typeof value === "boolean" ? value ? <Check className="h-4 w-4 text-[var(--signal)]" /> : <Minus className="h-4 w-4 text-[#4c5664]" /> : value}</td>)}</tr>)}
               </tbody>

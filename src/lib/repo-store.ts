@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 /**
  * The project has no Prisma migration history, so the two additive tables used by
  * repository connections and background repository scans are created idempotently
- * on first use. Existing tables are never altered.
+ * on first use. Existing data and column types are preserved; AI fields are additive only.
  */
 const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "GitHubInstallation" (
@@ -39,6 +39,20 @@ const STATEMENTS = [
     "completedAt" TIMESTAMP(3),
     CONSTRAINT "RepoScan_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "RepoScan_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "aiModel" TEXT`,
+  `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "aiInputTokens" INTEGER`,
+  `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "aiOutputTokens" INTEGER`,
+  `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "aiFindingsCount" INTEGER`,
+  `CREATE TABLE IF NOT EXISTS "AIReviewPreference" (
+    "userId" TEXT PRIMARY KEY REFERENCES "User"("id") ON DELETE CASCADE,
+    "enabled" BOOLEAN NOT NULL DEFAULT true
+  )`,
+  `CREATE TABLE IF NOT EXISTS "AIReviewUsage" (
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+    "month" TEXT NOT NULL,
+    "chargedTokens" INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY ("userId", "month")
   )`,
   `CREATE INDEX IF NOT EXISTS "RepoScan_userId_createdAt_idx" ON "RepoScan"("userId", "createdAt")`,
 ];

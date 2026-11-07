@@ -34,6 +34,8 @@ model User {
   scans                Scan[]
   githubInstallations  GitHubInstallation[]
   repoScans            RepoScan[]
+  aiReviewPreference   AIReviewPreference?
+  aiReviewUsage        AIReviewUsage[]
 }
 
 model Scan {
@@ -93,6 +95,10 @@ model RepoScan {
   score          Int?
   risk           String?
   findingsCount  Int?
+  aiModel        String?
+  aiInputTokens  Int?
+  aiOutputTokens Int?
+  aiFindingsCount Int?
   result         Json?
   error          String?
   createdAt      DateTime  @default(now())
@@ -100,4 +106,20 @@ model RepoScan {
   completedAt    DateTime?
 
   @@index([userId, createdAt])
+}
+
+/// Account opt-out; absence of a row uses the disclosed paid-plan default.
+model AIReviewPreference {
+  userId  String @id
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enabled Boolean @default(true)
+}
+
+/// UTC calendar month. Charged tokens include in-flight/ambiguous reservations.
+model AIReviewUsage {
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month String
+  chargedTokens Int @default(0)
+  @@id([userId, month])
 }

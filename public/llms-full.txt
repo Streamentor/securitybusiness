@@ -83,3 +83,7 @@ Open the public GitHub repository scanner, enter a repository you own or are aut
 ScanMySaaS is operated by Content Petit LLC. Only scan websites you own or have explicit permission to test. Support: stefan@scanmysaas.com.
 
 Last updated: August 13, 2026
+
+## Paid-plan AI logic review
+
+Starter and Pro repository scans can send selected source file contents, paths and line numbers to OpenAI, an AI-analysis subprocessor, using the Responses API with store: false. This disables response storage, not all provider retention. Users can opt out for future scans in the dashboard or repository picker. AI findings have source=ai, confidence, code references, and a Needs verification label; they are not proven vulnerabilities. Low-confidence findings do not affect the score. Per-scan and monthly token budgets apply, with a higher monthly allowance on Pro. Unavailable, timed-out or over-budget AI review does not prevent a rule-based report. Free users keep rule findings and an honest paid-feature teaser, not AI finding details.
