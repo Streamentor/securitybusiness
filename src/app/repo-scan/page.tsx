@@ -88,7 +88,7 @@ export default function RepositoryScannerPage() {
           <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#778191]"><span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--signal)]" /> We never execute repository code</span><span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--signal)]" /> Secret values stay out of the report</span></div>
         </div>
 
-        <div className="surface rounded-[1.5rem] p-5 sm:p-7">
+        <div data-scan-target className="surface rounded-[1.5rem] p-5 sm:p-7">
           <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[0.07] bg-[#0b1016] p-1" role="tablist" aria-label="Repository type">
             <button type="button" role="tab" aria-selected={tab === "public"} onClick={() => setTab("public")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition ${tab === "public" ? "bg-white/[0.08] text-white" : "text-[#7f8998] hover:text-white"}`}><Github className="h-4 w-4" /> Public repo</button>
             <button type="button" role="tab" aria-selected={tab === "private"} onClick={() => setTab("private")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition ${tab === "private" ? "bg-white/[0.08] text-white" : "text-[#7f8998] hover:text-white"}`}><Lock className="h-4 w-4" /> Private repo <span className="rounded bg-[var(--signal)]/15 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-[.08em] text-[var(--signal)]">New</span></button>

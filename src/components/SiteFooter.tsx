@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Brand } from "@/components/Brand";
+import { MobileScanCta } from "@/components/MobileScanCta";
 
 export function SiteFooter() {
   return (
+    <>
     <footer className="border-t border-white/[0.07] bg-[#080b10]">
       <div className="app-shell grid gap-10 py-12 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
@@ -37,5 +39,7 @@ export function SiteFooter() {
         <span>Automated checks are not a substitute for a penetration test.</span>
       </div>
     </footer>
+    <MobileScanCta />
+    </>
   );
 }

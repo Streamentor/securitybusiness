@@ -19,7 +19,7 @@ export function ScannerForm({ compact = false }: { compact?: boolean }) {
 
   return (
     <>
-      <form id={compact ? undefined : "scan"} onSubmit={startScan} className={`input-shell signal-shadow flex w-full gap-2 rounded-2xl p-2 ${compact ? "max-w-2xl" : "max-w-xl"}`}>
+      <form id={compact ? undefined : "scan"} data-scan-target onSubmit={startScan} className={`input-shell signal-shadow flex w-full gap-2 rounded-2xl p-2 ${compact ? "max-w-2xl" : "max-w-xl"}`}>
         <label className="flex min-w-0 flex-1 items-center gap-3 px-3" aria-label="Website URL">
           <Globe2 className="h-5 w-5 shrink-0 text-[#778191]" />
           <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="yourapp.com" className="min-w-0 flex-1 bg-transparent py-3 text-base text-white placeholder:text-[#657080] focus:outline-none" inputMode="url" autoCapitalize="none" autoCorrect="off" />
