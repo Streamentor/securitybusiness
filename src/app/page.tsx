@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -27,7 +26,7 @@ import {
   Video,
   Waypoints,
 } from "lucide-react";
-import ScanningOverlay from "@/components/ScanningOverlay";
+import { ScannerForm } from "@/components/ScannerForm";
 import { ToastContainer } from "@/components/Toast";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -40,7 +39,7 @@ const coverage = [
   { icon: FileKey, title: "Exposed files", copy: "Public environment files, Git metadata, backups, logs, source maps, and debug paths." },
   { icon: Cookie, title: "Cookies & forms", copy: "Secure, HttpOnly, and SameSite flags plus observable CSRF protection gaps." },
   { icon: Braces, title: "Client-side risk", copy: "Unsafe JavaScript patterns, detectable outdated libraries, and injection signals." },
-  { icon: Fingerprint, title: "App exposure", copy: "Technology leakage, public API docs, open redirects, DNS signals, and CORS." },
+  { icon: Fingerprint, title: "App exposure", copy: "Technology leakage, debug endpoints, GraphQL introspection, DNS and email signals, and CORS." },
   { icon: Bot, title: "AI discovery", copy: "llms.txt availability and a readable public resource map for compatible AI tools." },
   { icon: Globe2, title: "Crawl readiness", copy: "robots.txt, XML sitemap, canonical URL, homepage indexability, and security.txt." },
 ];
@@ -82,34 +81,6 @@ const homepageJsonLd = {
   ],
 };
 
-function ScannerForm({ compact = false }: { compact?: boolean }) {
-  const [url, setUrl] = useState("");
-  const [scanUrl, setScanUrl] = useState("");
-  const [scanning, setScanning] = useState(false);
-
-  function startScan(event: React.FormEvent) {
-    event.preventDefault();
-    if (!url.trim()) return;
-    const normalized = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
-    setScanUrl(normalized);
-    setScanning(true);
-  }
-
-  return (
-    <>
-      <form id={compact ? undefined : "scan"} onSubmit={startScan} className={`input-shell signal-shadow flex w-full gap-2 rounded-2xl p-2 ${compact ? "max-w-2xl" : "max-w-xl"}`}>
-        <label className="flex min-w-0 flex-1 items-center gap-3 px-3" aria-label="Website URL">
-          <Globe2 className="h-5 w-5 shrink-0 text-[#778191]" />
-          <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="yourapp.com" className="min-w-0 flex-1 bg-transparent py-3 text-base text-white placeholder:text-[#657080] focus:outline-none" inputMode="url" autoCapitalize="none" autoCorrect="off" />
-        </label>
-        <button type="submit" disabled={!url.trim() || scanning} className="button-primary shrink-0 px-4 sm:px-6">
-          <Search className="h-4 w-4" /> <span className="hidden sm:inline">Scan website</span><span className="sm:hidden">Scan</span>
-        </button>
-      </form>
-      <ScanningOverlay url={scanUrl} isOpen={scanning} onClose={() => { setScanning(false); setScanUrl(""); }} />
-    </>
-  );
-}
 
 function ReportPreview() {
   const findings = [
@@ -177,7 +148,7 @@ export default function HomePage() {
             <h1 className="display-title text-balance">SaaS security scanner <span className="text-[var(--signal)]">before your next launch.</span></h1>
             <p className="mt-7 max-w-xl text-pretty text-lg leading-8 text-[#a0a9b6]">Shipping with Cursor, Claude, Codex or Lovable? Run a free website vulnerability scan on your deployed app. Find exposed files, unsafe headers and risky cookies, with affected URLs and a clear order for what to verify first.</p>
             <div className="mt-8"><ScannerForm /></div>
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm"><Link href="/repo-scan" className="inline-flex items-center gap-1.5 text-[var(--signal)] hover:underline"><Github className="h-4 w-4" /> Scan your GitHub repo (public or private)</Link><Link href="/guides/saas-launch-security-checklist" className="text-[#a0a9b6] hover:text-white hover:underline">SaaS launch security checklist</Link></div>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm"><Link href="/repo-scan" className="inline-flex items-center gap-1.5 text-[var(--signal)] hover:underline"><Github className="h-4 w-4" /> GitHub repo scanner (public or private)</Link><Link href="/guides/saas-launch-security-checklist" className="text-[#a0a9b6] hover:text-white hover:underline">SaaS launch security checklist</Link></div>
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#778191]">
               <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-[var(--signal)]" /> 60+ checks</span>
               <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-[var(--signal)]" /> Up to 25 pages</span>

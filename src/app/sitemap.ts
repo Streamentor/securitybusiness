@@ -7,7 +7,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
       url: baseUrl,
-      lastModified: new Date("2026-09-06"),
+      lastModified: new Date("2026-11-07"),
       changeFrequency: "weekly",
       priority: 1,
     },
@@ -43,14 +43,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
+      url: `${baseUrl}/free-website-vulnerability-scanner`,
+      lastModified: new Date("2026-11-07"),
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
+    {
       url: `${baseUrl}/repo-scan`,
-      lastModified: new Date("2026-09-06"),
+      lastModified: new Date("2026-11-07"),
       changeFrequency: "weekly",
       priority: 0.9,
     },
     {
       url: `${baseUrl}/vibe-coding-security`,
-      lastModified: new Date("2026-08-13"),
+      lastModified: new Date("2026-11-07"),
       changeFrequency: "monthly",
       priority: 0.85,
     },

@@ -4,8 +4,8 @@ import "./globals.css";
 
 const SITE_URL = "https://www.scanmysaas.com";
 const SITE_NAME = "ScanMySaaS";
-const TITLE = "SaaS Security Scanner — Free Website Scan | ScanMySaaS";
-const DESCRIPTION = "Check your SaaS before launch. Run a free website security scan for exposed files, unsafe headers and cookies, with affected URLs. No credit card required.";
+const TITLE = "SaaS Security Scanner: Free Website & GitHub Repo Scan | ScanMySaaS";
+const DESCRIPTION = "Free SaaS security scanner for apps built with Cursor, Claude, Codex or Lovable. Scan your website and GitHub repo for exposed files, secrets and risky headers.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -23,6 +23,10 @@ export const metadata: Metadata = {
     "web vulnerability scanner",
     "free website vulnerability scanner",
     "SaaS security scanner",
+    "SaaS scanner",
+    "GitHub repo scanner",
+    "repository security scanner",
+    "vibe coding security scanner",
     "scan SaaS",
     "security headers check",
     "SSL checker",
@@ -70,6 +74,7 @@ const jsonLd = {
       "@type": "Organization",
       "@id": `${SITE_URL}/#organization`,
       name: SITE_NAME,
+      alternateName: ["Scan My SaaS", "ScanMySaaS security scanner"],
       url: SITE_URL,
       logo: { "@type": "ImageObject", url: `${SITE_URL}/icon-512.png` },
     },

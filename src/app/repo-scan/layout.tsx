@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
+import { repoFaqs } from "@/lib/site-content";
 
 const SITE_URL = "https://www.scanmysaas.com";
 
 export const metadata: Metadata = {
-  title: "Free GitHub Repository Security Scanner",
-  description: "Scan a public GitHub repository for committed environment files, hardcoded secrets, risky GitHub Actions, exposed client keys, source maps, and missing Supabase RLS signals.",
+  title: { absolute: "GitHub Repo Scanner: Scan Repos for Secrets & Vulnerabilities" },
+  description: "Free GitHub repo scanner. Scan public or private repos (read-only) for committed .env files, API keys, risky GitHub Actions, Supabase RLS gaps and vulnerable dependencies.",
   alternates: { canonical: "/repo-scan" },
   openGraph: {
-    title: "Free GitHub Repository Security Scanner | ScanMySaaS",
+    title: "GitHub Repo Scanner for Secrets & Vulnerabilities | ScanMySaaS",
     description: "A read-only repository security scan for vibe-coded SaaS apps built with Codex, Claude, Cursor, and other AI coding tools.",
     url: "/repo-scan",
     type: "website",
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
 
 const jsonLd = {
   "@context": "https://schema.org",
+  "@graph": [{
   "@type": "WebApplication",
   "@id": `${SITE_URL}/repo-scan#application`,
   name: "ScanMySaaS GitHub Repository Scanner",
@@ -23,7 +25,12 @@ const jsonLd = {
   applicationCategory: "SecurityApplication",
   operatingSystem: "Any",
   isAccessibleForFree: true,
-  description: "A read-only public GitHub repository scanner for common secret, workflow, client-code, and database configuration risks.",
+  description: "A read-only GitHub repo scanner for public and private repositories: committed secrets, risky workflows, client-code exposure, database configuration and vulnerable dependencies.",
+  }, {
+    "@type": "FAQPage",
+    "@id": `${SITE_URL}/repo-scan#faq`,
+    mainEntity: repoFaqs.map((faq) => ({ "@type": "Question", name: faq.question, acceptedAnswer: { "@type": "Answer", text: faq.answer } })),
+  }],
 };
 
 export default function RepoScanLayout({ children }: { children: React.ReactNode }) {
