@@ -21,6 +21,10 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import {ProductFigure} from "@/components/visuals/ProductFigure";
+import {OutsideInsideDiagram} from "@/components/visuals/OutsideInsideDiagram";
+import {PrivateAccessDiagram} from "@/components/visuals/PrivateAccessDiagram";
+
 import { RepoReport, type RepoReportResult } from "@/components/RepoReport";
 import { PrivateRepoPanel } from "@/components/PrivateRepoPanel";
 import { repoFaqs, repoScanSteps } from "@/lib/site-content";
@@ -109,11 +113,13 @@ export default function RepositoryScannerPage() {
     </section>
 
     {!result && <>
+      <section className="app-shell pb-10"><div className="grid items-start gap-8 lg:grid-cols-2"><ProductFigure id="repo-report" sizes="(max-width: 1023px) 100vw, 600px" /><ProductFigure id="repo-loader" sizes="(max-width: 1023px) 100vw, 600px" /></div></section>
       <section className="app-shell py-20 sm:py-28"><div className="max-w-2xl"><p className="eyebrow">What the repo scan checks</p><h2 className="section-title mt-4 text-balance">The mistakes hidden behind a working demo.</h2></div><div className="mt-12 grid gap-4 md:grid-cols-2">{checks.map((check) => <article key={check.title} className="surface-muted rounded-2xl p-6 sm:p-7"><check.icon className="h-5 w-5 text-[var(--signal)]" /><h3 className="mt-8 text-xl font-semibold tracking-[-0.025em]">{check.title}</h3><p className="mt-3 text-sm leading-6 text-[#87919f]">{check.copy}</p></article>)}</div></section>
-      <section className="border-y border-white/[0.07] bg-[#0a0e14] py-20"><div className="app-shell grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><p className="eyebrow">Two scans, two surfaces</p><h2 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Scan the repository before launch. Scan the public app after launch.</h2><p className="mt-5 max-w-2xl text-sm leading-7 text-[#8f99a7]">Repository checks catch secrets and configuration mistakes. The website scanner checks the deployed headers, TLS, cookies, files, routes, and browser-facing behavior.</p></div><Link href="/#scan" className="button-secondary shrink-0">Open website scanner <ArrowRight className="h-4 w-4" /></Link></div></section>
+      <section className="border-y border-white/[0.07] bg-[#0a0e14] py-20"><div className="app-shell grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><p className="eyebrow">Two scans, two surfaces</p><h2 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Scan the repository before launch. Scan the public app after launch.</h2><p className="mt-5 max-w-2xl text-sm leading-7 text-[#8f99a7]">Repository checks catch secrets and configuration mistakes. The website scanner checks the deployed headers, TLS, cookies, files, routes, and browser-facing behavior.</p></div><div className="lg:col-span-2 lg:row-start-2"><OutsideInsideDiagram /></div><Link href="/#scan" className="button-secondary shrink-0 lg:col-start-2 lg:row-start-3">Open website scanner <ArrowRight className="h-4 w-4" /></Link></div></section>
       <section className="app-shell py-20 sm:py-24">
         <div className="max-w-2xl"><p className="eyebrow">How to scan a GitHub repository</p><h2 className="section-title mt-4 text-balance">Scan a repo in three steps.</h2></div>
         <ol className="mt-10 grid gap-4 md:grid-cols-3">{repoScanSteps.map((step, index) => <li key={step.title} className="surface-muted rounded-2xl p-6"><span className="font-mono text-sm text-[var(--signal)]">0{index + 1}</span><h3 className="mt-3 text-lg font-semibold">{step.title}</h3><p className="mt-2 text-sm leading-7 text-[#8f99a7]">{step.copy}</p></li>)}</ol>
+        <PrivateAccessDiagram />
       </section>
       <section className="app-shell pb-20 sm:pb-28">
         <div className="max-w-2xl"><p className="eyebrow">Repo scanner FAQ</p><h2 className="section-title mt-4 text-balance">Questions about scanning your repository.</h2></div>
