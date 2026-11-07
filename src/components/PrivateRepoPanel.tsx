@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { AIReviewPreference } from "@/components/AIReviewPreference";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, CheckCircle2, Eye, GitBranch, Github, Loader2, Lock, LogIn, Search, ShieldCheck, Sparkles, Unplug } from "lucide-react";
 
@@ -110,6 +111,7 @@ export function PrivateRepoPanel({ connectResult }: { connectResult?: string | n
 
   const needsUpgrade = selected?.private && !status.canScanPrivate;
   return <div className="mt-5">
+    <AIReviewPreference />
     {notice && <Notice {...notice} />}
     <label className="input-shell flex items-center gap-3 rounded-xl px-3.5"><Search className="h-4 w-4 shrink-0 text-[#697483]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your repositories" className="min-w-0 flex-1 bg-transparent py-3 text-sm text-white placeholder:text-[#596473] focus:outline-none" /></label>
     <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-white/[0.07] bg-[#0b1016]" role="listbox" aria-label="Repositories">

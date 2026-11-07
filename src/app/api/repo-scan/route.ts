@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resultForEntitlement } from "@/lib/ai-review";
 import { createHash } from "node:crypto";
 import { GitHubScannerError, scanPublicGitHubRepository } from "@/lib/github-scanner";
 
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
   if (!authorized) return NextResponse.json({ error: "Confirm that you own the repository or have permission to scan it.", code: "authorization_required" }, { status: 400 });
 
   try {
-    return NextResponse.json(await scanPublicGitHubRepository(repository));
+    return NextResponse.json(resultForEntitlement(await scanPublicGitHubRepository(repository), false));
   } catch (error) {
     if (error instanceof GitHubScannerError) {
       const status = error.code === "rate_limited" ? 429 : error.code === "upstream_unavailable" ? 502 : 400;

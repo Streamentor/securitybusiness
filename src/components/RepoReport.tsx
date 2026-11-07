@@ -18,6 +18,10 @@ export interface RepoFinding {
   line: number | null;
   remedy: string;
   referenceUrl?: string;
+  source?: "ai" | "rule";
+  confidence?: "high" | "medium" | "low";
+  evidence?: string;
+  why?: string;
 }
 
 export interface RepoReportResult {
@@ -39,6 +43,7 @@ export interface RepoReportResult {
     knownVulnerabilities: number;
     dependencyStatus: "checked" | "partial" | "unavailable" | "not-detected";
   };
+  aiReview?: {status: string; note: string; findingsCount?: number; filesReviewed?: number};
   scannedAt: string;
 }
 
@@ -60,16 +65,16 @@ function FindingCard({ finding, repository, defaultBranch, defaultOpen }: { find
   const style = severityStyle[finding.severity];
   const Icon = style.icon;
   const fileUrl = `https://github.com/${repository}/blob/${encodeURIComponent(defaultBranch)}/${finding.file.split("/").map(encodeURIComponent).join("/")}${finding.line ? `#L${finding.line}` : ""}`;
-  const fixPrompt = buildFixPrompt({ surface: "source repository", title: finding.title, severity: finding.severity, category: finding.category, target: `${finding.file}${finding.line ? `:${finding.line}` : ""}`, repository, evidence: finding.description, remediation: finding.remedy });
-  return <article className={`overflow-hidden rounded-xl border ${style.border} bg-[#0b1016]`}>
+  const fixPrompt = buildFixPrompt({ surface: "source repository", title: finding.title, severity: finding.severity, category: finding.category, target: `${finding.file}${finding.line ? `:${finding.line}` : ""}`, repository, evidence: `${finding.source === "ai" ? "AI hypothesis — Needs verification. " : ""}${finding.evidence || ""}\n${finding.description}`, remediation: finding.remedy });
+  return <article className={`overflow-hidden rounded-xl border ${finding.source === "ai" ? "border-violet-400/40 border-dashed" : style.border} bg-[#0b1016]`}>
     <button onClick={() => setOpen((value) => !value)} className="grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 p-4 text-left sm:p-5" aria-expanded={open}>
       <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${style.bg} ${style.text}`}><Icon className="h-4 w-4" /></span>
-      <span className="min-w-0"><span className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-white sm:text-base">{finding.title}</span><span className={`rounded px-1.5 py-0.5 text-[0.61rem] font-bold uppercase tracking-[.08em] ${style.bg} ${style.text}`}>{style.label}</span></span><span className="mt-1.5 block break-all font-mono text-xs leading-5 text-[#667180]">{finding.file}{finding.line ? `:${finding.line}` : ""}</span></span>
+      <span className="min-w-0"><span className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-white sm:text-base">{finding.title}</span><span className={`rounded px-1.5 py-0.5 text-[0.61rem] font-bold uppercase tracking-[.08em] ${style.bg} ${style.text}`}>{style.label}</span>{finding.source === "ai" && <span className="rounded bg-violet-400/10 px-2 py-1 text-xs text-violet-200">AI · Needs verification · {finding.confidence} confidence</span>}</span><span className="mt-1.5 block break-all font-mono text-xs leading-5 text-[#667180]">{finding.file}{finding.line ? `:${finding.line}` : ""}</span></span>
       {open ? <ChevronUp className="mt-2 h-4 w-4 text-[#687382]" /> : <ChevronDown className="mt-2 h-4 w-4 text-[#687382]" />}
     </button>
     {open && <div className="border-t border-white/[0.07] p-4 sm:p-5">
       <div className="grid gap-5 lg:grid-cols-2">
-        <div className="min-w-0"><p className="text-[0.67rem] font-bold uppercase tracking-[.12em] text-[#687382]">Why it was flagged</p><p className="mt-3 text-sm leading-7 text-[#a5aeba]">{finding.description}</p><div className="mt-4 flex flex-wrap gap-x-4 gap-y-2"><a href={fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--signal)] hover:underline">Open file on GitHub <ArrowUpRight className="h-3.5 w-3.5" /></a>{finding.referenceUrl && <a href={finding.referenceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#aeb8c5] hover:text-white hover:underline">Open advisory <ArrowUpRight className="h-3.5 w-3.5" /></a>}</div></div>
+        <div className="min-w-0"><p className="text-[0.67rem] font-bold uppercase tracking-[.12em] text-[#687382]">Why it was flagged</p><p className="mt-3 text-sm leading-7 text-[#a5aeba]">{finding.description}</p>{finding.source === "ai" && finding.evidence && <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded bg-white/5 p-3 text-xs text-[#a5aeba]">{finding.evidence}</pre>}<div className="mt-4 flex flex-wrap gap-x-4 gap-y-2"><a href={fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--signal)] hover:underline">Open file on GitHub <ArrowUpRight className="h-3.5 w-3.5" /></a>{finding.referenceUrl && <a href={finding.referenceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#aeb8c5] hover:text-white hover:underline">Open advisory <ArrowUpRight className="h-3.5 w-3.5" /></a>}</div></div>
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-[var(--signal)]" />What to do next</p><CopyPromptButton prompt={fixPrompt} /></div><p className="mt-3 text-sm leading-7 text-[#a5aeba]">{finding.remedy}</p></div>
       </div>
     </div>}
@@ -78,7 +83,7 @@ function FindingCard({ finding, repository, defaultBranch, defaultOpen }: { find
 
 export function RepoReport({ result, onReset }: { result: RepoReportResult; onReset?: () => void }) {
   const counts = useMemo(() => Object.fromEntries((["critical", "high", "medium", "low"] as Severity[]).map((severity) => [severity, result?.findings.filter((finding) => finding.severity === severity).length || 0])) as Record<Severity, number>, [result]);
-  const fullAuditPrompt = useMemo(() => result ? buildRepoAuditPrompt({ repository: result.repository.fullName, score: result.score, coverageSummary: `${result.filesScanned} of ${result.coverage.candidateFiles} supported files read; ${result.coverage.filesSkipped} skipped. ${result.truncated ? "The scan is incomplete." : "The supported file selection was read."} Dependency advisory coverage: ${result.coverage.dependencyStatus}; ${result.coverage.dependenciesChecked} exact versions checked. Git history and runtime authorization were not tested.`, findings: result.findings.map((finding) => ({ title: finding.title, severity: finding.severity, category: finding.category, target: `${finding.file}${finding.line ? `:${finding.line}` : ""}`, evidence: finding.description, remediation: finding.remedy })) }) : "", [result]);
+  const fullAuditPrompt = useMemo(() => result ? buildRepoAuditPrompt({ repository: result.repository.fullName, score: result.score, coverageSummary: `${result.filesScanned} of ${result.coverage.candidateFiles} supported files read; ${result.coverage.filesSkipped} skipped. ${result.truncated ? "The scan is incomplete." : "The supported file selection was read."} Dependency advisory coverage: ${result.coverage.dependencyStatus}; ${result.coverage.dependenciesChecked} exact versions checked. Git history and runtime authorization were not tested.`, findings: result.findings.map((finding) => ({ title: finding.title, severity: finding.severity, category: finding.category, target: `${finding.file}${finding.line ? `:${finding.line}` : ""}`, evidence: `${finding.source === "ai" ? "AI hypothesis — Needs verification. " : ""}${finding.evidence || ""}\n${finding.description}`, remediation: finding.remedy })) }) : "", [result]);
 
   return <section id="repo-results" className="app-shell scroll-mt-24 py-12 sm:py-16">
       <div className="surface overflow-hidden rounded-2xl">
@@ -89,6 +94,7 @@ export function RepoReport({ result, onReset }: { result: RepoReportResult; onRe
         <div className="grid grid-cols-2 border-t border-white/[0.08] sm:grid-cols-4">{(["critical", "high", "medium", "low"] as Severity[]).map((severity) => <div key={severity} className="border-r border-white/[0.07] px-4 py-4 last:border-r-0"><p className={`text-2xl font-semibold ${severityStyle[severity].text}`}>{counts[severity]}</p><p className="mt-1 text-[0.66rem] font-medium uppercase tracking-[.09em] text-[#697483]">{severityStyle[severity].label}</p></div>)}</div>
       </div>
 
+      {result.aiReview && <div className="surface-muted mt-5 rounded-xl border border-violet-400/20 p-4"><p className="text-sm font-semibold text-violet-200">AI logic review · {result.aiReview.status}</p><p className="mt-2 text-sm text-[#a5aeba]">{result.aiReview.note}</p>{["completed", "partial"].includes(result.aiReview.status) && <p className="mt-2 text-xs text-[#8f99a7]">AI findings are hypotheses. High-confidence findings carry half the normal score penalty, medium-confidence findings one quarter, and low-confidence findings do not affect the score.</p>}</div>}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="surface-muted rounded-xl p-4"><p className="text-2xl font-semibold text-white">{result.coverage.dependenciesChecked}</p><p className="mt-1 text-xs text-[#788392]">Exact dependency versions checked</p></div>
         <div className="surface-muted rounded-xl p-4"><p className={`text-2xl font-semibold ${result.coverage.knownVulnerabilities ? "text-[#ffd66b]" : "text-white"}`}>{["unavailable", "not-detected"].includes(result.coverage.dependencyStatus) ? "—" : result.coverage.knownVulnerabilities}</p><p className="mt-1 text-xs text-[#788392]">OSV advisory matches</p></div>

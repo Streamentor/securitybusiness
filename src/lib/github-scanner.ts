@@ -1,4 +1,5 @@
 import "server-only";
+import { repositorySecretPatterns } from "@/lib/secret-patterns";
 
 import { analyzeAgentSecurityFile, analyzeDependencyHygiene, extractDependencyInventory, isAgentSecurityFile } from "@/lib/repo-security-rules";
 import type { RepoRuleCategory } from "@/lib/repo-security-rules";
@@ -14,7 +15,7 @@ const MAX_TOTAL_BYTES = 6_000_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export type RepoSeverity = "critical" | "high" | "medium" | "low";
-export type RepoCategory = RepoRuleCategory;
+export type RepoCategory = RepoRuleCategory | "authorization" | "billing" | "webhooks" | "input-validation" | "ssrf";
 
 export interface RepoFinding {
   id: string;
@@ -26,6 +27,10 @@ export interface RepoFinding {
   line: number | null;
   remedy: string;
   referenceUrl?: string;
+  source?: "ai" | "rule";
+  confidence?: "high" | "medium" | "low";
+  evidence?: string;
+  why?: string;
 }
 
 export interface RepoScanResult {
@@ -60,6 +65,7 @@ export interface RepoScanResult {
     knownVulnerabilities: number;
     dependencyStatus: "checked" | "partial" | "unavailable" | "not-detected";
   };
+  aiReview?: { status: string; note: string; findingsCount?: number; filesReviewed?: number };
   scannedAt: string;
 }
 
@@ -281,15 +287,7 @@ function addFinding(findings: RepoFinding[], finding: Omit<RepoFinding, "id">) {
 }
 
 function scanSecretPatterns(path: string, content: string, findings: RepoFinding[]) {
-  const patterns: Array<{ regex: RegExp; title: string; description: string }> = [
-    { regex: /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/g, title: "Private key committed to the repository", description: "A private key marker is present in source control." },
-    { regex: /\bAKIA[0-9A-Z]{16}\b/g, title: "Potential AWS access key committed", description: "The file contains a value shaped like an AWS access key ID." },
-    { regex: /\bgh[pousr]_[A-Za-z0-9_]{36,255}\b/g, title: "Potential GitHub token committed", description: "The file contains a value shaped like a GitHub access token." },
-    { regex: /\bsk_live_[A-Za-z0-9]{16,}\b/g, title: "Potential live secret key committed", description: "The file contains a value shaped like a live provider secret key." },
-    { regex: /\bAIza[0-9A-Za-z_-]{35}\b/g, title: "Potential Google API key committed", description: "The file contains a value shaped like a Google API key." },
-    { regex: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g, title: "Potential Slack token committed", description: "The file contains a value shaped like a Slack token." },
-    { regex: /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s:@/]+:[^\s@/]+@[^\s"'`]+/gi, title: "Database URL with embedded credentials", description: "A database connection string appears to contain a username and password." },
-  ];
+  const patterns = repositorySecretPatterns();
 
   for (const pattern of patterns) {
     pattern.regex.lastIndex = 0;
@@ -459,12 +457,14 @@ async function resolveCommit(owner: string, repo: string, candidates: string[], 
   throw new GitHubScannerError("invalid_repository", "No branch, tag or commit could be resolved.");
 }
 
-export type RepoScanStage = "resolving" | "reading-tree" | "reading-files" | "analyzing" | "dependencies" | "scoring";
+export type RepoScanStage = "resolving" | "reading-tree" | "reading-files" | "analyzing" | "dependencies" | "ai-review" | "scoring";
 
 export interface RepoScanOptions {
   /** Installation token for private repositories (read-only). */
   accessToken?: string;
   onStage?: (stage: RepoScanStage) => void | Promise<void>;
+  /** Server-only callback; contents never enter the result, database or cache. */
+  onFilesLoaded?: (files: readonly { path: string; content: string }[]) => void;
 }
 
 /** Public, anonymous entry point: never reads private repositories. */
@@ -483,7 +483,7 @@ export async function scanGitHubRepository(input: string, options: RepoScanOptio
   if (repository.private && !accessToken) throw new GitHubScannerError("private_repository", "This repository is private. Connect GitHub to scan it with read-only access.");
   const { ref, commitSha } = await resolveCommit(owner, repo, refCandidates.length ? refCandidates : [repository.default_branch], accessToken);
   // Private results are never cached in this shared, per-instance cache.
-  const cacheKey = repository.private ? null : `${owner.toLowerCase()}/${repo.toLowerCase()}@${commitSha}`;
+  const cacheKey = repository.private || options.onFilesLoaded ? null : `${owner.toLowerCase()}/${repo.toLowerCase()}@${commitSha}`;
   const cached = cacheKey ? scanCache.get(cacheKey) : undefined;
   if (cached && cached.expiresAt > Date.now() && cached.result.repository.latestPush === repository.pushed_at && cached.result.repository.defaultBranch === repository.default_branch) return cached.result;
   // Pin the tree and every raw file read to one commit so a push mid-scan cannot mix versions.
@@ -497,6 +497,7 @@ export async function scanGitHubRepository(input: string, options: RepoScanOptio
   if (!loaded.files.length) {
     throw new GitHubScannerError("upstream_unavailable", "No supported repository files could be read. The repository may be empty, use unsupported file types, or be temporarily unavailable. Try again with a repository containing source or configuration files.");
   }
+  options.onFilesLoaded?.(loaded.files);
   await stage("analyzing");
   const repositoryPaths = tree.tree.filter((item) => item.type === "blob").map((item) => item.path);
   const findings: RepoFinding[] = [];

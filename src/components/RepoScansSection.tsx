@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AIReviewPreference } from "@/components/AIReviewPreference";
 import { AlertCircle, CheckCircle2, Clock3, ExternalLink, GitBranch, Github, Loader2, Lock, Plus } from "lucide-react";
 
 interface RepoScanRow {
@@ -42,6 +43,7 @@ export function RepoScansSection() {
 
   return <section id="repo-scans" className="mt-10 scroll-mt-6">
     <div className="mb-4 flex items-end justify-between gap-3"><div><h2 className="text-xl font-semibold tracking-[-0.025em]">Repository scans</h2><p className="mt-1 text-xs text-[#717c8b]">Public and private repositories, saved only to your account</p></div><Link href="/repo-scan" className="button-secondary"><Plus className="h-4 w-4" /> Scan a repository</Link></div>
+    <AIReviewPreference />
     {rows === null ? <div className="surface-muted flex h-28 items-center justify-center rounded-2xl"><Loader2 className="h-5 w-5 animate-spin text-[var(--signal)]" /></div>
       : rows.length === 0 ? <div className="surface-muted rounded-2xl px-6 py-12 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.04]"><Github className="h-5 w-5 text-[#667180]" /></div><h3 className="mt-4 font-semibold">Scan the code behind your app.</h3><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#778191]">Connect GitHub with read-only access, pick a repository, and find committed secrets, risky workflows and missing auth checks.</p><Link href="/repo-scan?tab=private" className="button-primary mt-5">Connect a repository</Link></div>
       : <div className="overflow-hidden rounded-2xl border border-white/[0.08]"><div className="divide-y divide-white/[0.07]">{rows.map((row) => {
