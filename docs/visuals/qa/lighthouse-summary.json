@@ -1,0 +1,62 @@
+{
+  "free-website-vulnerability-scanner": {
+    "before": {
+      "lighthouseVersion": "13.6.0",
+      "formFactor": "mobile",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "lcpMs": 907.8891000000001,
+      "cls": 0
+    },
+    "after": {
+      "lighthouseVersion": "13.6.0",
+      "formFactor": "mobile",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "lcpMs": 903.0752,
+      "cls": 0
+    }
+  },
+  "repo-scan": {
+    "before": {
+      "lighthouseVersion": "13.6.0",
+      "formFactor": "mobile",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "lcpMs": 903.0569,
+      "cls": 0
+    },
+    "after": {
+      "lighthouseVersion": "13.6.0",
+      "formFactor": "mobile",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "lcpMs": 902.2717,
+      "cls": 0
+    }
+  }
+}

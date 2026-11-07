@@ -1,0 +1,32 @@
+{
+  "generator": "Built-in image_gen tool (not Google Imagen)",
+  "contactSheetPrompt": "High-resolution 3200x1800 contact sheet, a seamless 2x2 grid of FOUR 1600x900 landscape variations of ONE editorial 3D illustration. Each panel self-contained, slight changes of angle and arrangement, no panel labels or borders. Near-black #07090d background, soft volumetric light, matte glass and brushed graphite, thin glowing lime #b9ff66 accents, restrained cobalt #7b91ff secondary glow, fine subtle grid. Calm and precise, generous negative space in the left third of EACH panel. No text, letters, numbers, logos, people, padlocks, hoodies, binary or pseudo-writing. This is abstract editorial art, NOT a diagram, UI or product screenshot. Subject: ",
+  "selection": {
+    "i1": "bottom-right",
+    "i2": "top-left",
+    "i3": "bottom-right",
+    "i4": "top-right",
+    "i5": "top-left",
+    "i6": "top-left",
+    "i7": "top-right",
+    "i8": "top-left",
+    "i9": "top-right",
+    "i10": "top-left",
+    "i11": "top-right"
+  },
+  "subjects": {
+    "i1": "A small modular building made of translucent glass blocks being assembled by thin robotic arms, one block slightly misaligned and outlined in lime light, isometric view.",
+    "i2": "A launch pad made of stacked glass tiles, a single lime checkmark-shaped light path running across the tiles toward the edge.",
+    "i3": "Layered translucent shield-like panes stacked in front of a glowing doorway, each pane a slightly different tint.",
+    "i4": "Two glass terminals connected by a sealed glowing tube of light, the seal rendered as interlocking rings.",
+    "i5": "A miniature city map of glass tiles with lime paths showing allowed routes and dimmed blocked streets, viewed from above at an angle.",
+    "i6": "A neat stack of glass index cards feeding into an abstract geometric reading device emitting soft cobalt light.",
+    "i7": "A graphite cabinet with one drawer slightly open, faint lime light spilling out over loose translucent sheets.",
+    "i8": "A long chain of glass commit beads, one bead glowing red-amber inside, a lime scanning ring passing over the chain.",
+    "i9": "A conveyor of glass modules passing through gates, one gate open wider than the others and highlighted in amber.",
+    "i10": "Rows of glass drawers in a vault-like grid, some drawers sealed with lime light, one row glowing red as unsealed.",
+    "i11": "A clipboard-like graphite slab with a column of glowing lime ticks and two empty amber slots."
+  },
+  "fullFramePrompt": "Create ONE single landscape 1600x900 finished illustration reproducing ONLY the SELECTED quadrant of the reference contact sheet. Enlarge the selected composition to fill the entire output. Do NOT include a contact sheet, split screen, panels, borders or other variations. Preserve its subject, camera, matte glass and graphite materials, near-black #07090d background, lime #b9ff66 and cobalt #7b91ff accents, negative space and premium editorial 3D style. Crisp detail. No text, letters, numbers, logos, people, padlocks, binary or pseudo-writing.",
+  "heroNote": "I1 uses a square full-frame composition and is exported at 1200×1200. Covers are exported at 1600×900. The chosen quadrant is a composition reference; final exports come from full-frame renders, not enlarged quadrant crops."
+}
