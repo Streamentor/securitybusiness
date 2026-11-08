@@ -69,12 +69,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           let utmMedium = "";
           let utmCampaign = "";
           let emailUpdates = false;
+          let pendingScanId: unknown = null;
+          let creatorProof: string | undefined;
           try {
             const cookieStore = await cookies();
+            creatorProof = cookieStore.get("scan-report-creator")?.value;
             const refCookie = cookieStore.get("signup_referrer");
             if (refCookie?.value) {
               const data = JSON.parse(decodeURIComponent(refCookie.value));
               emailUpdates = data.emailUpdates === true;
+              pendingScanId = data.pendingScanId;
               referrerUrl = data.referrerUrl || "";
               utmSource = data.utmSource || "";
               utmMedium = data.utmMedium || "";
@@ -101,6 +105,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           });
           if (emailUpdates) {
             try { const { setEmailPreference } = await import("@/lib/email/store"); await setEmailPreference(newUser.id, true); } catch { console.error("OAuth email preference unavailable"); }
+          }
+          if (pendingScanId) {
+            try { const { trackScanFunnel } = await import("@/lib/scan-funnel"); await trackScanFunnel("registered", pendingScanId, newUser.id, creatorProof); } catch { console.error("OAuth scan attribution unavailable"); }
           }
           user.id = newUser.id;
         } else {

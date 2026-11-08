@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { reportPermission, sameOrigin, reportHeaders } from "@/lib/report-access";
+import { trackScanFunnel } from "@/lib/scan-funnel";
 import { auth } from "@/lib/auth";
 
 /**
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest) {
       where: {id: scanId, userId: null}, data: {userId: session.user.id},
     });
     if (claimed.count !== 1) return NextResponse.json({error: "Scan already claimed"}, {status: 409, headers: reportHeaders});
+
+    await trackScanFunnel("claimed", scanId, session.user.id);
 
     if (process.env.VERCEL_ENV === "production" && ["live", "dry-run"].includes(process.env.EMAIL_SEQUENCE_MODE || "") && session.user.id) {
       const { after } = await import("next/server");

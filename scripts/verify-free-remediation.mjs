@@ -35,11 +35,11 @@ const findings = [
 ];
 const before = structuredClone(findings);
 const assertOneFreeFix = (payload) => {
-  const supplied = payload.filter((finding) => finding.remedy.trim());
+  const supplied = payload.filter((finding) => (finding.remedy || "").trim());
   assert.equal(supplied.length, 1, "free reports must serialize exactly one actionable remediation");
   assert.equal(supplied[0].id, "exposed-file", "prioritize severity, then direct exposure before same-severity hardening");
   assert.equal(supplied[0].remediationAccess, "free");
-  for (const finding of findings.filter((finding) => finding.id !== "exposed-file" && finding.remedy.trim())) {
+  for (const finding of findings.filter((finding) => finding.id !== "exposed-file" && (finding.remedy || "").trim())) {
     assert.equal(JSON.stringify(payload).includes(finding.remedy), false, "locked steps must be absent from the response, not visually blurred");
   }
 };
@@ -50,7 +50,7 @@ assert.equal(applyWebsiteRemediationAccess([findings[7], findings[7]], "free").f
 assert.equal(applyWebsiteRemediationAccess([findings[1], findings[2], findings[3], findings[4], findings[8]], "free").some((finding) => finding.remediationAccess === "free"), false, "metadata, informational/invalid severities, suppressed legacy checks and empty steps must not consume the free fix");
 for (const plan of ["starter", "pro"]) {
   const paid = applyWebsiteRemediationAccess(findings, plan);
-  assert.equal(paid.filter((finding) => finding.remedy.trim()).length, findings.filter((finding) => finding.remedy.trim()).length, "paid plans retain all existing implementation steps");
+  assert.equal(paid.filter((finding) => (finding.remedy || "").trim()).length, findings.filter((finding) => (finding.remedy || "").trim()).length, "paid plans retain all existing implementation steps");
   assert.equal(paid.some((finding) => finding.remediationAccess === "free" || finding.remediationAccess === "locked"), false);
 }
 assert.deepEqual(findings, before, "redacting a free response must not mutate stored findings or a later paid response");
@@ -105,7 +105,7 @@ try {
       const response = await request();
       assert.equal(response.status, 200);
       const data = await response.json();
-      assert.equal(data.vulnerabilities.filter((finding) => finding.remedy.trim()).length, findings.filter((finding) => finding.remedy.trim()).length, "server-paid entitlements must retain all fixes on both API paths");
+      assert.equal(data.vulnerabilities.filter((finding) => (finding.remedy || "").trim()).length, findings.filter((finding) => (finding.remedy || "").trim()).length, "server-paid entitlements must retain all fixes on both API paths");
     }
   }
   fixture.plan = "free";

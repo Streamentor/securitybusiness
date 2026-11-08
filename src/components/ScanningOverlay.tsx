@@ -27,7 +27,6 @@ import {
   ShieldAlert,
   ArrowRightLeft,
   FileCode,
-  UserPlus,
 } from "lucide-react";
 import { toast } from "@/components/Toast";
 import { beginScanSessionVerification } from "@/lib/scan-session-verification";
@@ -529,35 +528,8 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 </button>
               ) : (
                 <div className="space-y-3">
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center">
-                    <p className="text-sm text-amber-300">
-                      Create a free account to view your full security report with detailed findings.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      // Store scan ID so we can redirect after registration
-                      if (typeof window !== "undefined") {
-                        sessionStorage.setItem("pendingScanId", complete.scanId);
-                      }
-                      router.push("/register");
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Sign Up Free to View Report
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (typeof window !== "undefined") {
-                        sessionStorage.setItem("pendingScanId", complete.scanId);
-                      }
-                      router.push("/login");
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-700 px-6 py-3 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-                  >
-                    Already have an account? Log in
-                  </button>
+                  <p className="text-sm text-gray-300">Preview your score and one complete finding. A free account opens the affected pages and details for the rest.</p>
+                  <button onClick={() => router.push(`/scan/${complete.scanId}`)} className="button-primary w-full">View scan preview <ArrowRight className="h-4 w-4" /></button>
                 </div>
               )}
             </motion.div>

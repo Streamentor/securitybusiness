@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Github, Loader2, Lock, Mail } from "lucide-react";
+import { pendingScanFrom, safeAuthRedirect } from "@/lib/scan-auth-return";
 import { AuthFrame } from "@/components/AuthFrame";
 
 function GoogleMark() {
@@ -24,12 +25,17 @@ function LoginForm() {
   const authError = searchParams.get("error");
   const authErrorMessage = authError ? authError === "OAuthAccountNotLinked" ? "This email is already linked to another sign-in method." : "Sign-in failed. Please try again." : null;
 
+  function pendingScan() {
+    const id = pendingScanFrom(window.location.search, sessionStorage.getItem("pendingScanId"));
+    if (id) sessionStorage.setItem("pendingScanId", id);
+    return id;
+  }
   function callbackUrl() {
-    const pendingScanId = sessionStorage.getItem("pendingScanId");
+    const pendingScanId = pendingScan();
     if (pendingScanId) return `/scan/${pendingScanId}`;
     const pendingPlan = localStorage.getItem("pendingPlan");
     if (pendingPlan) return `/pricing?checkout=${pendingPlan}`;
-    return redirectTo || "/dashboard";
+    return safeAuthRedirect(redirectTo);
   }
 
   async function handleProvider(provider: "google" | "github") {
@@ -49,22 +55,22 @@ function LoginForm() {
         return;
       }
       const pendingPlan = localStorage.getItem("pendingPlan");
-      const pendingScanId = sessionStorage.getItem("pendingScanId");
+      const pendingScanId = pendingScan();
       if (pendingPlan) {
         localStorage.removeItem("pendingPlan");
         if (pendingScanId) {
-          sessionStorage.removeItem("pendingScanId");
-          await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: pendingScanId }) }).catch(() => undefined);
+          const claimed = await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: pendingScanId }) }).catch(() => null);
+          if (claimed?.ok) sessionStorage.removeItem("pendingScanId");
         }
         const response = await fetch("/api/stripe/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: pendingPlan }) });
         const data = await response.json();
         if (data.url) { window.location.href = data.url; return; }
       }
       if (pendingScanId) {
-        sessionStorage.removeItem("pendingScanId");
-        await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: pendingScanId }) }).catch(() => undefined);
+        const claimed = await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: pendingScanId }) }).catch(() => null);
+        if (claimed?.ok) sessionStorage.removeItem("pendingScanId");
         router.push(`/scan/${pendingScanId}`);
-      } else router.push(redirectTo || "/dashboard");
+      } else router.push(safeAuthRedirect(redirectTo));
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -86,7 +92,7 @@ function LoginForm() {
         <label className="block text-sm font-medium text-[#c5ccd5]">Password<div className="input-shell mt-2 flex items-center gap-3 rounded-xl px-3.5"><Lock className="h-4 w-4 text-[#667180]" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Your password" className="w-full bg-transparent py-3.5 text-sm text-white placeholder:text-[#586372] focus:outline-none" /></div></label>
         <button type="submit" disabled={loading} className="button-primary w-full">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}</button>
       </form>
-      <p className="mt-6 text-center text-sm text-[#7f8998]">New to ScanMySaaS? <Link href="/register" className="font-medium text-white hover:text-[var(--signal)]">Create an account</Link></p>
+      <p className="mt-6 text-center text-sm text-[#7f8998]">New to ScanMySaaS? <Link href="/register" onClick={pendingScan} className="font-medium text-white hover:text-[var(--signal)]">Create an account</Link></p>
     </AuthFrame>
   );
 }

@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         await handleCheckoutCompleted(session);
+        if (session.payment_status === "paid" && session.metadata?.userId) {
+          try { const { trackScanFunnel } = await import("@/lib/scan-funnel"); await trackScanFunnel("upgraded", undefined, session.metadata.userId); } catch { console.error("Scan upgrade attribution unavailable"); }
+        }
         if (session.payment_status === "paid" && session.metadata?.email_campaign && session.metadata?.email_send_id && session.metadata?.userId) {
           try {
             const { recordEmailConversion } = await import("@/lib/email/attribution");

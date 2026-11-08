@@ -71,7 +71,7 @@ export function MobileScanCta() {
         {label}
         {onPage && <ArrowUp className="h-4 w-4 opacity-70" />}
       </button>
-      <p className="mt-2 text-center text-[0.68rem] text-[#7f8998]">{repo ? "Read-only · secrets never shown" : "No signup · one free scan per site"}</p>
+      <p className="mt-2 text-center text-[0.68rem] text-[#7f8998]">{repo ? "Read-only · secrets never shown" : "Free scan · account for full report"}</p>
     </div>
   );
 }

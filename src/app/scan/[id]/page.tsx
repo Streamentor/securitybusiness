@@ -35,8 +35,8 @@ import { buildFixPrompt } from "@/lib/fix-prompt";
 import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import type { RemediationAccess } from "@/lib/scan-remediation";
 
-interface Vulnerability { id: string; type: string; severity: string; title: string; description: string; url: string; remedy: string; remediationAccess: RemediationAccess }
-interface Scan { id: string; url: string; status: string; overallScore: number | null; totalPages: number; pagesScanned: number; createdAt: string; completedAt: string | null; userId: string | null; vulnerabilities: Vulnerability[]; access?: {owner: boolean; canClaim: boolean; shared: boolean; sharingEnabled: boolean}; comparison?: ScanComparison | null }
+interface Vulnerability { id: string; type: string; severity: string; title: string; description?: string; url?: string; remedy?: string; detailsLocked?: boolean; remediationAccess: RemediationAccess }
+interface Scan { id: string; url: string; status: string; overallScore: number | null; totalPages: number; pagesScanned: number; createdAt: string; completedAt: string | null; userId: string | null; vulnerabilities: Vulnerability[]; access?: {owner: boolean; canClaim: boolean; shared: boolean; sharingEnabled: boolean; requiresAccount?: boolean}; comparison?: ScanComparison | null }
 interface ScanComparison { previousScanId: string; previousScore: number | null; previousCreatedAt: string; resolved: string[]; added: string[]; stillOpen: number }
 
 const VERIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -65,7 +65,7 @@ function guideForFinding(finding: Vulnerability) {
   return null;
 }
 
-function FindingCard({ finding, defaultOpen, expanded, onExpandedChange }: { finding: Vulnerability; defaultOpen: boolean; expanded?: boolean; onExpandedChange?: (value: boolean) => void }) {
+function FindingCard({ finding, defaultOpen, expanded, onExpandedChange, onRegister, registerHref }: { finding: Vulnerability; defaultOpen: boolean; expanded?: boolean; onExpandedChange?: (value: boolean) => void; onRegister: () => void; registerHref: string }) {
   const [open, setOpen] = useState(defaultOpen);
   const isOpen = expanded ?? open;
   const freeFix = finding.remediationAccess === "free";
@@ -73,7 +73,8 @@ function FindingCard({ finding, defaultOpen, expanded, onExpandedChange }: { fin
   const config = severityConfig[finding.severity] || severityConfig.info;
   const Icon = config.icon;
   const guideHref = guideForFinding(finding);
-  const fixPrompt = buildFixPrompt({ surface: "deployed website", title: finding.title, severity: finding.severity, category: finding.type, target: finding.url, evidence: finding.description, remediation: finding.remedy });
+  if (finding.detailsLocked) return <article className={`rounded-xl border ${config.border} bg-[#0b1016] p-4 sm:p-5`}><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 break-words text-sm font-semibold text-white">{finding.title}</h3><span className={`shrink-0 text-xs font-semibold ${config.text}`}>{config.label}</span></div><Link href={registerHref} onClick={onRegister} className="mt-3 inline-flex items-center gap-2 text-xs text-[var(--signal)]"><Lock className="h-3.5 w-3.5" />Free account to see the affected page and details</Link></article>;
+  const fixPrompt = buildFixPrompt({ surface: "deployed website", title: finding.title, severity: finding.severity, category: finding.type, target: finding.url || "", evidence: finding.description || "", remediation: finding.remedy || "" });
   return (
     <article id={`finding-${finding.id}`} className={`scroll-mt-6 overflow-hidden rounded-xl border ${config.border} bg-[#0b1016]`}>
       <button onClick={() => onExpandedChange ? onExpandedChange(!isOpen) : setOpen(!isOpen)} className="grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 p-4 text-left sm:gap-4 sm:p-5" aria-expanded={isOpen}>
@@ -121,7 +122,10 @@ export default function ScanResultPage() {
         setScan(scanData);
         if (session?.user?.id && scanData.access?.canClaim) {
           const claimed = await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: scanData.id }) });
-          if (claimed.ok) setScan({...scanData, userId: session.user.id, access: {...scanData.access, owner: true, canClaim: false}});
+          if (claimed.ok) {
+            if (sessionStorage.getItem("pendingScanId") === scanData.id) sessionStorage.removeItem("pendingScanId");
+            setScan({...scanData, userId: session.user.id, access: {...scanData.access, owner: true, canClaim: false}});
+          }
         }
         if (planResponse.ok) { const plan = await planResponse.json(); setUserPlan(plan.plan || "free"); setUserCredits(plan.credits ?? null); }
         if (scanData.overallScore !== null) {
@@ -140,7 +144,7 @@ export default function ScanResultPage() {
     const snapshot = scan?.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === "SaaS readiness snapshot");
     if (!snapshot) return [];
     try {
-      const parsed = JSON.parse(snapshot.description) as { items?: ReadinessItem[] };
+      const parsed = JSON.parse(snapshot.description || "{}") as { items?: ReadinessItem[] };
       return Array.isArray(parsed.items) ? parsed.items : [];
     } catch { return []; }
   }, [scan]);
@@ -148,6 +152,13 @@ export default function ScanResultPage() {
   const visibleFindings = filter === "all" ? findings : findings.filter((finding) => finding.severity === filter);
   const freeFix = findings.find((finding) => finding.remediationAccess === "free");
   const lockedFixCount = findings.filter((finding) => finding.remediationAccess === "locked").length;
+
+  const registerHref = `/register?scan=${encodeURIComponent(String(params.id))}`;
+  function startRegistration() {
+    if (!scan) return;
+    sessionStorage.setItem("pendingScanId", scan.id);
+    void fetch(`/api/scan/${scan.id}/signup`, {method: "POST", keepalive: true}).catch(() => undefined);
+  }
 
   function openFreeFix() {
     if (!freeFix) return;
@@ -220,6 +231,7 @@ export default function ScanResultPage() {
           <div className="grid grid-cols-2 border-t border-white/[0.08] sm:grid-cols-5">{severityOrder.map((severity) => { const config = severityConfig[severity]; return <button key={severity} onClick={() => setFilter(filter === severity ? "all" : severity)} className={`border-r border-white/[0.07] px-4 py-4 text-left transition last:border-r-0 hover:bg-white/[0.025] ${filter === severity ? config.bg : ""}`}><p className={`text-2xl font-semibold ${config.text}`}>{counts[severity]}</p><p className="mt-1 text-[0.66rem] font-medium uppercase tracking-[.09em] text-[#697483]">{config.label}</p></button>; })}</div>
         </section>
 
+        {scan.access?.requiresAccount && <section className="mt-6 rounded-2xl border border-[var(--signal)]/30 bg-[var(--signal)]/[0.05] p-5 sm:p-6"><p className="eyebrow">Your scan preview</p><h2 className="mt-3 text-xl font-semibold">See where each issue was found.</h2><p className="mt-3 text-sm leading-6 text-[#a5aeba]">Your score, severity counts and one complete finding are below. Create a free account to see the affected pages and descriptions for every finding. One free fix is included; remaining fix steps are on paid plans.</p><div className="mt-5 flex flex-wrap gap-3"><Link href={registerHref} onClick={startRegistration} className="button-primary">Create a free account <ArrowUpRight className="h-4 w-4" /></Link><Link href={`/login?scan=${scan.id}`} onClick={() => sessionStorage.setItem("pendingScanId", scan.id)} className="button-secondary">Sign in</Link></div></section>}
         {freeFix && <section className="mt-6 rounded-2xl border border-[var(--signal)]/25 bg-[var(--signal)]/[0.05] p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="flex items-center gap-2 text-sm font-semibold text-[var(--signal)]"><Sparkles className="h-4 w-4" /> One free fix included</p><h2 className="mt-2 text-lg font-semibold">{freeFix.title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[#9aa5b3]">Start with the highest-priority actionable finding in this report. Review the steps or copy its fix prompt into your coding agent, then verify the finding before changing code.</p></div><button onClick={openFreeFix} className="button-primary shrink-0">Open your free fix <ArrowUpRight className="h-4 w-4" /></button></div></section>}
 
         {readiness.length > 0 && <section className="mt-8">
@@ -248,12 +260,12 @@ export default function ScanResultPage() {
               {(scan.comparison.resolved.length > 0 || scan.comparison.added.length > 0) && <ul className="mt-4 space-y-1 text-xs leading-5 text-[#a5afbd]">{scan.comparison.resolved.map((title) => <li key={`r-${title}`}><span className="mr-2 text-[#b9ff66]">✓</span>{title}</li>)}{scan.comparison.added.map((title) => <li key={`a-${title}`}><span className="mr-2 text-[#ff8585]">+</span>{title}</li>)}</ul>}
             </div>}
             <div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-semibold tracking-[-0.025em]">{filter === "all" ? "All findings" : `${severityConfig[filter].label} findings`}</h2><p className="mt-1 text-xs text-[#717c8b]">Ordered from highest to lowest priority</p></div>{filter !== "all" && <button onClick={() => setFilter("all")} className="text-xs text-[var(--signal)] hover:underline">Clear filter</button>}</div>
-            {visibleFindings.length ? <div className="space-y-3">{visibleFindings.map((finding, index) => <FindingCard key={finding.id} finding={finding} defaultOpen={index === 0} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[var(--signal)]" /><p className="mt-4 font-medium">No {filter} findings.</p></div>}
+            {visibleFindings.length ? <div className="space-y-3">{visibleFindings.map((finding, index) => <FindingCard key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={index === 0} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[var(--signal)]" /><p className="mt-4 font-medium">No {filter} findings.</p></div>}
           </section>
 
           <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
             <div className="surface-muted rounded-2xl p-5"><p className="text-xs font-semibold uppercase tracking-[.12em] text-[#6e7988]">Next move</p><p className="mt-4 text-lg font-semibold tracking-[-0.025em]">{priorityCount ? `Start with ${priorityCount} priority finding${priorityCount === 1 ? "" : "s"}.` : findings.length ? "Work through the medium-risk findings." : "Keep monitoring after releases."}</p><p className="mt-3 text-sm leading-6 text-[#7f8998]">{priorityCount ? "Critical and high findings can have the largest impact. Verify each one before making a production change." : "A clean automated result is useful, but it does not prove the app is vulnerability-free."}</p></div>
-            {!canViewRemedies && lockedFixCount > 0 && <div className="rounded-2xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.05] p-5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--signal)]/10 text-[var(--signal)]"><Lock className="h-4 w-4" /></span><h3 className="mt-5 font-semibold">Unlock the remaining fixes.</h3><p className="mt-2 text-sm leading-6 text-[#8f99a7]">{freeFix ? "Your first actionable fix is included. Paid plans add the remaining implementation steps and scan credits for follow-up checks." : "Paid plans add implementation steps and scan credits for follow-up checks."}</p><Link href="/pricing" className="button-primary mt-5 w-full">View plans</Link></div>}
+            {!scan.access?.requiresAccount && !canViewRemedies && lockedFixCount > 0 && <div className="rounded-2xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.05] p-5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--signal)]/10 text-[var(--signal)]"><Lock className="h-4 w-4" /></span><h3 className="mt-5 font-semibold">Unlock the remaining fixes.</h3><p className="mt-2 text-sm leading-6 text-[#8f99a7]">{freeFix ? "Your first actionable fix is included. Paid plans add the remaining implementation steps and scan credits for follow-up checks." : "Paid plans add implementation steps and scan credits for follow-up checks."}</p><Link href="/pricing" className="button-primary mt-5 w-full">View plans</Link></div>}
             <div className="rounded-2xl border border-[var(--cobalt)]/25 bg-[var(--cobalt)]/[0.06] p-5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--cobalt)]/15 text-[#9fb0ff]"><Github className="h-4 w-4" /></span><h3 className="mt-5 font-semibold">Now scan the code behind {siteHost}.</h3><p className="mt-2 text-sm leading-6 text-[#9aa4b1]">This report only sees what is public. Connect the repository to find what an outside scan cannot: committed secrets, risky GitHub Actions, missing database rules and vulnerable dependencies, with the exact file and line.</p><Link href="/repo-scan?tab=private" className="button-primary mt-4 w-full"><Github className="h-4 w-4" /> Connect your repository</Link><p className="mt-2 text-center text-[0.68rem] text-[#6e7988]">Read-only GitHub App · takes about a minute</p></div>
             <button onClick={rescan} disabled={!canRescan} className="button-secondary w-full"><RotateCw className="h-4 w-4" /> {verificationRescan && !(userCredits && userCredits > 0) ? "Verify your fixes (free rescan)" : "Scan this site again"}</button>
             <Link href="/" className="flex items-center justify-center gap-2 py-2 text-xs text-[#737e8d] hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Scan another website</Link>

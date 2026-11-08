@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { AdminEmails } from "@/components/AdminEmails";
+import { AdminScanFunnel } from "@/components/AdminScanFunnel";
 import { AdminRegistrationChart } from "@/components/AdminRegistrationChart";
 import { motion } from "framer-motion";
 import {
@@ -430,6 +431,7 @@ export default function AdminDashboard() {
             </div>
 
             <AdminRegistrationChart />
+            <AdminScanFunnel />
 
             {/* Growth + Plans Row */}
             <div className="grid gap-4 lg:grid-cols-2">
