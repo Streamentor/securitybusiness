@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { AdminRegistrationChart } from "@/components/AdminRegistrationChart";
 import { motion } from "framer-motion";
 import {
   Shield,
@@ -424,6 +425,8 @@ export default function AdminDashboard() {
                 </motion.div>
               ))}
             </div>
+
+            <AdminRegistrationChart />
 
             {/* Growth + Plans Row */}
             <div className="grid gap-4 lg:grid-cols-2">
