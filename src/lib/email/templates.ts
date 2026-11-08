@@ -107,7 +107,7 @@ You can scan a public GitHub repo for free: ${repo}
 For private repos, Starter connects a read-only GitHub App. It also includes an AI review looking for logic mistakes such as missing ownership checks. AI findings need verification before you change code.`;
         break;
       case "repo_gap":
-        subject = `3 things a ${shortDomain} scan can't see`;
+        subject = `3 things your website scan can't see`;
         copy = `A website scan only sees what ${domain} shows to public requests. A few important mistakes need a look inside the repository:
 
 - a secret key committed in a source file
