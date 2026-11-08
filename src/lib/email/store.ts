@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import type { EmailKey } from "@/lib/email/types";
 export const EMAIL_DDL = [
+  `CREATE TABLE IF NOT EXISTS "EmailSequenceRun" ("id" TEXT PRIMARY KEY, "mode" TEXT NOT NULL, "status" TEXT NOT NULL, "startedAt" TIMESTAMP(3) NOT NULL, "completedAt" TIMESTAMP(3) NOT NULL, "examined" INTEGER NOT NULL DEFAULT 0, "sent" INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE INDEX IF NOT EXISTS "EmailSequenceRun_startedAt_idx" ON "EmailSequenceRun" ("startedAt")`,
   `CREATE TABLE IF NOT EXISTS "EmailConversion" ("userId" TEXT PRIMARY KEY REFERENCES "User"("id") ON DELETE CASCADE, "checkoutId" TEXT NOT NULL UNIQUE, "emailKey" TEXT NOT NULL, "sendId" TEXT NOT NULL, "paidAt" TIMESTAMP(3) NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS "EmailPreference" ("userId" TEXT PRIMARY KEY REFERENCES "User"("id") ON DELETE CASCADE, "marketingOptOut" BOOLEAN NOT NULL DEFAULT false, "optOutAt" TIMESTAMP(3), "suppressed" BOOLEAN NOT NULL DEFAULT false, "suppressedReason" TEXT, "consentAt" TIMESTAMP(3), "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
   `ALTER TABLE "EmailPreference" ADD COLUMN IF NOT EXISTS "consentAt" TIMESTAMP(3)`,
@@ -46,4 +48,12 @@ export async function reserveSend(userId: string, emailKey: EmailKey, now: Date)
     await tx.emailSend.create({ data: { id, userId, emailKey, status: "sending", createdAt: now } });
     return id;
   });
+}
+
+/** Health telemetry never stores recipients, message bodies or exception details. */
+export async function recordSequenceRun(mode: string, status: string, startedAt: Date, examined = 0, sent = 0) {
+  try {
+    await ensureEmailTables();
+    await prisma.$executeRaw`INSERT INTO "EmailSequenceRun" ("id", "mode", "status", "startedAt", "completedAt", "examined", "sent") VALUES (${randomUUID()}, ${mode}, ${status}, ${startedAt}, ${new Date()}, ${examined}, ${sent})`;
+  } catch { console.error("Email cron health record unavailable"); }
 }
