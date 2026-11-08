@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { prisma } from "@/lib/db";
 import { scanWebsite, type ScanProgress, validateScanTarget, type VulnerabilityResult, WebsiteScanError } from "@/lib/scanner";
+import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import { admitWebsiteScan } from "@/lib/scan-gate";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
 
         // Run scan with progress callbacks
         const results = await scanWebsite(normalizedUrl, (progress: ScanProgress) => {
-          send("progress", progress);
+          send("progress", !userId && progress.step === "html" ? {...progress, label: "Analyzing page HTML…"} : progress);
         });
 
         send("progress", {
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const actionable = results.vulnerabilities.filter((v: VulnerabilityResult) => v.type !== "scan-meta");
+        const actionable = results.vulnerabilities.filter((v: VulnerabilityResult) => isVisibleWebsiteFinding(v));
         send("complete", {
           scanId: scan.id,
           score: results.score,

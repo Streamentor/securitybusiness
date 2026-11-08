@@ -184,7 +184,7 @@ export default function LovableSecurityScannerPage() {
     <section className="app-shell py-20">
       <div className="rounded-3xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.045] p-8 sm:p-12">
         <h2 className="max-w-2xl text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Scan your Lovable app now.</h2>
-        <p className="mt-4 max-w-xl text-sm leading-7 text-[#909aa8]">Start with the live URL. It needs no account.</p>
+        <p className="mt-4 max-w-xl text-sm leading-7 text-[#909aa8]">Start with the live URL. Free scan, no card. A free account opens the full report; one fix is included.</p>
         <div className="mt-8"><ScannerForm compact /></div>
       </div>
     </section>

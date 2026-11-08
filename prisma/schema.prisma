@@ -206,3 +206,18 @@ model EmailSequenceRun {
   sent Int @default(0)
   @@index([startedAt])
 }
+
+// Runtime DDL lives in scan-funnel.ts. No migration history is introduced.
+model ScanFunnel {
+  scanId           String    @id
+  signupClickedAt  DateTime?
+  registeredAt     DateTime?
+  registeredUserId String?
+  claimedAt        DateTime?
+  upgradedAt       DateTime?
+}
+
+model ScanFunnelRollout {
+  id        Int      @id
+  startedAt DateTime @default(now())
+}

@@ -4,7 +4,7 @@ import { scanWebsite, validateScanTarget, WebsiteScanError } from "@/lib/scanner
 import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { auth } from "@/lib/auth";
 import { admitWebsiteScan } from "@/lib/scan-gate";
-import { applyWebsiteRemediationAccess } from "@/lib/scan-remediation";
+import { serializeWebsiteFindings } from "@/lib/scan-remediation";
 
 export async function POST(req: NextRequest) {
   let userId: string | null = null;
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         ...updatedScan,
-        vulnerabilities: applyWebsiteRemediationAccess(updatedScan.vulnerabilities, userPlan),
+        vulnerabilities: serializeWebsiteFindings(updatedScan.vulnerabilities, userPlan, !userId),
       }, {headers: {"Cache-Control": "private, no-store", ...(creator ? {"Set-Cookie": creator.cookie} : {})}});
     } catch (scanError) {
       console.error("Scan execution error:", scanError);

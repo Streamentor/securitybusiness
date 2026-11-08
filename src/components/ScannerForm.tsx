@@ -19,6 +19,7 @@ export function ScannerForm({ compact = false }: { compact?: boolean }) {
 
   return (
     <>
+      <p className="mb-3 text-xs leading-5 text-[#98a2b3]">Free scan, no card. Free account to see the full report. One fix included.</p>
       <form id={compact ? undefined : "scan"} data-scan-target onSubmit={startScan} className={`input-shell signal-shadow flex w-full gap-2 rounded-2xl p-2 ${compact ? "max-w-2xl" : "max-w-xl"}`}>
         <label className="flex min-w-0 flex-1 items-center gap-3 px-3" aria-label="Website URL">
           <Globe2 className="h-5 w-5 shrink-0 text-[#778191]" />

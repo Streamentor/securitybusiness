@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { reportPermission, reportHeaders } from "@/lib/report-access";
+import { ensureScanFunnel } from "@/lib/scan-funnel";
 import { auth } from "@/lib/auth";
-import { applyWebsiteRemediationAccess, isVisibleWebsiteFinding } from "@/lib/scan-remediation";
+import { serializeWebsiteFindings, isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import { compareScanFindings } from "@/lib/scan-comparison";
 import { isSameHost, hostnameKey } from "@/lib/scan-access";
 
@@ -40,6 +41,8 @@ export async function GET(
     const access = await reportPermission(req, scan, session?.user?.id);
     if (!access.allowed) return NextResponse.json({error: "Scan not found"}, {status: 404, headers: reportHeaders});
 
+    if (!user && !access.shared) await ensureScanFunnel().catch(() => { console.error("Scan funnel initialization unavailable"); });
+
     // Owners see what changed since their previous completed scan of the same hostname.
     let comparison = null;
     if (session?.user?.id && scan.userId === session.user.id && scan.status === "completed") {
@@ -68,10 +71,10 @@ export async function GET(
     return NextResponse.json({
       ...scan,
       userId: access.owner ? scan.userId : null,
-      access: {owner: access.owner, canClaim: access.canClaim, shared: access.shared, sharingEnabled: access.sharingEnabled},
+      access: {owner: access.owner, canClaim: access.canClaim, shared: access.shared, sharingEnabled: access.sharingEnabled, requiresAccount: !user && !access.shared},
       comparison,
       // Never send locked implementation steps and rely on a client-side blur.
-      vulnerabilities: applyWebsiteRemediationAccess(scan.vulnerabilities, user?.plan),
+      vulnerabilities: serializeWebsiteFindings(scan.vulnerabilities, user?.plan, !user && !access.shared),
     }, {headers: reportHeaders});
   } catch {
     return NextResponse.json(

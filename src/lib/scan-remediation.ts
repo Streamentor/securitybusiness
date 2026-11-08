@@ -49,3 +49,19 @@ export function applyWebsiteRemediationAccess<T extends RemediationFinding>(find
     };
   });
 }
+
+/** A distinct boundary from paid fixes: anonymous previews disclose one real finding.
+ * Locked rows use an allowlist so future evidence fields cannot accidentally leak.
+ * Sharing links bypass this gate, but retain the existing plan-based fix boundary.
+ */
+export function serializeWebsiteFindings<T extends RemediationFinding>(findings: readonly T[], plan: unknown, requiresAccount: boolean) {
+  const entitled = applyWebsiteRemediationAccess(findings, requiresAccount ? "free" : plan);
+  if (!requiresAccount) return entitled;
+  const visible = entitled.filter(isVisibleWebsiteFinding);
+  const sample = visible.find(finding => finding.remediationAccess === "free")
+    ?? [...visible].sort((a, b) => (severityRank[a.severity] ?? 4) - (severityRank[b.severity] ?? 4) || a.id.localeCompare(b.id))[0];
+  return visible.map(finding => finding === sample ? {...finding, detailsLocked: false} : {
+    id: finding.id, title: finding.title, severity: finding.severity,
+    type: "account-locked", detailsLocked: true, remediationAccess: "locked" as const,
+  });
+}
