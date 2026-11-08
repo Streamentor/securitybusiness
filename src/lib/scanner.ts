@@ -1,3 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { websiteFailure } from "./website-scan-messages.mjs";
+import type { WebsiteFailure, WebsiteCoverage } from "./website-scan-failure";
 import * as cheerio from "cheerio";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -19,6 +22,7 @@ interface ScanResult {
   score: number;
   vulnerabilities: VulnerabilityResult[];
   pagesScanned: number;
+  coverage?: WebsiteCoverage;
 }
 
 export interface ScanProgress {
@@ -33,7 +37,24 @@ export interface ScanProgress {
 
 export type ProgressCallback = (progress: ScanProgress) => void;
 
-export class WebsiteScanError extends Error {}
+export class WebsiteScanError extends Error {
+  readonly failure: WebsiteFailure;
+  constructor(message: string, failure: WebsiteFailure = websiteFailure("network")) {
+    super(message); this.name = "WebsiteScanError"; this.failure = failure;
+  }
+}
+const scanBudget = new AsyncLocalStorage<{deadline: number; exhausted: boolean; failedRequests: number}>();
+interface CrawledPage {url: string; html: string; headers: Headers}
+function networkFailure(error: unknown, timedOut = false): WebsiteFailure {
+  if (timedOut) return websiteFailure("timeout");
+  const e = error as {code?: string; cause?: {code?: string}};
+  const code = e?.cause?.code || e?.code || "";
+  if (["ENOTFOUND", "EAI_AGAIN", "ENODATA"].includes(code)) return websiteFailure("dns");
+  if (/CERT|TLS|SSL|SELF_SIGNED|UNABLE_TO_VERIFY/.test(code)) return websiteFailure("tls");
+  if (/TIMEOUT|TIMEDOUT/.test(code)) return websiteFailure("timeout");
+  return websiteFailure("network");
+}
+
 
 interface ReadinessItem {
   key: "tls" | "robots" | "sitemap" | "llms" | "security" | "canonical" | "indexability";
@@ -124,8 +145,8 @@ export async function validateScanTarget(rawUrl: string): Promise<URL> {
   let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await lookup(hostname, { all: true, verbatim: true });
-  } catch {
-    throw new Error("The website hostname could not be resolved.");
+  } catch (error) {
+    throw new Error("The website hostname could not be resolved.", {cause: error});
   }
   if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
     throw new Error("This hostname does not resolve to a public address.");
@@ -138,15 +159,20 @@ export const MAX_SCAN_RESPONSE_BYTES = 2_000_000;
 // ─── Helper: bounded fetch, including redirects and body reads ────
 export async function safeFetch(
   url: string,
-  opts: RequestInit & { timeout?: number } = {}
+  opts: RequestInit & { timeout?: number; onFailure?: (failure: WebsiteFailure) => void; sameSiteRedirects?: boolean } = {}
 ): Promise<Response | null> {
+  const {onFailure, sameSiteRedirects, timeout, ...fetchOptions} = opts;
+  const budget = scanBudget.getStore();
+  const remaining = budget ? budget.deadline - Date.now() : Infinity;
+  if (remaining <= 0) { if (budget) {budget.exhausted = true; budget.failedRequests += 1;} onFailure?.(websiteFailure("timeout")); return null; }
+  let failure: WebsiteFailure | undefined;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout>;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       controller.abort();
       reject(new Error("Scanner response deadline exceeded."));
-    }, opts.timeout ?? 10000);
+    }, Math.min(timeout ?? 10000, remaining));
   });
   try {
     let currentUrl = url;
@@ -157,7 +183,7 @@ export async function safeFetch(
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
       try {
         const requestOptions: RequestInit & { dispatcher: Agent } = {
-          ...opts,
+          ...fetchOptions,
           dispatcher: scanDispatcher,
           cache: "no-store",
           redirect: "manual",
@@ -179,11 +205,16 @@ export async function safeFetch(
           // Redirect bodies are not inspected. Cancel before following, including
           // when the next URL subsequently fails private-target validation.
           void response.body?.cancel().catch(() => undefined);
-          currentUrl = new URL(location, currentUrl).toString();
+          const nextUrl = new URL(location, currentUrl);
+          if (sameSiteRedirects && nextUrl.hostname.replace(/^www\./, "") !== new URL(url).hostname.replace(/^www\./, "")) {
+            failure = websiteFailure("redirect"); throw new Error("Cross-host crawl redirect");
+          }
+          currentUrl = nextUrl.toString();
           continue;
         }
 
         if (response.body && Number(response.headers.get("content-length")) > MAX_SCAN_RESPONSE_BYTES) {
+          failure = websiteFailure("response-too-large");
           throw new Error("Scanner response exceeds the body byte limit.");
         }
         // Drain a clone while enforcing the deadline and decoded-byte limit.
@@ -196,9 +227,10 @@ export async function safeFetch(
             const chunk = await Promise.race([reader.read(), deadline]);
             if (chunk.done) break;
             bytes += chunk.value.byteLength;
-            if (bytes > MAX_SCAN_RESPONSE_BYTES) throw new Error("Scanner response exceeds the body byte limit.");
+            if (bytes > MAX_SCAN_RESPONSE_BYTES) { failure = websiteFailure("response-too-large"); throw new Error("Scanner response exceeds the body byte limit."); }
           }
         }
+        if (budget && ([403, 429].includes(response.status) || response.headers.get("cf-mitigated") === "challenge" || response.headers.get("x-vercel-mitigated") === "challenge")) budget.failedRequests += 1;
         return response;
       } catch (error) {
         // Cancel both tee branches; awaiting only one can deadlock until the
@@ -211,7 +243,10 @@ export async function safeFetch(
       }
     }
     return null;
-  } catch {
+  } catch (error) {
+    if (budget && Date.now() >= budget.deadline) budget.exhausted = true;
+    if (budget) budget.failedRequests += 1;
+    onFailure?.(failure ?? networkFailure(error, controller.signal.aborted));
     return null;
   } finally {
     clearTimeout(timer!);
@@ -224,7 +259,12 @@ async function dnsLookupTxt(hostname: string): Promise<string[][]> {
     const dns = await import("dns");
     const { promisify } = await import("util");
     const resolveTxt = promisify(dns.resolveTxt);
-    return await resolveTxt(hostname);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([resolveTxt(hostname), new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("DNS response deadline exceeded")), Math.max(1, Math.min(5000, (scanBudget.getStore()?.deadline ?? Infinity) - Date.now())));
+      })]);
+    } finally { clearTimeout(timer); }
   } catch {
     return [];
   }
@@ -233,14 +273,19 @@ async function dnsLookupTxt(hostname: string): Promise<string[][]> {
 // ─── 1. Crawl / discover pages ────────────────────────────────────
 export async function discoverPages(
   baseUrl: string,
-  maxPages: number = 25
+  maxPages: number = 25,
+  onPage?: (page: CrawledPage) => void,
+  onFailure?: (failure: WebsiteFailure) => void,
+  onIncomplete?: () => void,
 ): Promise<string[]> {
   const visited = new Set<string>();
   const toVisit = [baseUrl];
   const pages: string[] = [];
-  const baseHost = new URL(baseUrl).hostname;
+  const baseHost = new URL(baseUrl).hostname.replace(/^www\./, "");
+  const crawlDeadline = Date.now() + 25000;
 
   while (toVisit.length > 0 && pages.length < maxPages) {
+    if (Date.now() >= crawlDeadline) { onIncomplete?.(); break; }
     // Crawl up to 3 pages concurrently
     const batch = toVisit.splice(0, 3).filter((u) => !visited.has(u));
     if (batch.length === 0) break;
@@ -250,13 +295,20 @@ export async function discoverPages(
         if (visited.has(batchUrl)) return null;
         visited.add(batchUrl);
 
-        const res = await safeFetch(batchUrl, { redirect: "follow", timeout: 8000 });
-        if (!res || !res.ok) return null;
-
+        const res = await safeFetch(batchUrl, { redirect: "follow", timeout: Math.min(12000, Math.max(1, crawlDeadline - Date.now())), sameSiteRedirects: true, onFailure });
+        if (!res) { onIncomplete?.(); return null; }
+        const provider = res.headers.has("cf-ray") ? "Cloudflare" : res.headers.has("x-vercel-id") ? "Vercel" : undefined;
+        if (!res.ok || (res.headers.get("cf-mitigated") === "challenge" || res.headers.get("x-vercel-mitigated") === "challenge")) {
+          const code = [401, 403, 429].includes(res.status) || (res.headers.get("cf-mitigated") === "challenge" || res.headers.get("x-vercel-mitigated") === "challenge") ? "blocked" : res.status >= 300 && res.status < 400 ? "redirect" : "http-error";
+          onFailure?.(websiteFailure(code, res.status, provider)); onIncomplete?.(); return null;
+        }
         const ct = res.headers.get("content-type") || "";
-        if (!ct.includes("text/html")) return null;
+        if (!ct.toLowerCase().includes("text/html")) { onFailure?.(websiteFailure("not-html")); onIncomplete?.(); return null; }
 
         const html = await res.text();
+        if (!html.trim()) { onFailure?.(websiteFailure("empty-html")); onIncomplete?.(); return null; }
+        const finalUrl = res.url || batchUrl;
+        onPage?.({url: batchUrl, html, headers: res.headers});
         const $ = cheerio.load(html);
         const links: string[] = [];
 
@@ -264,9 +316,9 @@ export async function discoverPages(
           try {
             const href = $(el).attr("href");
             if (!href) return;
-            const abs = new URL(href, batchUrl).toString().split("#")[0].split("?")[0];
+            const abs = new URL(href, finalUrl).toString().split("#")[0].split("?")[0];
             if (
-              new URL(abs).hostname === baseHost &&
+              new URL(abs).hostname.replace(/^www\./, "") === baseHost &&
               !visited.has(abs) &&
               abs.startsWith("http")
             ) {
@@ -1165,17 +1217,14 @@ async function detectWAF(baseUrl: string): Promise<VulnerabilityResult[]> {
 }
 
 // ─── 17. Source map detection ─────────────────────────────────────
-async function checkSourceMaps(baseUrl: string, pages: string[]): Promise<VulnerabilityResult[]> {
+async function checkSourceMaps(baseUrl: string, pages: string[], snapshots: Map<string, CrawledPage>): Promise<VulnerabilityResult[]> {
   const vulns: VulnerabilityResult[] = [];
   const checked = new Set<string>();
 
   for (const pageUrl of pages.slice(0, 3)) {
-    const res = await safeFetch(pageUrl, { timeout: 8000 });
-    if (!res?.ok) continue;
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("text/html")) continue;
-
-    const html = await res.text();
+    const snapshot = snapshots.get(pageUrl);
+    if (!snapshot) continue;
+    const html = snapshot.html;
     const $ = cheerio.load(html);
     const scripts: string[] = [];
 
@@ -1324,7 +1373,10 @@ function calculateScore(vulns: VulnerabilityResult[]): number {
 }
 
 // ─── MAIN SCAN FUNCTION ───────────────────────────────────────────
-export async function scanWebsite(
+export async function scanWebsite(url: string, onProgress?: ProgressCallback): Promise<ScanResult> {
+  return scanBudget.run({deadline: Date.now() + 90000, exhausted: false, failedRequests: 0}, () => scanWebsiteWithinBudget(url, onProgress));
+}
+async function scanWebsiteWithinBudget(
   url: string,
   onProgress?: ProgressCallback
 ): Promise<ScanResult> {
@@ -1349,9 +1401,13 @@ export async function scanWebsite(
   // ── Step 1: Discover pages ──────────────────────────────────────
   currentStepNum = 1;
   report("Discovering pages…", "crawl", "running");
-  const pages = await discoverPages(url, 25);
+  const snapshots = new Map<string, CrawledPage>();
+  let initialFailure: WebsiteFailure | undefined;
+  let incomplete = false;
+  const pages = await discoverPages(url, 25, page => snapshots.set(page.url, page), failure => { initialFailure ??= failure; }, () => { incomplete = true; });
   if (pages.length === 0) {
-    throw new WebsiteScanError("No public HTML pages could be read. Check that the URL is reachable and that your firewall allows the scanner, then try again.");
+    const failure = initialFailure ?? websiteFailure("network");
+    throw new WebsiteScanError(failure.message, failure);
   }
   report(`Found ${pages.length} page(s)`, "crawl", "done", 0, pages.length);
 
@@ -1441,9 +1497,11 @@ export async function scanWebsite(
   const cookieHeaders = new Headers();
 
   for (const pageUrl of pages) {
-    const res = await safeFetch(pageUrl, { timeout: 15000 });
-    if (!res?.ok || !res.headers.get("content-type")?.includes("text/html")) continue;
-
+    // Analyze exactly the bounded HTML already read during discovery. A second
+    // request used to discard good evidence when the origin later rate-limited us.
+    const snapshot = snapshots.get(pageUrl);
+    if (!snapshot) { incomplete = true; continue; }
+    const res = snapshot;
     for (const cookie of res.headers.getSetCookie?.() ?? []) cookieHeaders.append("set-cookie", cookie);
 
     if (pagesAnalyzed === 0) {
@@ -1468,7 +1526,7 @@ export async function scanWebsite(
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("text/html")) {
       report(`Scanning ${new URL(pageUrl).pathname}…`, "html", "running");
-      const html = await res.text();
+      const html = snapshot.html;
       const htmlVulns = checkHTMLSecurity(pageUrl, html);
       allVulns.push(...htmlVulns);
 
@@ -1494,7 +1552,7 @@ export async function scanWebsite(
   // Source maps
   currentStepNum = 17;
   report("Checking source maps…", "source-maps", "running");
-  const srcMapV = await checkSourceMaps(url, pages);
+  const srcMapV = await checkSourceMaps(url, pages, snapshots);
   allVulns.push(...srcMapV);
   report("Source maps complete", "source-maps", "done", srcMapV.length);
 
@@ -1507,5 +1565,10 @@ export async function scanWebsite(
     return true;
   });
 
-  return { url, score: calculateScore(unique), vulnerabilities: unique, pagesScanned: pagesAnalyzed };
+  const partial = incomplete || Boolean(scanBudget.getStore()?.exhausted) || Boolean(scanBudget.getStore()?.failedRequests);
+  return { url, score: calculateScore(unique), vulnerabilities: unique, pagesScanned: pagesAnalyzed,
+    coverage: {partial, pagesDiscovered: pages.length, pagesAnalyzed, note: partial
+      ? "Some pages or checks could not be completed within the scan limits. This score uses observed findings only; unread checks are not proof of safety."
+      : "Public website checks only. Up to 25 linked HTML pages; authenticated routes and repository code were not reviewed."},
+  };
 }

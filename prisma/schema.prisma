@@ -221,3 +221,17 @@ model ScanFunnelRollout {
   id        Int      @id
   startedAt DateTime @default(now())
 }
+
+/// Additive runtime table; safe diagnostic text only, never upstream response bodies.
+model WebsiteScanDiagnostic {
+  scanId          String   @id
+  failureCode     String?
+  failureMessage  String?
+  httpStatus      Int?
+  provider        String?
+  partial         Boolean  @default(false)
+  pagesDiscovered Int?
+  pagesAnalyzed   Int?
+  coverageNote    String?
+  finishedAt      DateTime @default(now())
+}

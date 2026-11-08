@@ -44,6 +44,7 @@ interface ScanProgress {
 interface ScanComplete {
   scanId: string;
   score: number;
+  coverage?: {partial: boolean; note: string};
   totalVulnerabilities: number;
   pagesScanned: number;
   critical: number;
@@ -229,7 +230,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               const c = data as ScanComplete;
               setComplete(c);
               addTerminalLine("─".repeat(50));
-              addTerminalLine(`[done] Scan complete — Score: ${c.score}/100`);
+              addTerminalLine(`[done] Scan complete — Public surface score: ${c.score}/100`);
               addTerminalLine(`[done] ${c.totalVulnerabilities} vulnerabilities found across ${c.pagesScanned} page(s)`);
               if (c.critical > 0) addTerminalLine(`[!!]   ${c.critical} CRITICAL`);
               if (c.high > 0) addTerminalLine(`[!]    ${c.high} HIGH`);
@@ -307,7 +308,9 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", delay: 0.3 }}
                   className={`flex h-14 w-14 items-center justify-center rounded-2xl font-bold text-xl ${
-                    complete.score >= 80
+                    complete.critical > 0 ? "bg-red-500/20 text-red-400"
+                      : complete.high > 0 || complete.coverage?.partial ? "bg-yellow-500/20 text-yellow-400"
+                      : complete.score >= 80
                       ? "bg-emerald-500/20 text-emerald-400"
                       : complete.score >= 50
                         ? "bg-yellow-500/20 text-yellow-400"
@@ -490,6 +493,8 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               animate={{ opacity: 1, y: 0 }}
               className="border-t border-gray-800 px-6 py-4"
             >
+              <p className="mb-3 text-sm text-gray-300">Public surface score: {complete.score}/100. Repository code was not assessed in this scan.</p>
+              {complete.coverage?.partial && <p className="mb-3 text-sm text-amber-200">Partial scan. {complete.coverage.note}</p>}
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 {complete.critical > 0 && (
                   <span className="rounded-full bg-red-500/20 px-3 py-1 text-sm font-medium text-red-400">

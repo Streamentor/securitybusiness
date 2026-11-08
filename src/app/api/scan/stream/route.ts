@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { prepareCreator, recordReportCreator } from "@/lib/report-access";
+import { saveWebsiteDiagnostic } from "@/lib/website-scan-diagnostics";
+import { websiteFailure } from "@/lib/website-scan-failure";
 import { prisma } from "@/lib/db";
 import { scanWebsite, type ScanProgress, validateScanTarget, type VulnerabilityResult, WebsiteScanError } from "@/lib/scanner";
 import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
@@ -104,10 +106,12 @@ export async function POST(req: NextRequest) {
             status: "completed",
             overallScore: results.score,
             pagesScanned: results.pagesScanned,
-            totalPages: results.pagesScanned,
+            totalPages: results.coverage?.pagesDiscovered ?? results.pagesScanned,
             completedAt: new Date(),
           },
         });
+
+        await saveWebsiteDiagnostic(scan.id, {coverage: results.coverage});
 
         // The credit was reserved before the scan; only update usage here.
         if (userId) {
@@ -123,6 +127,7 @@ export async function POST(req: NextRequest) {
         send("complete", {
           scanId: scan.id,
           score: results.score,
+          coverage: results.coverage,
           totalVulnerabilities: actionable.length,
           pagesScanned: results.pagesScanned,
           critical: actionable.filter((v: VulnerabilityResult) => v.severity === "critical").length,
@@ -132,13 +137,15 @@ export async function POST(req: NextRequest) {
           info: actionable.filter((v: VulnerabilityResult) => v.severity === "info").length,
         });
       } catch (error) {
-        console.error("Stream scan error:", error);
+        const failure = error instanceof WebsiteScanError ? error.failure : websiteFailure("internal");
+        console.error(`Stream scan error: ${failure.code}`);
         if (scanId) {
           await prisma.scan.updateMany({
             where: { id: scanId, status: "running" },
-            data: { status: "failed" },
+            data: { status: "failed", completedAt: new Date() },
           }).catch(() => undefined);
         }
+        if (scanId) await saveWebsiteDiagnostic(scanId, {failure});
         if (userId && creditReserved) {
           await prisma.user.update({
             where: { id: userId },
@@ -147,7 +154,7 @@ export async function POST(req: NextRequest) {
           creditReserved = false;
         }
         send("error", {
-          message: error instanceof WebsiteScanError ? error.message : "Scan failed. Please check the URL and try again.",
+          message: failure.message, code: failure.code,
         });
       } finally {
         controller.close();

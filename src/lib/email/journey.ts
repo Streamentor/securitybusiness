@@ -36,7 +36,8 @@ export function emailJourney(c: EmailContext, history: SendHistory[], now: Date,
         const day = key === "first_scan_nudge" ? 1 : 4;
         begins = +humanTime(c, new Date(+c.createdAt + day * DAY)); end = +c.createdAt + (day === 1 ? 4 : 7) * DAY;
       } else reason = "Requires a completed website scan";
-    } else if (key.startsWith("first_scan_")) reason = "Website already scanned";
+    } else if (s.partial && key === "clean_outside") reason = "Partial website coverage cannot support a clean-outside email";
+    else if (key.startsWith("first_scan_")) reason = "Website already scanned";
     else if (+s.anchor > +c.createdAt + 14 * DAY) reason = "First scan was outside the 14-day enrollment window";
     else if (key === "welcome_report") { begins = +s.anchor; end = +s.anchor + 10 * 60_000; }
     else {

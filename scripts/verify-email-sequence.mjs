@@ -42,6 +42,7 @@ assert.ok(eligible(c,new Date('2026-01-01')));
 for(const change of [{plan:'starter'},{plan:'pro'},{optedOut:true},{suppressed:true},{consentAt:null},{email:'bad'},{createdAt:new Date('2025-01-01')}]) assert.equal(eligible({...c,...change},new Date('2026-01-01')),false);
 assert.equal(eligible(c,null),false);
 assert.equal(dueEmail(c,[],now),'welcome_report');
+assert.equal(dueEmail({...c,repo:undefined,scan:{...c.scan,partial:true,high:0}},[{emailKey:'welcome_report',createdAt:now,status:'sent'}],new Date(+now+2*DAY)),null,'partial coverage must not trigger a clean-outside claim');
 assert.equal(dueEmail(c,[{emailKey:'welcome_report',createdAt:now,status:'sent'}],new Date(+now+DAY)),null,'44 hour cap wins over day 1');
 const day2=humanTime(c,new Date(+now+MIN_GAP));
 assert.equal(dueEmail({...c,repo:undefined,scan:{...c.scan,high:0}},[{emailKey:'welcome_report',createdAt:now,status:'sent'}],day2),'clean_outside');
@@ -78,6 +79,8 @@ if (process.env.EMAIL_FIXTURE_OUTPUT) writeFileSync(process.env.EMAIL_FIXTURE_OU
 assert.match(renderEmail("welcome_report", {...c,scan:{...c.scan,domain:"long-subdomain-for-a-realistic-app.example.com"}}, process.env.EMAIL_POSTAL_ADDRESS).subject, /71\/100/);
 assert.doesNotMatch(renderEmail('welcome_report',{...c,scan:{...c.scan,top:undefined}},process.env.EMAIL_POSTAL_ADDRESS).body,/Check your public GitHub repo next/,'welcome acknowledges existing repo scan even when website is clean');
 assert.match(renderEmail('welcome_report',{...c,repo:undefined,scan:{...c.scan,top:undefined}},process.env.EMAIL_POSTAL_ADDRESS).body,/Check your public GitHub repo next/,'new repo invitation remains available before any repo scan');
+assert.match(renderEmail('welcome_report',{...c,scan:{...c.scan,partial:true}},process.env.EMAIL_POSTAL_ADDRESS).body,/scan was partial/);
+assert.match(renderEmail('last_note',{...c,scan:{...c.scan,rescanned:true,comparisonUnavailable:true,resolved:999}},process.env.EMAIL_POSTAL_ADDRESS).body,/cannot reliably say/);
 const readable = renderEmail('welcome_report', {...c,name:'Streamentor'}, process.env.EMAIL_POSTAL_ADDRESS);
 assert.ok(readable.body.startsWith('Hi,\n'), 'OAuth handles use a neutral greeting');
 assert.ok(renderEmail('welcome_report', c, process.env.EMAIL_POSTAL_ADDRESS).body.startsWith('Hi Alex,\n'));

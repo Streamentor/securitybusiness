@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
+import { readWebsiteDiagnostics } from "@/lib/website-scan-diagnostics";
 import { prisma } from "@/lib/db";
 
 export async function GET() {
@@ -114,6 +115,9 @@ export async function GET() {
       }),
     ]);
 
+    const diagnostics = await readWebsiteDiagnostics(recentScans.map(scan => scan.id));
+    const diagnosticByScan = new Map(diagnostics.map(row => [row.scanId, row]));
+
     // Format plan breakdown into a map
     const plans: Record<string, number> = {};
     for (const p of planBreakdown) {
@@ -157,7 +161,7 @@ export async function GET() {
       vulnBySeverity,
       trafficSources,
       recentUsers,
-      recentScans,
+      recentScans: recentScans.map(scan => ({...scan, diagnostic: diagnosticByScan.get(scan.id) ?? null})),
     });
   } catch (error) {
     console.error("Admin stats error:", error);
