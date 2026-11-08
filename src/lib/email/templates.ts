@@ -78,7 +78,7 @@ I'll stop these reminders here. If something blocked you, a short reply would he
 
 ${top ? `The issue I'd review first is "${top.title}" on ${top.path}. ${top.impact}` : "The public checks found no actionable issues. That is a useful starting point, but it doesn't verify the application logic inside your repository."}
 
-${top ? `Open your report: ${report}` : `Check your public GitHub repo next: ${repo}`}
+${top || c.repo ? `Open your report: ${report}` : `Check your public GitHub repo next: ${repo}`}
 
 ${s.rescanAvailable ? `You have one free verification rescan of this host until ${date(s.deadline)} (UTC). Run it after you deploy a fix to compare the results.` : "A website scan covers publicly observable behavior. It cannot confirm that private routes enforce ownership or database permissions."}
 
