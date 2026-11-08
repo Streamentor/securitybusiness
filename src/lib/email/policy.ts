@@ -3,8 +3,18 @@ import type { EmailContext, EmailKey, SendHistory } from "@/lib/email/types";
 import { validEmail } from "@/lib/email/config";
 export const DAY = 86_400_000;
 export const MIN_GAP = 44 * 3_600_000;
+export function eligibilityReason(c: Pick<EmailContext, "createdAt" | "plan" | "email" | "optedOut" | "suppressed" | "consentAt">, start: Date | null): string | null {
+  if (c.suppressed) return "Suppressed after a bounce, complaint or rejection";
+  if (c.optedOut) return "Unsubscribed";
+  if (c.plan !== "free") return "Paid plan: sequence stopped";
+  if (!start) return "Activation date is not configured";
+  if (+c.createdAt < +start) return "Account predates live enrollment";
+  if (!c.consentAt) return "Email opt-in not given";
+  if (!validEmail(c.email)) return "Invalid email address";
+  return null;
+}
 export function eligible(c: EmailContext, start: Date | null): boolean {
-  return !!start && +c.createdAt >= +start && c.plan === "free" && validEmail(c.email) && !c.optedOut && !c.suppressed && !!c.consentAt;
+  return eligibilityReason(c, start) === null;
 }
 export function jitter(userId: string): number { return createHash("sha256").update(userId).digest().readUInt32BE(0) % 41; }
 export function humanTime(c: Pick<EmailContext, "userId" | "createdAt">, earliest: Date): Date {
@@ -19,7 +29,8 @@ export function dueEmail(c: EmailContext, history: SendHistory[], now: Date): Em
   if (consumed.length >= 6) return null;
   const latest = consumed.reduce((n, s) => Math.max(n, +s.createdAt), 0);
   if (latest && +now - latest < MIN_GAP) return null;
-  const sent = (key: string) => consumed.some(s => s.emailKey === key);
+  // Cancelled reservations also retain their unique key; never forecast or retry it.
+  const sent = (key: string) => history.some(s => s.emailKey === key);
   const signupHour = c.createdAt.getUTCHours();
   const isHumanHour = now.getUTCHours() === (signupHour < 6 ? 8 : signupHour) && now.getUTCMinutes() <= 40;
   if (!c.scan) {
