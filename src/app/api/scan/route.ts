@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { saveWebsiteDiagnostic } from "@/lib/website-scan-diagnostics";
+import { websiteFailure } from "@/lib/website-scan-failure";
 import { prisma } from "@/lib/db";
 import { scanWebsite, validateScanTarget, WebsiteScanError } from "@/lib/scanner";
 import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { auth } from "@/lib/auth";
 import { admitWebsiteScan } from "@/lib/scan-gate";
 import { serializeWebsiteFindings } from "@/lib/scan-remediation";
+
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   let userId: string | null = null;
@@ -79,13 +83,15 @@ export async function POST(req: NextRequest) {
           status: "completed",
           overallScore: results.score,
           pagesScanned: results.pagesScanned,
-          totalPages: results.pagesScanned,
+          totalPages: results.coverage?.pagesDiscovered ?? results.pagesScanned,
           completedAt: new Date(),
         },
         include: {
           vulnerabilities: true,
         },
       });
+
+      await saveWebsiteDiagnostic(scan.id, {coverage: results.coverage});
 
       // The credit was reserved before the scan; only update usage here.
       if (userId) {
@@ -103,10 +109,12 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         ...updatedScan,
+        coverage: results.coverage,
         vulnerabilities: serializeWebsiteFindings(updatedScan.vulnerabilities, userPlan, !userId),
       }, {headers: {"Cache-Control": "private, no-store", ...(creator ? {"Set-Cookie": creator.cookie} : {})}});
     } catch (scanError) {
-      console.error("Scan execution error:", scanError);
+      const failure = scanError instanceof WebsiteScanError ? scanError.failure : websiteFailure("internal");
+      console.error(`Scan execution error: ${failure.code}`);
       if (userId && creditReserved) {
         await prisma.user.update({
           where: { id: userId },
@@ -116,12 +124,13 @@ export async function POST(req: NextRequest) {
       }
       await prisma.scan.update({
         where: { id: scan.id },
-        data: { status: "failed" },
+        data: { status: "failed", completedAt: new Date() },
       });
 
+      await saveWebsiteDiagnostic(scan.id, {failure});
       return NextResponse.json(
-        { error: scanError instanceof WebsiteScanError ? scanError.message : "Failed to scan the website. Please check the URL and try again." },
-        { status: scanError instanceof WebsiteScanError ? 422 : 500 }
+        { error: failure.message, code: failure.code },
+        { status: scanError instanceof WebsiteScanError ? 422 : 500, headers: {"Cache-Control": "private, no-store", ...(creator ? {"Set-Cookie": creator.cookie} : {})} }
       );
     }
   } catch (outerError) {

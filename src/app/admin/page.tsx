@@ -67,7 +67,10 @@ interface AdminUser {
   _count: { scans: number };
 }
 
+interface ScanDiagnostic { failureCode: string | null; failureMessage: string | null; httpStatus: number | null; provider: string | null; partial: boolean; coverageNote: string | null }
+
 interface AdminScan {
+  diagnostic?: ScanDiagnostic | null;
   id: string;
   url: string;
   status: string;
@@ -87,6 +90,7 @@ interface UserDetail extends AdminUser {
   utmMedium: string | null;
   utmCampaign: string | null;
   scans: {
+    diagnostic?: ScanDiagnostic | null;
     id: string;
     url: string;
     status: string;
@@ -742,8 +746,10 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-1.5">
                             {statusIcon(s.status)}
                             <span className="capitalize text-gray-300">
-                              {s.status}
+                              {s.status}{s.diagnostic?.partial ? " (partial)" : ""}
                             </span>
+                            {s.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
+                            {s.diagnostic?.partial && <p className="mt-2 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic.coverageNote}</p>}
                           </div>
                         </td>
                         <td
@@ -985,8 +991,10 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-1.5">
                           {statusIcon(s.status)}
                           <span className="capitalize text-gray-300">
-                            {s.status}
+                            {s.status}{s.diagnostic?.partial ? " (partial)" : ""}
                           </span>
+                          {s.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
+                          {s.diagnostic?.partial && <p className="mt-2 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic.coverageNote}</p>}
                         </div>
                       </td>
                       <td
@@ -1239,8 +1247,9 @@ export default function AdminDashboard() {
                                 <div className="flex items-center gap-1.5">
                                   {statusIcon(sc.status)}
                                   <span className="capitalize text-gray-300">
-                                    {sc.status}
+                                    {sc.status}{sc.diagnostic?.partial ? " (partial)" : ""}
                                   </span>
+                                  {sc.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{sc.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
                                 </div>
                               </td>
                               <td

@@ -1,4 +1,5 @@
 import "server-only";
+import { readWebsiteDiagnostics } from "@/lib/website-scan-diagnostics";
 import { prisma } from "@/lib/db";
 import { ensureRepoTables } from "@/lib/repo-store";
 import { ensureEmailTables } from "@/lib/email/store";
@@ -30,8 +31,11 @@ export async function loadEmailContext(userId: string, now = new Date()): Promis
     const sorted = [...actionable].sort((a, b) => ranks[a.severity] - ranks[b.severity] || a.title.localeCompare(b.title));
     const toFinding = (f: typeof actionable[number]): EmailFinding => ({ title: safeText(f.title, 75), path: path(f.url), severity: f.severity, impact: findingImpact(f) });
     const decision = decideScanAccess({ userId, plan: u.plan, credits: u.credits, targetUrl: latest.url, priorFreeScans: hostScans, now });
-    const comp = previous ? compareScanFindings(previous.vulnerabilities.filter(isVisibleWebsiteFinding), latest.vulnerabilities.filter(isVisibleWebsiteFinding)) : null;
-    c.scan = { id: latest.id, domain, score: latest.overallScore!, createdAt: latest.createdAt, completedAt: latest.completedAt, anchor: new Date(Math.max(+first.completedAt, +u.createdAt)), openCount: actionable.length, lockedCount: access.filter(f => f.remediationAccess === "locked" && actionable.some(a => a.id === f.id)).length, critical: actionable.filter(f => f.severity === "critical").length, high: actionable.filter(f => f.severity === "high").length, medium: actionable.filter(f => f.severity === "medium").length, top: selected ? toFinding(selected) : sorted[0] ? toFinding(sorted[0]) : undefined, top3: sorted.slice(0, 3).map(toFinding), rescanAvailable: decision.allowed && decision.kind === "verification", deadline: new Date(+(hostScans[0]?.createdAt || latest.createdAt) + VERIFICATION_WINDOW_MS), rescanned: !!previous, resolved: comp?.resolved.length || 0, added: comp?.added.length || 0, stillOpen: comp?.stillOpen || 0 };
+    const diagnostics = await readWebsiteDiagnostics([latest.id, ...(previousId ? [previousId] : [])]);
+    const partial = diagnostics.some(d => d.scanId === latest.id && d.partial);
+    const comparisonUnavailable = partial || diagnostics.some(d => d.scanId === previousId && d.partial);
+    const comp = previous && !comparisonUnavailable ? compareScanFindings(previous.vulnerabilities.filter(isVisibleWebsiteFinding), latest.vulnerabilities.filter(isVisibleWebsiteFinding)) : null;
+    c.scan = { partial, comparisonUnavailable, id: latest.id, domain, score: latest.overallScore!, createdAt: latest.createdAt, completedAt: latest.completedAt, anchor: new Date(Math.max(+first.completedAt, +u.createdAt)), openCount: actionable.length, lockedCount: access.filter(f => f.remediationAccess === "locked" && actionable.some(a => a.id === f.id)).length, critical: actionable.filter(f => f.severity === "critical").length, high: actionable.filter(f => f.severity === "high").length, medium: actionable.filter(f => f.severity === "medium").length, top: selected ? toFinding(selected) : sorted[0] ? toFinding(sorted[0]) : undefined, top3: sorted.slice(0, 3).map(toFinding), rescanAvailable: decision.allowed && decision.kind === "verification", deadline: new Date(+(hostScans[0]?.createdAt || latest.createdAt) + VERIFICATION_WINDOW_MS), rescanned: !!previous, resolved: comp?.resolved.length || 0, added: comp?.added.length || 0, stillOpen: comp?.stillOpen || 0 };
   }
   if (repo) {
     const result = repo.result as { findings?: Array<{ title?: string; file?: string; line?: number; severity?: string; description?: string; source?: string }> } | null;

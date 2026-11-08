@@ -74,13 +74,13 @@ I'll stop these reminders here. If something blocked you, a short reply would he
     switch (key) {
       case "welcome_report":
         subject = domain.length <= 25 ? `your ${domain} report is saved` : `your scan report is saved (${s.score}/100)`;
-        copy = `Your scan of ${domain} is saved. Score: ${s.score}/100, with ${s.critical} critical, ${s.high} high and ${s.medium} medium findings.
+        copy = `Your scan of ${domain} is saved. Public surface score: ${s.score}/100, with ${s.critical} critical, ${s.high} high and ${s.medium} medium findings.
 
 ${top ? `The issue I'd review first is "${top.title}" on ${top.path}. ${top.impact}` : "The public checks found no actionable issues. That is a useful starting point, but it doesn't verify the application logic inside your repository."}
 
 ${top || c.repo ? `Open your report: ${report}` : `Check your public GitHub repo next: ${repo}`}
 
-${s.rescanAvailable ? `You have one free verification rescan of this host until ${date(s.deadline)} (UTC). Run it after you deploy a fix to compare the results.` : "A website scan covers publicly observable behavior. It cannot confirm that private routes enforce ownership or database permissions."}
+${s.partial ? "This scan was partial. Unread checks remain unknown; review the report limits before drawing conclusions." : s.rescanAvailable ? `You have one free verification rescan of this host until ${date(s.deadline)} (UTC). Run it after you deploy a fix to compare the results.` : "A website scan covers publicly observable behavior. It cannot confirm that private routes enforce ownership or database permissions."}
 
 If anything in the report doesn't make sense, reply. I read every one.`;
         break;
@@ -161,7 +161,7 @@ Not sure it's useful for your app? Reply with what you're building and I'll tell
         subject = `1 last note on ${shortDomain}`;
         copy = `This is my last email about your ${domain} report.
 
-${s.rescanned ? `The comparison with the previous scan shows ${s.resolved} resolved finding groups, ${s.added} new groups, and ${s.stillOpen} still reported groups.` : `The scan from ${date(s.createdAt)} lists ${s.openCount} actionable issues. You haven't rescanned this host, so I can't tell whether fixes are deployed.`}
+${s.comparisonUnavailable ? "One of your scans was partial, so I cannot reliably say which findings were resolved. The latest report shows the evidence we could read." : s.rescanned ? `The comparison with the previous scan shows ${s.resolved} resolved finding groups, ${s.added} new groups, and ${s.stillOpen} still reported groups.` : `The scan from ${date(s.createdAt)} lists ${s.openCount} actionable issues. You haven't rescanned this host, so I can't tell whether fixes are deployed.`}
 
 If you fixed them already, great. A rescan can check the public surface again. If not, start with the unlocked fix in your report. Starter adds the remaining fix steps and coding-agent prompts: ${pricing}
 

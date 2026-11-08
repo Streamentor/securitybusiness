@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
+import { readWebsiteDiagnostics } from "@/lib/website-scan-diagnostics";
 import { prisma } from "@/lib/db";
 
 export async function GET(
@@ -56,7 +57,9 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json(user);
+    const diagnostics = await readWebsiteDiagnostics(user.scans.map(scan => scan.id));
+    const diagnosticByScan = new Map(diagnostics.map(row => [row.scanId, row]));
+    return NextResponse.json({...user, scans: user.scans.map(scan => ({...scan, diagnostic: diagnosticByScan.get(scan.id) ?? null}))});
   } catch (error) {
     console.error("Admin user detail error:", error);
     return NextResponse.json(

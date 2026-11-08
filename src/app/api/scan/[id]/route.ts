@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { reportPermission, reportHeaders } from "@/lib/report-access";
 import { ensureScanFunnel } from "@/lib/scan-funnel";
+import { readWebsiteDiagnostics } from "@/lib/website-scan-diagnostics";
 import { auth } from "@/lib/auth";
 import { serializeWebsiteFindings, isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import { compareScanFindings } from "@/lib/scan-comparison";
@@ -43,9 +44,11 @@ export async function GET(
 
     if (!user && !access.shared) await ensureScanFunnel().catch(() => { console.error("Scan funnel initialization unavailable"); });
 
+    const diagnostic = (await readWebsiteDiagnostics([scan.id]))[0] ?? null;
+
     // Owners see what changed since their previous completed scan of the same hostname.
     let comparison = null;
-    if (session?.user?.id && scan.userId === session.user.id && scan.status === "completed") {
+    if (session?.user?.id && scan.userId === session.user.id && scan.status === "completed" && !diagnostic?.partial) {
       try {
         const key = hostnameKey(scan.url);
         const candidates = await prisma.scan.findMany({
@@ -55,7 +58,8 @@ export async function GET(
           select: { id: true, url: true, overallScore: true, createdAt: true, vulnerabilities: { select: { type: true, title: true, url: true } } },
         });
         const previous = candidates.find((candidate) => isSameHost(candidate.url, key));
-        if (previous) {
+        const previousDiagnostic = previous ? (await readWebsiteDiagnostics([previous.id]))[0] : null;
+        if (previous && !previousDiagnostic?.partial) {
           comparison = {
             previousScanId: previous.id,
             previousScore: previous.overallScore,
@@ -70,6 +74,7 @@ export async function GET(
 
     return NextResponse.json({
       ...scan,
+      diagnostic,
       userId: access.owner ? scan.userId : null,
       access: {owner: access.owner, canClaim: access.canClaim, shared: access.shared, sharingEnabled: access.sharingEnabled, requiresAccount: !user && !access.shared},
       comparison,

@@ -4,7 +4,7 @@ export interface EmailFinding { title: string; path: string; severity: string; i
 export interface EmailContext {
   userId: string; email: string; name: string; plan: string; createdAt: Date; signupSource: string | null;
   optedOut: boolean; suppressed: boolean; consentAt: Date | null;
-  scan?: { id: string; domain: string; score: number; createdAt: Date; completedAt: Date; anchor: Date; openCount: number; lockedCount: number; critical: number; high: number; medium: number; top?: EmailFinding; top3: EmailFinding[]; rescanAvailable: boolean; deadline: Date; rescanned: boolean; resolved: number; stillOpen: number; added: number };
+  scan?: { partial?: boolean; comparisonUnavailable?: boolean; id: string; domain: string; score: number; createdAt: Date; completedAt: Date; anchor: Date; openCount: number; lockedCount: number; critical: number; high: number; medium: number; top?: EmailFinding; top3: EmailFinding[]; rescanAvailable: boolean; deadline: Date; rescanned: boolean; resolved: number; stillOpen: number; added: number };
   repo?: { id: string; count: number; visibility: string; top?: EmailFinding };
 }
 export interface SendHistory { emailKey: string; createdAt: Date; status: string }
