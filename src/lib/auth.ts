@@ -68,11 +68,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           let utmSource = "";
           let utmMedium = "";
           let utmCampaign = "";
+          let emailUpdates = false;
           try {
             const cookieStore = await cookies();
             const refCookie = cookieStore.get("signup_referrer");
             if (refCookie?.value) {
               const data = JSON.parse(decodeURIComponent(refCookie.value));
+              emailUpdates = data.emailUpdates === true;
               referrerUrl = data.referrerUrl || "";
               utmSource = data.utmSource || "";
               utmMedium = data.utmMedium || "";
@@ -97,6 +99,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               utmCampaign: utmCampaign || null,
             },
           });
+          if (emailUpdates) {
+            try { const { setEmailPreference } = await import("@/lib/email/store"); await setEmailPreference(newUser.id, true); } catch { console.error("OAuth email preference unavailable"); }
+          }
           user.id = newUser.id;
         } else {
           user.id = existingUser.id;

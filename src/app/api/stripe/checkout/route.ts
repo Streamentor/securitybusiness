@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { plan } = await req.json();
+    const { plan, emailCampaign } = await req.json();
 
     if (!plan || !(plan in PLANS)) {
       return NextResponse.json(
@@ -64,6 +64,11 @@ export async function POST(req: NextRequest) {
 
     const siteUrl = getSiteUrl();
 
+    let emailMetadata: Record<string, string> = {};
+    if (user.plan === "free" && typeof emailCampaign === "string") {
+      try { const { checkoutEmailAttribution } = await import("@/lib/email/attribution"); emailMetadata = await checkoutEmailAttribution(session.user.id, emailCampaign); } catch { console.error("Email checkout attribution unavailable"); }
+    }
+
     // Create checkout session
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -73,6 +78,7 @@ export async function POST(req: NextRequest) {
       metadata: {
         userId: session.user.id,
         plan: planKey,
+        ...emailMetadata,
       },
       success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteUrl}/pricing`,
