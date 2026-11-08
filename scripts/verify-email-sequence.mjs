@@ -44,12 +44,16 @@ assert.equal(eligible(c,null),false);
 assert.equal(dueEmail(c,[],now),'welcome_report');
 assert.equal(dueEmail(c,[{emailKey:'welcome_report',createdAt:now,status:'sent'}],new Date(+now+DAY)),null,'44 hour cap wins over day 1');
 const day2=humanTime(c,new Date(+now+MIN_GAP));
-assert.equal(dueEmail({...c,scan:{...c.scan,high:0}},[{emailKey:'welcome_report',createdAt:now,status:'sent'}],day2),'clean_outside');
+assert.equal(dueEmail({...c,repo:undefined,scan:{...c.scan,high:0}},[{emailKey:'welcome_report',createdAt:now,status:'sent'}],day2),'clean_outside');
 assert.equal(dueEmail(c,[{emailKey:'welcome_report',createdAt:now,status:'sent'}],day2),'still_open');
 const day3=humanTime(c,new Date(+now+3*DAY));
 assert.equal(dueEmail(c,[{emailKey:'still_open',createdAt:new Date(+now-DAY),status:'sent'}],day3),'repo_findings');
 assert.equal(dueEmail({...c,repo:undefined},[{emailKey:'clean_outside',createdAt:new Date(+now-DAY),status:'sent'}],day3),null);
 assert.equal(dueEmail({...c,scan:undefined,repo:undefined},[],humanTime(c,new Date(+now+DAY))),'first_scan_nudge');
+// Completed repo scans must remove acquisition prompts for that same action.
+assert.equal(dueEmail({...c,scan:undefined},[],humanTime(c,new Date(+now+DAY))),null,'repo-only user is not unactivated');
+assert.equal(dueEmail({...c,scan:{...c.scan,high:0}},[{emailKey:'welcome_report',createdAt:now,status:'sent'}],day2),null,'clean website plus completed repo needs no repo invitation');
+assert.equal(dueEmail({...c,repo:{...c.repo,count:0,top:undefined}},[{emailKey:'still_open',createdAt:new Date(+now-DAY),status:'sent'}],day3),null,'clean completed repo does not get repo_gap');
 const day5=humanTime(c,new Date(+now+5*DAY));
 assert.equal(dueEmail(c,[],day5),'rescan_expiring');
 assert.equal(dueEmail({...c,scan:{...c.scan,rescanAvailable:false}},[],day5),null);
@@ -72,6 +76,8 @@ for(const key of EMAIL_KEYS) {
 }
 if (process.env.EMAIL_FIXTURE_OUTPUT) writeFileSync(process.env.EMAIL_FIXTURE_OUTPUT, "# Synthetic email previews\n\nAll names, domains, findings and addresses below are fixtures, not customer data. No emails were sent.\n\n" + previewSections.join("\n\n"));
 assert.match(renderEmail("welcome_report", {...c,scan:{...c.scan,domain:"long-subdomain-for-a-realistic-app.example.com"}}, process.env.EMAIL_POSTAL_ADDRESS).subject, /71\/100/);
+assert.doesNotMatch(renderEmail('welcome_report',{...c,scan:{...c.scan,top:undefined}},process.env.EMAIL_POSTAL_ADDRESS).body,/Check your public GitHub repo next/,'welcome acknowledges existing repo scan even when website is clean');
+assert.match(renderEmail('welcome_report',{...c,repo:undefined,scan:{...c.scan,top:undefined}},process.env.EMAIL_POSTAL_ADDRESS).body,/Check your public GitHub repo next/,'new repo invitation remains available before any repo scan');
 const readable = renderEmail('welcome_report', {...c,name:'Streamentor'}, process.env.EMAIL_POSTAL_ADDRESS);
 assert.ok(readable.body.startsWith('Hi,\n'), 'OAuth handles use a neutral greeting');
 assert.ok(renderEmail('welcome_report', c, process.env.EMAIL_POSTAL_ADDRESS).body.startsWith('Hi Alex,\n'));

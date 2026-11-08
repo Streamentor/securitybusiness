@@ -23,6 +23,8 @@ export function dueEmail(c: EmailContext, history: SendHistory[], now: Date): Em
   const signupHour = c.createdAt.getUTCHours();
   const isHumanHour = now.getUTCHours() === (signupHour < 6 ? 8 : signupHour) && now.getUTCMinutes() <= 40;
   if (!c.scan) {
+    // A completed repo scan is activation too; do not send first-scan reminders.
+    if (c.repo) return null;
     if (!isHumanHour) return null;
     for (const [key, day, end] of [["first_scan_nudge", 1, 4], ["first_scan_last", 4, 7]] as const) {
       const due = humanTime(c, new Date(+c.createdAt + day * DAY));
@@ -35,7 +37,7 @@ export function dueEmail(c: EmailContext, history: SendHistory[], now: Date): Em
   if (!sent("welcome_report") && +now >= +s.anchor && +now <= +s.anchor + 10 * 60_000) return "welcome_report";
   if (!isHumanHour) return null;
   const slots: Array<{ keys: EmailKey[]; day: number; end: number; pick: EmailKey | null }> = [
-    { keys: ["still_open", "clean_outside"], day: 1, end: 3, pick: s.critical + s.high === 0 ? "clean_outside" : s.openCount >= 2 ? "still_open" : null },
+    { keys: ["still_open", "clean_outside"], day: 1, end: 3, pick: s.critical + s.high === 0 ? (c.repo ? null : "clean_outside") : s.openCount >= 2 ? "still_open" : null },
     { keys: ["repo_gap", "repo_findings"], day: 3, end: 5, pick: c.repo ? c.repo.count > 0 ? "repo_findings" : null : sent("clean_outside") ? null : "repo_gap" },
     { keys: ["rescan_expiring"], day: 5, end: 7, pick: s.rescanAvailable && +s.deadline - +now >= DAY && +s.deadline - +now <= 3 * DAY && s.openCount > 0 ? "rescan_expiring" : null },
     { keys: ["what_paid_unlocks"], day: 8, end: 12, pick: s.openCount > 0 || c.repo ? "what_paid_unlocks" : null },
