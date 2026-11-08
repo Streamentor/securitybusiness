@@ -5,7 +5,7 @@ import { sequenceMode, startAt, deliveryConfig, validEmail } from "@/lib/email/c
 import { loadEmailContext } from "@/lib/email/context";
 import { eligible, dueEmail } from "@/lib/email/policy";
 import { ensureEmailTables, lockEmailUser, reserveSend } from "@/lib/email/store";
-import { renderEmail } from "@/lib/email/templates";
+import { minimalHtml, renderEmail } from "@/lib/email/templates";
 import { sendEmail } from "@/lib/email/ses";
 import type { EmailContext, EmailKey } from "@/lib/email/types";
 export async function processEmailUser(userId: string, now = new Date()): Promise<boolean> {
@@ -45,6 +45,11 @@ export async function sendAdminTest(c: EmailContext, key: EmailKey, mode: "test"
   const admin = await prisma.user.findFirst({ where: { role: "admin", ...(adminId ? { id: adminId } : {}) }, orderBy: { createdAt: "asc" }, include: { emailPreference: true } });
   if (!admin || !validEmail(admin.email) || admin.emailPreference?.suppressed || admin.emailPreference?.marketingOptOut) throw new Error("Admin test recipient unavailable");
   const cfg = deliveryConfig(); const email = renderEmail(key, c, cfg.address); const id = randomUUID();
+  if (mode === "test") {
+    const note = `Template review: ${key}. This was selected manually, so this branch may not apply to your account. Figures and dates below come from your saved reports. Automatic emails check eligibility before sending.`;
+    email.text = `${note}\n\n${email.text}`;
+    email.html = minimalHtml(email.text);
+  }
   // Limit manual test sending too. Partial unique index isolates dry-run from live history.
   const reserved = await prisma.$transaction(async tx => {
     await lockEmailUser(tx, admin.id);

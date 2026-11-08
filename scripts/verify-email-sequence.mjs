@@ -72,6 +72,14 @@ for(const key of EMAIL_KEYS) {
 }
 if (process.env.EMAIL_FIXTURE_OUTPUT) writeFileSync(process.env.EMAIL_FIXTURE_OUTPUT, "# Synthetic email previews\n\nAll names, domains, findings and addresses below are fixtures, not customer data. No emails were sent.\n\n" + previewSections.join("\n\n"));
 assert.match(renderEmail("welcome_report", {...c,scan:{...c.scan,domain:"long-subdomain-for-a-realistic-app.example.com"}}, process.env.EMAIL_POSTAL_ADDRESS).subject, /71\/100/);
+const readable = renderEmail('welcome_report', {...c,name:'Streamentor'}, process.env.EMAIL_POSTAL_ADDRESS);
+assert.ok(readable.body.startsWith('Hi,\n'), 'OAuth handles use a neutral greeting');
+assert.ok(renderEmail('welcome_report', c, process.env.EMAIL_POSTAL_ADDRESS).body.startsWith('Hi Alex,\n'));
+assert.match(readable.html, /<a href="https:\/\/www\.scanmysaas\.com\/scan\/[^"]+">Open your report<\/a>/);
+assert.match(readable.html, /<p><a href="[^"]+">Unsubscribe<\/a><\/p>\n<p>ScanMySaaS,/);
+assert.doesNotMatch(readable.html, />https:\/\//, 'visible labels never expose full URLs');
+assert.ok(readable.text.includes(readable.unsubscribeUrl), 'plain text keeps full URLs');
+assert.ok(readable.html.includes('&amp;utm_medium='), 'query parameters remain escaped in hrefs');
 const paid=renderEmail('what_paid_unlocks',c,process.env.EMAIL_POSTAL_ADDRESS);
 for(const value of [PLANS.starter.price/100,PLANS.starter.credits,PLANS.starter.maxRollover,PLANS.pro.price/100,PLANS.pro.credits]) assert.ok(paid.text.includes(String(value)));
 assert.equal(verifyUnsubscribeToken('bad'),null);
