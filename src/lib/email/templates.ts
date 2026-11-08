@@ -14,14 +14,40 @@ export function emailLink(path: string, key: EmailKey): string {
 }
 function date(d: Date) { return d.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }); }
 function htmlEscape(s: string) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function linkLabel(url: string): string {
+  const path = new URL(url).pathname;
+  if (path === "/api/email/unsubscribe") return "Unsubscribe";
+  if (path.startsWith("/repo-scan/")) return "Open your repository report";
+  if (path.startsWith("/scan/")) return "Open your report";
+  if (path === "/pricing") return "See Starter and Pro";
+  if (path === "/repo-scan") return "Scan your repository";
+  return "Scan your app";
+}
 export function minimalHtml(text: string): string {
-  return text.split(/\n\n/).map(p => `<p>${htmlEscape(p).replace(/https:\/\/www\.scanmysaas\.com[^\s<]*/g, url => `<a href="${url}">${url}</a>`)}</p>`).join("\n");
+  // Escape text and hrefs separately. Full URLs stay in the plain-text alternative.
+  const links = /(?:Open your report: |See Starter: |Unsubscribe: |Plans: |Review your saved report: )?(https:\/\/www\.scanmysaas\.com\/[^\s<>"']*)/g;
+  return text.split(/\n+/).map(paragraph => {
+    let html = "", last = 0;
+    for (const match of paragraph.matchAll(links)) {
+      html += htmlEscape(paragraph.slice(last, match.index));
+      html += `<a href="${htmlEscape(match[1])}">${linkLabel(match[1])}</a>`;
+      last = match.index! + match[0].length;
+    }
+    return `<p>${html}${htmlEscape(paragraph.slice(last))}</p>`;
+  }).join("\n");
+}
+function greeting(name: string, email: string): string {
+  const cleaned = safeText(name, 70);
+  const parts = cleaned.split(/\s+/);
+  // A single OAuth handle is not reliable evidence of a person's first name.
+  const person = parts.length >= 2 && parts.every(p => /^[\p{L}][\p{L}'-]+$/u.test(p))
+    && !/\b(team|support|admin|labs|studio|company|llc|inc)\b/i.test(cleaned)
+    && parts[0].toLowerCase() !== email.split("@")[0].toLowerCase();
+  return person ? `Hi ${parts[0][0].toUpperCase() + parts[0].slice(1)},` : "Hi,";
 }
 export function renderEmail(key: EmailKey, c: EmailContext, address: string): RenderedEmail {
   if (!address.trim() || /[\r\n]/.test(address)) throw new Error("Postal address required");
-  const token = safeText(c.name, 70).split(" ")[0];
-  const first = token.length >= 2 && !/[\d@]/.test(token) ? token[0].toUpperCase() + token.slice(1) : "";
-  const hi = first ? `Hi ${first},` : "Hi,";
+  const hi = greeting(c.name, c.email);
   const s = c.scan, domain = safeText(s?.domain || "your app", 160);
   const shortDomain = domain.length <= 25 ? domain : "your app";
   const report = s ? emailLink(`/scan/${encodeURIComponent(s.id)}`, key) : "";
@@ -81,7 +107,7 @@ You can scan a public GitHub repo for free: ${repo}
 For private repos, Starter connects a read-only GitHub App. It also includes an AI review looking for logic mistakes such as missing ownership checks. AI findings need verification before you change code.`;
         break;
       case "repo_gap":
-        subject = `3 things a ${shortDomain} scan can't see`;
+        subject = `3 things your website scan can't see`;
         copy = `A website scan only sees what ${domain} shows to public requests. A few important mistakes need a look inside the repository:
 
 - a secret key committed in a source file
@@ -145,7 +171,7 @@ Either way, thanks for trying ScanMySaaS. If something didn't work for you, a on
   }
   const body = `${hi}\n\n${copy}\n\nStefan`;
   const unsub = unsubscribeUrl(c.userId);
-  const footer = `${s ? `You're getting this because you created a ScanMySaaS account and scanned ${domain}.` : "You're getting this because you created a ScanMySaaS account and opted in to email updates."}\nUnsubscribe: ${unsub}\nScanMySaaS, ${safeText(address, 400)}`;
+  const footer = `${s ? `You're getting this because you created a ScanMySaaS account and scanned ${domain}.` : "You're getting this because you created a ScanMySaaS account and opted in to email updates."}\n\nUnsubscribe: ${unsub}\n\nScanMySaaS, ${safeText(address, 400)}`;
   const text = `${body}\n\n${footer}`;
   const words = body.split(/\s+/).length;
   if (words < 60 || words > 170) throw new Error("Email body outside length budget");
