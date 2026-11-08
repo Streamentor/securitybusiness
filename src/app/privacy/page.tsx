@@ -20,9 +20,10 @@ export default function PrivacyPolicyPage() {
 
       <main className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
         <h1 className="text-4xl font-bold text-white">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-gray-500">Last updated: November 7, 2026</p>
+        <p className="mt-2 text-sm text-gray-500">Last updated: November 8, 2026</p>
 
         <div className="prose-invert mt-10 space-y-8 text-gray-300 leading-relaxed">
+          <section><h2 className="text-xl font-semibold text-white">Emails</h2><p className="mt-3">If you opt in, we send short onboarding and product emails based on your own scan data, such as findings, saved reports and verification rescan availability. Amazon Simple Email Service (SES) processes the recipient address and email content for delivery. We do not use open-tracking pixels or click-tracking redirects. We keep send, delivery, bounce, complaint and unsubscribe records to operate the service and prevent unwanted messages. Unsubscribe using any email footer or change Email updates in your dashboard. Unsubscribing does not clear a bounce or complaint suppression.</p></section>
           <section>
             <h2 className="text-xl font-semibold text-white">1. Introduction</h2>
             <p className="mt-3">

@@ -14,6 +14,7 @@ function GoogleMark() {
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [emailUpdates, setEmailUpdates] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export default function RegisterPage() {
   const router = useRouter();
 
   function storeReferrerCookie() {
-    const data = { referrerUrl: sessionStorage.getItem("referrer_url") || "", utmSource: sessionStorage.getItem("utm_source") || "", utmMedium: sessionStorage.getItem("utm_medium") || "", utmCampaign: sessionStorage.getItem("utm_campaign") || "" };
+    const data = { emailUpdates, referrerUrl: sessionStorage.getItem("referrer_url") || "", utmSource: sessionStorage.getItem("utm_source") || "", utmMedium: sessionStorage.getItem("utm_medium") || "", utmCampaign: sessionStorage.getItem("utm_campaign") || "" };
     document.cookie = `signup_referrer=${encodeURIComponent(JSON.stringify(data))};path=/;max-age=600;SameSite=Lax`;
   }
 
@@ -43,7 +44,7 @@ export default function RegisterPage() {
     event.preventDefault();
     setError("");
     setLoading(true);
-    const payload = { name, email, password, referrerUrl: sessionStorage.getItem("referrer_url") || "", utmSource: sessionStorage.getItem("utm_source") || "", utmMedium: sessionStorage.getItem("utm_medium") || "", utmCampaign: sessionStorage.getItem("utm_campaign") || "" };
+    const payload = { name, email, password, emailUpdates, referrerUrl: sessionStorage.getItem("referrer_url") || "", utmSource: sessionStorage.getItem("utm_source") || "", utmMedium: sessionStorage.getItem("utm_medium") || "", utmCampaign: sessionStorage.getItem("utm_campaign") || "" };
     try {
       const response = await fetch("/api/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
@@ -60,6 +61,7 @@ export default function RegisterPage() {
   return (
     <AuthFrame title="Create your account" subtitle="Start with one full scan. Keep the report and decide whether the findings deserve a deeper workflow.">
       {error && <div className="mb-3 rounded-xl border border-[#ff6b6b]/20 bg-[#ff6b6b]/[0.07] px-4 py-3 text-sm text-[#ff9696]">{error}</div>}
+      <label className="mb-4 flex items-start gap-2 text-sm text-[#98a2b3]"><input type="checkbox" checked={emailUpdates} onChange={e => setEmailUpdates(e.target.checked)} className="mt-1" /><span>Email me about my scans and ScanMySaaS. Optional. Unsubscribe anytime.</span></label>
       <div className="space-y-3">
         <button onClick={() => handleProvider("google")} disabled={Boolean(providerLoading)} className="button-secondary w-full"><GoogleMark />{providerLoading === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue with Google"}</button>
         <button onClick={() => handleProvider("github")} disabled={Boolean(providerLoading)} className="button-secondary w-full"><Github className="h-5 w-5" />{providerLoading === "github" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue with GitHub"}</button>
@@ -71,6 +73,7 @@ export default function RegisterPage() {
         <label className="block text-sm font-medium text-[#c5ccd5]">Password<div className="input-shell mt-2 flex items-center gap-3 rounded-xl px-3.5"><Lock className="h-4 w-4 text-[#667180]" /><input type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="new-password" placeholder="At least 8 characters" className="w-full bg-transparent py-3.5 text-sm text-white placeholder:text-[#586372] focus:outline-none" /></div></label>
         <button type="submit" disabled={loading} className="button-primary w-full">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create free account"}</button>
       </form>
+      <p className="mt-3 text-xs text-[#98a2b3]">If you opt in, we&apos;ll email you about your scans and ScanMySaaS. Unsubscribe anytime. <Link href="/privacy" className="underline">Privacy</Link>.</p>
       <p className="mt-4 text-center text-xs leading-5 text-[#667180]">By continuing, you agree to the <Link href="/terms" className="underline hover:text-white">Terms</Link> and <Link href="/privacy" className="underline hover:text-white">Privacy Policy</Link>.</p>
       <p className="mt-5 text-center text-sm text-[#7f8998]">Already have an account? <Link href="/login" className="font-medium text-white hover:text-[var(--signal)]">Sign in</Link></p>
     </AuthFrame>

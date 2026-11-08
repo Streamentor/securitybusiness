@@ -34,6 +34,11 @@ model User {
   scans                Scan[]
   githubInstallations  GitHubInstallation[]
   repoScans            RepoScan[]
+  emailConversion EmailConversion?
+  emailPreference EmailPreference?
+  emailSends EmailSend[]
+  emailTests EmailTestSend[] @relation("EmailTestSubject")
+  emailTestsAsAdmin EmailTestSend[] @relation("EmailTestAdmin")
   aiReviewPreference   AIReviewPreference?
   aiReviewUsage        AIReviewUsage[]
 }
@@ -138,4 +143,55 @@ model WebsiteReportAccess {
   scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
   creatorHash String?
   shareHash String?
+}
+
+model EmailPreference {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketingOptOut Boolean @default(false)
+  optOutAt DateTime?
+  suppressed Boolean @default(false)
+  suppressedReason String?
+  consentAt DateTime?
+  lastSequenceCheckAt DateTime?
+  updatedAt DateTime @default(now()) @updatedAt
+}
+model EmailSend {
+  id String @id
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailKey String
+  sesMessageId String? @unique
+  status String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  @@unique([userId, emailKey])
+  @@index([createdAt])
+}
+model EmailEvent {
+  id String @id
+  sendId String?
+  eventType String
+  createdAt DateTime @default(now())
+}
+model EmailTestSend {
+  id String @id
+  adminId String
+  admin User @relation("EmailTestAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation("EmailTestSubject", fields: [userId], references: [id], onDelete: Cascade)
+  emailKey String
+  mode String
+  sesMessageId String?
+  status String
+  createdAt DateTime @default(now())
+}
+
+model EmailConversion {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkoutId String @unique
+  emailKey String
+  sendId String
+  paidAt DateTime
 }

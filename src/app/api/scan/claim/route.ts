@@ -57,6 +57,12 @@ export async function POST(req: NextRequest) {
     });
     if (claimed.count !== 1) return NextResponse.json({error: "Scan already claimed"}, {status: 409, headers: reportHeaders});
 
+    if (process.env.VERCEL_ENV === "production" && ["live", "dry-run"].includes(process.env.EMAIL_SEQUENCE_MODE || "") && session.user.id) {
+      const { after } = await import("next/server");
+      const emailUserId = session.user.id;
+      after(async () => { const { maybeSendWelcome } = await import("@/lib/email/worker"); await maybeSendWelcome(emailUserId); });
+    }
+
     return NextResponse.json({ message: "Scan claimed successfully", claimed: true });
   } catch (error) {
     console.error("Scan claim error:", error);

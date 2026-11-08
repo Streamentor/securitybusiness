@@ -5,7 +5,7 @@ import { classifyReferrer } from "@/lib/referrer";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password, referrerUrl, utmSource, utmMedium, utmCampaign } = await req.json();
+    const { name, email, password, emailUpdates, referrerUrl, utmSource, utmMedium, utmCampaign } = await req.json();
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -49,6 +49,10 @@ export async function POST(req: NextRequest) {
         utmCampaign: utmCampaign || null,
       },
     });
+
+    if (emailUpdates === true) {
+      try { const { setEmailPreference } = await import("@/lib/email/store"); await setEmailPreference(user.id, true); } catch { console.error("Registration email preference unavailable"); }
+    }
 
     return NextResponse.json(
       { message: "Account created successfully", userId: user.id },

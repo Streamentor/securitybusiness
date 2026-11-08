@@ -73,7 +73,7 @@ export default function PricingPage() {
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planKey }),
+        body: JSON.stringify({ plan: planKey, emailCampaign: new URLSearchParams(window.location.search).get("utm_source") === "email" ? new URLSearchParams(window.location.search).get("utm_campaign") : undefined }),
       });
       const data = await response.json();
       if (data.url) window.location.href = data.url;

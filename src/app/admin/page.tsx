@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { AdminEmails } from "@/components/AdminEmails";
 import { AdminRegistrationChart } from "@/components/AdminRegistrationChart";
 import { motion } from "framer-motion";
 import {
@@ -180,7 +181,7 @@ export default function AdminDashboard() {
 
   // Users tab state
   const [activeTab, setActiveTab] = useState<
-    "overview" | "users" | "scans" | "user-detail"
+    "overview" | "users" | "scans" | "user-detail" | "emails"
   >("overview");
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
@@ -338,12 +339,13 @@ export default function AdminDashboard() {
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-xl border border-gray-800 bg-gray-900/50 p-1">
+        <div className="mb-6 flex flex-wrap gap-1 rounded-xl border border-gray-800 bg-gray-900/50 p-1">
           {(
             [
               { key: "overview", label: "Overview", icon: BarChart3 },
               { key: "users", label: "Users", icon: Users },
               { key: "scans", label: "Recent Scans", icon: ScanLine },
+              { key: "emails", label: "Emails", icon: BarChart3 },
             ] as const
           ).map(({ key, label, icon: Icon }) => (
             <button
@@ -362,6 +364,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Overview Tab ── */}
+        {activeTab === "emails" && <AdminEmails />}
         {activeTab === "overview" && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}

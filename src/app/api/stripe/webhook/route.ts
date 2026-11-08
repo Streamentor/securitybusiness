@@ -30,6 +30,12 @@ export async function POST(req: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         await handleCheckoutCompleted(session);
+        if (session.payment_status === "paid" && session.metadata?.email_campaign && session.metadata?.email_send_id && session.metadata?.userId) {
+          try {
+            const { recordEmailConversion } = await import("@/lib/email/attribution");
+            await recordEmailConversion({ checkoutId: session.id, userId: session.metadata.userId, campaign: session.metadata.email_campaign, sendId: session.metadata.email_send_id, paidAt: new Date(event.created * 1000) });
+          } catch { console.error("Paid checkout email attribution unavailable"); }
+        }
         break;
       }
 

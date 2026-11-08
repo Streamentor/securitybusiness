@@ -1,4 +1,5 @@
 "use client";
+import { EmailUpdates } from "@/components/EmailUpdates";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -157,6 +158,8 @@ export default function DashboardPage() {
               {userPlan.hasSubscription ? <button onClick={manageBilling} disabled={billingLoading} className="button-secondary mt-6 w-full"><CreditCard className="h-4 w-4" />{billingLoading ? "Opening…" : "Manage billing"}</button> : <Link href="/pricing" className="button-primary mt-6 w-full"><Sparkles className="h-4 w-4" /> View plans</Link>}
             </aside>
           </section>
+
+          <EmailUpdates />
 
           <section id="history" className="mt-10">
             <div className="mb-4 flex items-end justify-between"><div><h2 className="text-xl font-semibold tracking-[-0.025em]">Scan history</h2><p className="mt-1 text-xs text-[#717c8b]">Newest reports first</p></div>{scans.length > 0 && <span className="text-xs text-[#687382]">{scans.length} total</span>}</div>

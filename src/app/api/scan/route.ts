@@ -95,6 +95,12 @@ export async function POST(req: NextRequest) {
         });
       }
 
+    if (process.env.VERCEL_ENV === "production" && ["live", "dry-run"].includes(process.env.EMAIL_SEQUENCE_MODE || "") && userId) {
+      const { after } = await import("next/server");
+      const emailUserId = userId;
+      after(async () => { const { maybeSendWelcome } = await import("@/lib/email/worker"); await maybeSendWelcome(emailUserId); });
+    }
+
       return NextResponse.json({
         ...updatedScan,
         vulnerabilities: applyWebsiteRemediationAccess(updatedScan.vulnerabilities, userPlan),
