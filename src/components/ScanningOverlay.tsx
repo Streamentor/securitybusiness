@@ -27,10 +27,11 @@ import {
   ShieldAlert,
   ArrowRightLeft,
   FileCode,
+  X,
 } from "lucide-react";
 import { ReportUpgradeBanner } from "@/components/ReportUpgradeBanner";
 import { ScanLimitDialog } from "@/components/ScanLimitDialog";
-import { scanLimit, deeperScanAuthHref, type ScanLimit } from "@/lib/scan-journey";
+import { scanLimit, reportReturnHref, websiteScanReturnHref, type ScanLimit } from "@/lib/scan-journey";
 import { beginScanSessionVerification } from "@/lib/scan-session-verification";
 
 interface ScanProgress {
@@ -46,6 +47,7 @@ interface ScanProgress {
 interface ScanComplete {
   scanId: string;
   score: number;
+  previewFindings?: Array<{title: string; severity: string}>;
   coverage?: {partial: boolean; note: string};
   totalVulnerabilities: number;
   pagesScanned: number;
@@ -104,9 +106,10 @@ interface ScanningOverlayProps {
   url: string;
   isOpen: boolean;
   onClose: () => void;
+  reportId?: string;
 }
 
-export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverlayProps) {
+export default function ScanningOverlay({ url, isOpen, onClose, reportId }: ScanningOverlayProps) {
   const router = useRouter();
   const { status: authStatus } = useSession();
   const [progress, setProgress] = useState<ScanProgress[]>([]);
@@ -234,9 +237,10 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
             } else if (event === "complete") {
               const c = data as ScanComplete;
               setComplete(c);
+              try { sessionStorage.setItem("lastScanId", c.scanId); } catch {}
               addTerminalLine("─".repeat(50));
               addTerminalLine(`[done] Scan complete — Public surface score: ${c.score}/100`);
-              addTerminalLine(`[done] ${c.totalVulnerabilities} vulnerabilities found across ${c.pagesScanned} page(s)`);
+              addTerminalLine(`[done] ${c.totalVulnerabilities} findings observed across ${c.pagesScanned} page(s)`);
               if (c.critical > 0) addTerminalLine(`[!!]   ${c.critical} CRITICAL`);
               if (c.high > 0) addTerminalLine(`[!]    ${c.high} HIGH`);
               if (c.medium > 0) addTerminalLine(`[~]    ${c.medium} MEDIUM`);
@@ -264,12 +268,19 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
     }
   }, [terminalLines]);
 
+  useEffect(() => {
+    if (!isOpen || (!complete && !error)) return;
+    const closeOnEscape = (event: KeyboardEvent) => {if (event.key === "Escape") onClose();};
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen, complete, error, onClose]);
+
   const percentComplete = currentStep
     ? Math.round((currentStep.currentStep / currentStep.totalSteps) * 100)
     : 0;
 
   if (!isOpen) return null;
-  if (limit) return <ScanLimitDialog limit={limit} signedIn={authStatus === "authenticated" && verifiedLoggedIn} onClose={onClose} />;
+  if (limit) return <ScanLimitDialog limit={limit} signedIn={authStatus === "authenticated" && verifiedLoggedIn} returnTo={reportId ? reportReturnHref(reportId) : websiteScanReturnHref(url)} onClose={onClose} />;
 
   return (
     <AnimatePresence>
@@ -307,29 +318,11 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 </div>
               </div>
 
-              {/* Score badge (when complete) */}
-              {complete && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", delay: 0.3 }}
-                  className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-bold text-xl ${
-                    complete.critical > 0 ? "bg-red-500/20 text-red-400"
-                      : complete.high > 0 || complete.medium > 0 || complete.low > 0 || complete.coverage?.partial ? "bg-yellow-500/20 text-yellow-400"
-                      : complete.score >= 80
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : complete.score >= 50
-                        ? "bg-yellow-500/20 text-yellow-400"
-                        : "bg-red-500/20 text-red-400"
-                  }`}
-                >
-                  {complete.score}
-                </motion.div>
-              )}
+              {(complete || error) && <button type="button" aria-label="Close scan results" onClick={onClose} className="shrink-0 rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"><X className="h-5 w-5" /></button>}
+
             </div>
           </div>
 
-          {complete && viewerPlan !== "starter" && viewerPlan !== "pro" && <ReportUpgradeBanner />}
 
           {/* Progress bar */}
           {!complete && !error && (
@@ -504,59 +497,14 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               animate={{ opacity: 1, y: 0 }}
               className="border-t border-gray-800 px-6 py-4"
             >
-              <div className={`mb-4 rounded-xl border p-4 ${complete.totalVulnerabilities > 0 ? "border-red-400/30 bg-red-400/[0.06]" : "border-gray-700 bg-gray-900"}`}>
-                <p className="text-xl font-semibold text-white">{complete.totalVulnerabilities > 0 ? `${complete.totalVulnerabilities} findings. See what needs attention.` : "Your public surface scan is ready."}</p>
-                <p className="mt-2 text-sm leading-6 text-gray-300">{complete.totalVulnerabilities > 0 ? "A high score is not an all-clear. Review the evidence, then scan the code behind your app." : "No findings were observed. This scan does not assess private routes, ownership checks or database permissions in your code."}</p>
-              </div>
-              <p className="mb-3 text-sm text-gray-300">Public surface score: {complete.score}/100. Repository code was not assessed in this scan.</p>
-              {complete.coverage?.partial && <details className="mb-3 text-sm text-amber-200"><summary className="cursor-pointer">Partial scan — some checks could not finish</summary><p className="mt-2 leading-6">{complete.coverage.note}</p></details>}
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                {complete.critical > 0 && (
-                  <span className="rounded-full bg-red-500/20 px-3 py-1 text-sm font-medium text-red-400">
-                    {complete.critical} Critical
-                  </span>
-                )}
-                {complete.high > 0 && (
-                  <span className="rounded-full bg-orange-500/20 px-3 py-1 text-sm font-medium text-orange-400">
-                    {complete.high} High
-                  </span>
-                )}
-                {complete.medium > 0 && (
-                  <span className="rounded-full bg-yellow-500/20 px-3 py-1 text-sm font-medium text-yellow-400">
-                    {complete.medium} Medium
-                  </span>
-                )}
-                {complete.low > 0 && (
-                  <span className="rounded-full bg-blue-500/20 px-3 py-1 text-sm font-medium text-blue-400">
-                    {complete.low} Low
-                  </span>
-                )}
-                {complete.info > 0 && (
-                  <span className="rounded-full bg-gray-500/20 px-3 py-1 text-sm font-medium text-gray-400">
-                    {complete.info} Info
-                  </span>
-                )}
-              </div>
+              <p className="text-lg font-semibold text-white">{complete.totalVulnerabilities > 0 ? `${complete.totalVulnerabilities} findings on your public website` : "No findings were observed on the public surface."}</p>
+              {(complete.previewFindings?.length ?? 0) > 0 && <ul className="mt-3 space-y-2" aria-label="Findings preview">{complete.previewFindings!.map(finding => <li key={`${finding.severity}-${finding.title}`} className="flex items-start justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.025] p-3"><span className="text-sm leading-5 text-white">{finding.title}</span><span className={`shrink-0 text-xs capitalize ${finding.severity === "critical" || finding.severity === "high" ? "text-red-300" : "text-amber-200"}`}>{finding.severity}</span></li>)}</ul>}
+              <p className="mt-3 text-xs leading-5 text-gray-400">Public surface: {complete.score}/100. Repository code was not assessed.</p>
+              {complete.coverage?.partial && <details className="mt-2 text-xs text-amber-200"><summary className="cursor-pointer">Partial scan: some checks could not finish</summary><p className="mt-2 leading-5">{complete.coverage.note}</p></details>}
+              <button onClick={() => router.push(reportReturnHref(complete.scanId))} className="button-primary mt-4 w-full">See your report <ArrowRight className="h-4 w-4" /></button>
+              {authStatus === "unauthenticated" && <p className="mt-2 text-xs leading-5 text-gray-400">Preview one complete finding. A free account opens the rest of the affected pages and descriptions.</p>}
+              {(authStatus === "unauthenticated" || (verifiedLoggedIn && viewerPlan === "free")) && <div className="mt-4"><ReportUpgradeBanner compact /></div>}
 
-              {authStatus === "authenticated" && verifiedLoggedIn ? (
-                <div className="space-y-3">
-                  {viewerPlan === "free" && <><p className="text-sm leading-6 text-gray-300">Go deeper with private repository scans, AI code review and every available fix prompt.</p><button onClick={() => router.push("/pricing#plans")} className="button-primary w-full">Unlock maximum scan <ArrowRight className="h-4 w-4" /></button></>}
-                  <button onClick={() => router.push(`/scan/${complete.scanId}`)} className={viewerPlan === "free" ? "button-secondary w-full" : "button-primary w-full"}>View full report <ArrowRight className="h-4 w-4" /></button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm leading-6 text-gray-300">Your website report is ready. Create a free account to open all finding details, then connect your repository for a deeper code scan. Public repos are free; private repos and AI review require a paid plan.</p>
-                  <button onClick={() => {
-                    sessionStorage.setItem("pendingScanId", complete.scanId);
-                    void fetch(`/api/scan/${complete.scanId}/signup`, {method: "POST", keepalive: true}).catch(() => undefined);
-                    router.push(deeperScanAuthHref(complete.scanId));
-                  }} className="button-primary w-full">Run a deeper scan <ArrowRight className="h-4 w-4" /></button>
-                  <p className="text-center text-xs text-gray-400">Free account first. Choose a plan for private repos, AI review and all available fixes.</p>
-                  <button onClick={() => router.push("/pricing#plans")} className="button-secondary w-full">Unlock maximum scan</button>
-                  <button onClick={() => { sessionStorage.setItem("pendingScanId", complete.scanId); router.push(deeperScanAuthHref(complete.scanId, "login")); }} className="block w-full py-2 text-sm text-gray-300 underline underline-offset-4">Already have an account? Sign in</button>
-                  <button onClick={() => router.push(`/scan/${complete.scanId}`)} className="block w-full py-2 text-sm text-gray-400 underline underline-offset-4 hover:text-white">See the preview first</button>
-                </div>
-              )}
             </motion.div>
           )}
 

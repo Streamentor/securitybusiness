@@ -1,13 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import {validPendingScanId} from "@/lib/scan-auth-return";
 import { Globe2, Search } from "lucide-react";
 import ScanningOverlay from "@/components/ScanningOverlay";
 
 export function ScannerForm({ compact = false }: { compact?: boolean }) {
+  const [lastReport, setLastReport] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [scanUrl, setScanUrl] = useState("");
   const [scanning, setScanning] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+    const target = new URLSearchParams(window.location.search).get("url");
+    if (target && target.length <= 2048 && /^https?:\/\//i.test(target)) setUrl(target);
+    try { setLastReport(validPendingScanId(sessionStorage.getItem("lastScanId") || sessionStorage.getItem("pendingScanId"))); } catch {}
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   function startScan(event: React.FormEvent) {
     event.preventDefault();
@@ -29,7 +41,8 @@ export function ScannerForm({ compact = false }: { compact?: boolean }) {
           <Search className="h-4 w-4" /> <span className="hidden sm:inline">Scan website</span><span className="sm:hidden">Scan</span>
         </button>
       </form>
-      <ScanningOverlay url={scanUrl} isOpen={scanning} onClose={() => { setScanning(false); setScanUrl(""); }} />
+      {lastReport && <Link href={`/scan/${lastReport}`} className="mt-3 inline-block text-sm text-[var(--signal)] underline underline-offset-4">Open your last report</Link>}
+      <ScanningOverlay url={scanUrl} isOpen={scanning} onClose={() => { setScanning(false); setScanUrl(""); try { setLastReport(validPendingScanId(sessionStorage.getItem("lastScanId"))); } catch {} }} />
     </>
   );
 }

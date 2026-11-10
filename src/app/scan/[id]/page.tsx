@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   Github,
@@ -31,7 +31,7 @@ import { CopyPromptButton } from "@/components/CopyPromptButton";
 import ScanningOverlay from "@/components/ScanningOverlay";
 import { ReportUpgradeBanner } from "@/components/ReportUpgradeBanner";
 import { ScanLimitDialog } from "@/components/ScanLimitDialog";
-import { deeperScanAuthHref, type ScanLimit } from "@/lib/scan-journey";
+import { authPageHref, reportReturnHref, previewFindingTitles, type ScanLimit } from "@/lib/scan-journey";
 import { ToastContainer, toast } from "@/components/Toast";
 import { formatDate } from "@/lib/utils";
 import { buildFixPrompt } from "@/lib/fix-prompt";
@@ -80,10 +80,10 @@ function FindingCard({ finding, defaultOpen, expanded, onExpandedChange, onRegis
   const config = severityConfig[finding.severity] || severityConfig.info;
   const Icon = config.icon;
   const guideHref = guideForFinding(finding);
-  if (finding.detailsLocked) return <article className={`rounded-xl border ${config.border} ${finding.severity !== "info" ? "border-l-[3px] border-l-[#ff6b6b] bg-[#ff6b6b]/[0.035]" : "bg-[#0b1016]"} p-4 sm:p-5`}><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 break-words text-sm font-semibold text-white">{finding.title}</h3><span className={`shrink-0 text-xs font-semibold ${config.text}`}>{config.label}</span></div><Link href={registerHref} onClick={onRegister} className="mt-3 inline-flex items-center gap-2 text-xs text-[#ffc1c1] hover:underline"><Lock className="h-3.5 w-3.5" />Open this finding with a free account</Link></article>;
+  if (finding.detailsLocked) return <article id={`finding-${finding.id}`} className={`scroll-mt-24 rounded-xl border ${config.border} ${finding.severity !== "info" ? "border-l-[3px] border-l-[#ff6b6b] bg-[#ff6b6b]/[0.035]" : "bg-[#0b1016]"} p-4 sm:p-5`}><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 break-words text-sm font-semibold text-white">{finding.title}</h3><span className={`shrink-0 text-xs font-semibold ${config.text}`}>{config.label}</span></div><Link href={`${registerHref}&finding=${encodeURIComponent(finding.id)}`} onClick={onRegister} className="mt-3 inline-flex items-center gap-2 text-xs text-[#ffc1c1] hover:underline"><Lock className="h-3.5 w-3.5" />Open this finding with a free account</Link></article>;
   const fixPrompt = buildFixPrompt({ surface: "deployed website", title: finding.title, severity: finding.severity, category: finding.type, target: finding.url || "", evidence: finding.description || "", remediation: finding.remedy || "" });
   return (
-    <article id={`finding-${finding.id}`} className={`scroll-mt-6 overflow-hidden rounded-xl border ${config.border} bg-[#0b1016]`}>
+    <article id={`finding-${finding.id}`} className={`scroll-mt-24 overflow-hidden rounded-xl border ${config.border} bg-[#0b1016]`}>
       <button onClick={() => onExpandedChange ? onExpandedChange(!isOpen) : setOpen(!isOpen)} className="grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 p-4 text-left sm:gap-4 sm:p-5" aria-expanded={isOpen}>
         <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${config.bg} ${config.text}`}><Icon className="h-4 w-4" /></span>
         <span className="min-w-0"><span className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-white sm:text-base">{finding.title}</span><span className={`rounded px-1.5 py-0.5 text-[0.61rem] font-bold uppercase tracking-[.08em] ${config.bg} ${config.text}`}>{config.label}</span>{freeFix && <span className="rounded bg-[var(--signal)]/10 px-1.5 py-0.5 text-[0.61rem] font-bold uppercase tracking-[.08em] text-[var(--signal)]">Free fix</span>}</span><span className="mt-1.5 block break-all text-xs leading-5 text-[#667180]">{finding.type} · {finding.url}</span></span>
@@ -106,7 +106,6 @@ function FindingCard({ finding, defaultOpen, expanded, onExpandedChange, onRegis
 
 export default function ScanResultPage() {
   const params = useParams();
-  const router = useRouter();
   const [limit, setLimit] = useState<ScanLimit | null>(null);
   const { data: session } = useSession();
   const [scan, setScan] = useState<Scan | null>(null);
@@ -129,18 +128,12 @@ export default function ScanResultPage() {
         if (!scanResponse.ok) { setError("Report unavailable. Sign in as its owner or open an active sharing link."); return; }
         const scanData: Scan = await scanResponse.json();
         setScan(scanData);
-        let claimedForReturn = Boolean(scanData.access?.owner);
         if (session?.user?.id && scanData.access?.canClaim) {
           const claimed = await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: scanData.id }) });
           if (claimed.ok) {
-            claimedForReturn = true;
             if (sessionStorage.getItem("pendingScanId") === scanData.id) sessionStorage.removeItem("pendingScanId");
             setScan({...scanData, userId: session.user.id, access: {...scanData.access, owner: true, canClaim: false}});
           }
-        }
-        if (session?.user?.id && claimedForReturn && new URLSearchParams(window.location.search).get("next") === "repo") {
-          router.replace("/repo-scan?tab=private&from=website-report");
-          return;
         }
         if (planResponse.ok) { const plan = await planResponse.json(); setUserPlan(plan.plan || "free"); setUserCredits(plan.credits ?? null); }
         if (scanData.overallScore !== null) {
@@ -151,7 +144,13 @@ export default function ScanResultPage() {
       finally { setLoading(false); }
     }
     load();
-  }, [params.id, session?.user?.id, router]);
+  }, [params.id, session?.user?.id]);
+
+  useEffect(() => {
+    if (loading) return;
+    const match = window.location.hash.match(/^#finding-([A-Za-z0-9_-]{1,100})$/);
+    if (match) requestAnimationFrame(() => document.getElementById(`finding-${match[1]}`)?.scrollIntoView({block: "start"}));
+  }, [loading, scan?.id]);
 
   const canViewRemedies = userPlan === "starter" || userPlan === "pro";
   const findings = useMemo(() => [...(scan?.vulnerabilities || [])].filter(isVisibleWebsiteFinding).sort((a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity)), [scan]);
@@ -166,9 +165,10 @@ export default function ScanResultPage() {
   const counts = useMemo(() => Object.fromEntries(severityOrder.map((severity) => [severity, findings.filter((finding) => finding.severity === severity).length])) as Record<string, number>, [findings]);
   const visibleFindings = filter === "all" ? findings : findings.filter((finding) => finding.severity === filter);
   const freeFix = findings.find((finding) => finding.remediationAccess === "free");
+  const displayedFindings = scan?.access?.requiresAccount && filter === "all" && freeFix ? [freeFix, ...visibleFindings.filter(finding => finding.id !== freeFix.id)] : visibleFindings;
   const lockedFixCount = findings.filter((finding) => finding.remediationAccess === "locked").length;
 
-  const registerHref = deeperScanAuthHref(String(params.id));
+  const registerHref = authPageHref("register", {scanId: String(params.id)});
   function startRegistration() {
     if (!scan) return;
     sessionStorage.setItem("pendingScanId", scan.id);
@@ -235,12 +235,12 @@ export default function ScanResultPage() {
 
   return (
     <main className="min-h-screen pb-20">
-      <header className="border-b border-white/[0.08] bg-[#07090d]/88 backdrop-blur-xl"><div className="app-shell flex min-h-16 flex-wrap items-center justify-between gap-3 py-3"><Brand /><div className="flex items-center gap-2">{userCredits !== null && <span className="hidden items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-[#aab3bf] sm:flex"><Zap className="h-3.5 w-3.5 text-[var(--amber)]" />{userCredits} left</span>}{ownsScan && <button onClick={shareReport} disabled={sharingBusy} className="button-secondary !min-h-9 !px-3 !py-2"><Share2 className="h-3.5 w-3.5" /><span>{scan.access?.sharingEnabled ? "Replace share link" : "Create share link"}</span></button>}{session?.user && <button onClick={rescan} aria-label="Rescan this website" className="button-primary !min-h-9 !px-3 !py-2"><RotateCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Rescan</span></button>}<Link href={session?.user ? "/dashboard" : "/"} className="ml-1 text-xs text-[#8a94a2] hover:text-white"><span className="hidden sm:inline">{session?.user ? "Dashboard" : "New scan"}</span><ArrowLeft className="h-4 w-4 sm:hidden" /></Link></div></div></header>
+      <header className="border-b border-white/[0.08] bg-[#07090d]/88 backdrop-blur-xl"><div className="app-shell flex min-h-16 flex-wrap items-center justify-between gap-3 py-3"><Brand /><div className="flex items-center gap-2">{session?.user && userCredits !== null && <span className="hidden items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-[#aab3bf] sm:flex"><Zap className="h-3.5 w-3.5 text-[var(--amber)]" />{userCredits} left</span>}{ownsScan && <button onClick={shareReport} disabled={sharingBusy} className="button-secondary !min-h-9 !px-3 !py-2"><Share2 className="h-3.5 w-3.5" /><span>{scan.access?.sharingEnabled ? "Replace share link" : "Create share link"}</span></button>}{session?.user && <button onClick={rescan} aria-label="Rescan this website" className="button-primary !min-h-9 !px-3 !py-2"><RotateCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Rescan</span></button>}<Link href={session?.user ? "/dashboard" : "/"} className="ml-1 text-xs text-[#8a94a2] hover:text-white"><span className="hidden sm:inline">{session?.user ? "Dashboard" : "New scan"}</span><ArrowLeft className="h-4 w-4 sm:hidden" /></Link></div></div></header>
 
       {!canViewRemedies && <ReportUpgradeBanner />}
 
       <div className="app-shell py-8 sm:py-12">
-        {ownsScan && <section className="surface-muted mb-6 rounded-xl p-4" aria-label="Report sharing">
+        {ownsScan && (shareUrl || scan.access?.sharingEnabled) && <section className="surface-muted mb-6 rounded-xl p-4" aria-label="Report sharing">
           <p className="text-sm text-[#a5aeba]">{scan.access?.sharingEnabled ? "Link sharing is enabled. Anyone with the current link can view this report." : "This report is private. Create a sharing link to let someone else view it."}</p>
           {shareUrl && <div className="mt-3 flex flex-wrap gap-2"><input aria-label="Sharing link" readOnly value={shareUrl} className="min-w-0 flex-1 rounded border border-white/10 bg-black/20 p-2 text-xs" /><button className="button-secondary" onClick={async () => {try {await navigator.clipboard.writeText(shareUrl); toast("Sharing link copied.", "success");} catch {toast("Select and copy the sharing link above.", "warning");}}}>Copy link</button></div>}
           {scan.access?.sharingEnabled && <button className="button-secondary mt-3" disabled={sharingBusy} onClick={revokeShare}>Revoke sharing link</button>}
@@ -248,18 +248,47 @@ export default function ScanResultPage() {
         {scan.access?.shared && !ownsScan && <p className="mb-6 text-sm text-[#a5aeba]">Shared report · access can be revoked by its owner.</p>}
 
         <section className={`surface overflow-hidden rounded-2xl ${findings.length > 0 ? "!border-[#ff6b6b]/30" : ""}`}>
-          <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div><div className="flex items-center gap-2 text-xs text-[#798493]"><Globe2 className="h-3.5 w-3.5" /><span className="break-all">{scan.url}</span></div><h1 className="mt-4 text-3xl font-semibold tracking-[-0.05em] sm:text-4xl">Website security report</h1><p className={`mt-4 flex items-start gap-2 text-lg font-semibold ${findings.length > 0 ? "text-[#ff9292]" : "text-[#cbd3df]"}`}><AlertTriangle className="mt-1 h-5 w-5 shrink-0" />{findings.length > 0 ? `${findings.length} finding${findings.length === 1 ? "" : "s"} to review, even with a ${scan.overallScore ?? "—"}/100 score.` : "No findings observed. Your repository has not been assessed."}</p><div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#7b8695]"><span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" />{formatDate(scan.createdAt)}</span><span className="flex items-center gap-1.5"><FileSearch className="h-3.5 w-3.5" />{scan.pagesScanned} pages</span><span className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{findings.length} findings</span></div>{percentile !== null && findings.length === 0 && !scan.diagnostic?.partial && <div className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-xs text-[#aab3bf]"><Trophy className="h-3.5 w-3.5 text-[var(--amber)]" /> Scores above {percentile}% of scanned sites</div>}</div>
-            <div className="flex items-center gap-5 lg:pl-12"><div className="relative flex h-24 w-24 items-center sm:h-32 sm:w-32 justify-center rounded-full" style={{ background: `conic-gradient(${status.color} ${(scan.overallScore ?? 0) * 3.6}deg, rgba(255,255,255,.07) 0deg)` }}><div className="absolute inset-[9px] rounded-full bg-[#10161e]" /><div className="relative text-center"><p className="mb-1 text-[0.56rem] font-semibold uppercase tracking-wide text-[#98a2b3]">Public surface</p><p className="text-4xl font-semibold tracking-[-0.06em]">{scan.overallScore ?? "—"}</p><p className="mx-auto mt-0.5 max-w-[88px] text-[0.56rem] font-semibold uppercase leading-3 tracking-[.04em]" style={{ color: status.color }}>{status.label}</p></div></div></div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 p-4 sm:gap-8 sm:p-8">
+            <div><div className="flex items-center gap-2 text-xs text-[#798493]"><Globe2 className="h-3.5 w-3.5" /><span className="break-all">{scan.url}</span></div><h1 className="mt-3 text-xl font-semibold tracking-[-0.05em] sm:text-4xl">Website security report</h1><p className={`mt-3 flex items-start gap-2 text-sm font-semibold sm:text-lg ${findings.length > 0 ? "text-[#ff9292]" : "text-[#cbd3df]"}`}><AlertTriangle className="mt-1 h-5 w-5 shrink-0" />{findings.length > 0 ? `${findings.length} finding${findings.length === 1 ? "" : "s"} to review, even with a ${scan.overallScore ?? "—"}/100 score.` : "No findings observed. Your repository has not been assessed."}</p><div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#7b8695]"><span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" />{formatDate(scan.createdAt)}</span><span className="flex items-center gap-1.5"><FileSearch className="h-3.5 w-3.5" />{scan.pagesScanned} pages</span><span className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />{findings.length} findings</span></div>{percentile !== null && findings.length === 0 && !scan.diagnostic?.partial && <div className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-xs text-[#aab3bf]"><Trophy className="h-3.5 w-3.5 text-[var(--amber)]" /> Scores above {percentile}% of scanned sites</div>}</div>
+            <div className="flex items-center gap-5 lg:pl-12"><div className="relative flex h-28 w-28 items-center sm:h-32 sm:w-32 justify-center rounded-full" style={{ background: `conic-gradient(${status.color} ${(scan.overallScore ?? 0) * 3.6}deg, rgba(255,255,255,.07) 0deg)` }}><div className="absolute inset-[9px] rounded-full bg-[#10161e]" /><div className="relative max-w-[90px] text-center"><p className="mb-1 text-[0.56rem] font-semibold uppercase tracking-wide text-[#98a2b3]">Public surface</p><p className="text-3xl font-semibold tracking-[-0.06em] sm:text-4xl">{scan.overallScore ?? "—"}</p><p className="mx-auto mt-0.5 max-w-[88px] text-[0.56rem] font-semibold uppercase leading-3 tracking-[.04em]" style={{ color: status.color }}>{status.label}</p></div></div></div>
           </div>
           <div className="grid grid-cols-5 border-t border-white/[0.08]">{severityOrder.map((severity) => { const config = severityConfig[severity]; return <button key={severity} onClick={() => setFilter(filter === severity ? "all" : severity)} className={`border-r border-white/[0.07] px-2 py-4 text-left sm:px-4 transition last:border-r-0 hover:bg-white/[0.025] ${filter === severity ? config.bg : ""}`}><p className={`text-2xl font-semibold ${counts[severity] > 0 && severity !== "info" ? "text-[#ff9292]" : "text-[#697483]"}`}>{counts[severity]}</p><p className="mt-1 text-[0.66rem] font-medium uppercase tracking-[.09em] text-[#697483]">{config.label}</p></button>; })}</div>
+          {findings.length > 1 && <nav aria-label="Priority finding titles" className="border-t border-white/[0.08] px-4 py-2 sm:px-8">{previewFindingTitles(findings).map(preview => {
+            const finding = findings.find(item => item.title === preview.title);
+            if (!finding) return null;
+            return <a key={finding.title} href={`#finding-${finding.id}`} className="flex items-center justify-between gap-3 py-2 text-xs hover:underline"><span className="min-w-0 truncate text-[#e2e8f0]">{finding.title}</span><span className={`shrink-0 capitalize ${(severityConfig[finding.severity] || severityConfig.info).text}`}>{finding.severity}</span></a>;
+          })}</nav>}
+
         </section>
+
+        <div className="mt-5 grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_19rem]">
+          <section className="min-w-0">
+            {scan.comparison && <div className="surface-muted mb-6 rounded-2xl p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-base font-semibold tracking-[-0.02em]">Since your previous scan</h2><Link href={`/scan/${scan.comparison.previousScanId}`} className="text-xs text-[#8f99a7] hover:text-white">{new Date(scan.comparison.previousCreatedAt).toLocaleDateString()} · score {scan.comparison.previousScore ?? "—"} → {scan.overallScore ?? "—"}</Link></div>
+              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-xl bg-[#b9ff66]/[0.06] px-3 py-3"><p className="text-2xl font-semibold text-[#b9ff66]">{scan.comparison.resolved.length}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">Resolved</p></div>
+                <div className="rounded-xl bg-[#ff6b6b]/[0.06] px-3 py-3"><p className="text-2xl font-semibold text-[#ff8585]">{scan.comparison.added.length}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">New</p></div>
+                <div className="rounded-xl bg-white/[0.035] px-3 py-3"><p className="text-2xl font-semibold text-white">{scan.comparison.stillOpen}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">Still open</p></div>
+              </div>
+              {(scan.comparison.resolved.length > 0 || scan.comparison.added.length > 0) && <ul className="mt-4 space-y-1 text-xs leading-5 text-[#a5afbd]">{scan.comparison.resolved.map((title) => <li key={`r-${title}`}><span className="mr-2 text-[#b9ff66]">✓</span>{title}</li>)}{scan.comparison.added.map((title) => <li key={`a-${title}`}><span className="mr-2 text-[#ff8585]">+</span>{title}</li>)}</ul>}
+            </div>}
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-semibold tracking-[-0.025em]">{filter === "all" ? "All findings" : `${severityConfig[filter].label} findings`}</h2><p className="mt-1 text-xs text-[#717c8b]">{scan.access?.requiresAccount && freeFix ? "One complete finding first. Remaining findings follow in priority order." : "Ordered from highest to lowest priority"}</p></div>{freeFix && <button onClick={openFreeFix} className="ml-3 shrink-0 text-xs font-semibold text-[var(--signal)]">Open your free fix</button>}{filter !== "all" && <button onClick={() => setFilter("all")} className="text-xs text-[var(--signal)] hover:underline">Clear filter</button>}</div>
+            {visibleFindings.length ? <div className="space-y-3">{displayedFindings.map((finding, index) => <FindingCard key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={index === 0} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[var(--signal)]" /><p className="mt-4 font-medium">No {filter} findings.</p></div>}
+          </section>
+
+          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+            <div className="surface-muted rounded-2xl p-5"><p className="text-xs font-semibold uppercase tracking-[.12em] text-[#6e7988]">Next move</p><p className="mt-4 text-lg font-semibold tracking-[-0.025em]">{priorityCount ? `Start with ${priorityCount} priority finding${priorityCount === 1 ? "" : "s"}.` : findings.length ? "Work through the medium-risk findings." : "Keep monitoring after releases."}</p><p className="mt-3 text-sm leading-6 text-[#7f8998]">{priorityCount ? "Critical and high findings can have the largest impact. Verify each one before making a production change." : "A clean automated result is useful, but it does not prove the app is vulnerability-free."}</p></div>
+            {!scan.access?.requiresAccount && !canViewRemedies && lockedFixCount > 0 && <div className="rounded-2xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.05] p-5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--signal)]/10 text-[var(--signal)]"><Lock className="h-4 w-4" /></span><h3 className="mt-5 font-semibold">Unlock the remaining fixes.</h3><p className="mt-2 text-sm leading-6 text-[#8f99a7]">{freeFix ? "Your first actionable fix is included. Paid plans add the remaining implementation steps and scan credits for follow-up checks." : "Paid plans add implementation steps and scan credits for follow-up checks."}</p><Link href="/pricing" className="button-primary mt-5 w-full">View plans</Link></div>}
+            <button onClick={rescan} className="button-secondary w-full"><RotateCw className="h-4 w-4" /> {verificationRescan && !(userCredits && userCredits > 0) ? "Verify your fixes (free rescan)" : "Scan this site again"}</button>
+            <Link href="/" className="flex items-center justify-center gap-2 py-2 text-xs text-[#737e8d] hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Scan another website</Link>
+          </aside>
+        </div>
 
         {scan.access?.requiresAccount && <section className="mt-6 rounded-2xl border border-[#ff6b6b]/30 bg-[#ff6b6b]/[0.05] p-5 sm:p-6" aria-label="Open your report">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#ff9292]"><Lock className="h-4 w-4" /> Your report is ready</p>
-          <h2 className="mt-3 text-2xl font-semibold">{findings.filter(f => f.detailsLocked).length > 0 ? `Run a deeper scan of ${siteHost}.` : "Run a deeper scan of your app."}</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#b7c0cd]">Open all finding details with a free account, then connect the code behind your app. A repository scan checks risks this website scan cannot see. Public repos are free; private repos and AI code review are on paid plans.</p>
-          <div className="mt-5 flex flex-wrap gap-3"><Link href={registerHref} onClick={startRegistration} className="button-primary">Run a deeper scan <ArrowUpRight className="h-4 w-4" /></Link><Link href={deeperScanAuthHref(scan.id, "login")} onClick={() => sessionStorage.setItem("pendingScanId", scan.id)} className="button-secondary">Already have an account? Sign in</Link></div>
+          <h2 className="mt-3 text-2xl font-semibold">{findings.filter(f => f.detailsLocked).length > 0 ? `Open all findings for ${siteHost}.` : "Save your report."}</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#b7c0cd]">Create a free account to see every affected page and finding description. You will return to this report. One available fix is included; remaining fixes are on paid plans.</p>
+          <div className="mt-5 flex flex-wrap gap-3"><Link href={registerHref} onClick={startRegistration} className="button-primary">Create free account to open findings <ArrowUpRight className="h-4 w-4" /></Link><Link href={authPageHref("login", {scanId: scan.id})} onClick={() => sessionStorage.setItem("pendingScanId", scan.id)} className="button-secondary">Already have an account? Sign in</Link></div>
           <p className="mt-3 text-xs text-[#98a2b3]">No card needed. One fix included when available; remaining fix steps require a paid plan.</p>
         </section>}
 
@@ -268,20 +297,19 @@ export default function ScanResultPage() {
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#ff9292]"><Github className="h-4 w-4" /> Repository not assessed</p>
             <h2 className="mt-3 text-xl font-semibold">Now scan the code behind {siteHost}.</h2>
             <p className="mt-3 text-sm leading-6 text-[#aeb8c5]">This report only sees what is public. Scan the repository for committed secrets, risky GitHub Actions, missing database-rule signals and vulnerable dependencies, with findings pointing to the file and line.</p>
-            <Link href="/repo-scan" className="button-secondary mt-5 w-full sm:w-auto">Scan your repository <ArrowUpRight className="h-4 w-4" /></Link>
+            <Link href={`/repo-scan?report=${scan.id}`} className="button-secondary mt-5 w-full sm:w-auto">Scan your repository <ArrowUpRight className="h-4 w-4" /></Link>
             <p className="mt-3 text-xs text-[#98a2b3]">Public repos are free. Private repos use a read-only GitHub App on paid plans.</p>
           </div>
           <div className="rounded-2xl border border-[var(--cobalt)]/30 bg-[var(--cobalt)]/[0.06] p-5 sm:p-6">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#a8b6ff]"><Sparkles className="h-4 w-4" /> {canViewRemedies ? "Your paid scan tools" : "Go beyond the free report"}</p>
             <h2 className="mt-3 text-xl font-semibold">{canViewRemedies ? "Put your plan to work." : "Unlock maximum scan"}</h2>
             <p className="mt-3 text-sm leading-6 text-[#aeb8c5]">Get available fix steps and coding-agent prompts across the report, private repository scans, AI review of high-risk server code and monthly credits to rescan after changes.</p>
-            <Link href={canViewRemedies ? "/repo-scan?tab=private" : "/pricing#plans"} className="button-primary mt-5 w-full sm:w-auto">{canViewRemedies ? "Start a private repo scan" : "Unlock maximum scan"} <ArrowUpRight className="h-4 w-4" /></Link>
+            <Link href={canViewRemedies ? "/repo-scan?tab=private" : "/pricing#paid-plans"} className="button-primary mt-5 w-full sm:w-auto">{canViewRemedies ? "Start a private repo scan" : "Unlock maximum scan"} <ArrowUpRight className="h-4 w-4" /></Link>
             <p className="mt-3 text-xs text-[#98a2b3]">{canViewRemedies ? "AI review has token limits. Verify findings before changing code." : "Choose Starter or Pro, then continue to checkout. AI review has token limits."}</p>
           </div>
         </section>
 
         <section className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-5 sm:p-6" aria-label="Scan coverage"><h2 className="text-lg font-semibold text-amber-200">{findings.length} finding{findings.length === 1 ? "" : "s"} on the public surface</h2><p className="mt-2 text-sm leading-6 text-[#a5aeba]">{priorityCount > 0 ? `${priorityCount} critical or high finding${priorityCount === 1 ? "" : "s"} to verify first. ` : "Review the evidence before changing code. "}The public surface score is not an overall app security score. Ownership checks, roles and database permissions need code review and authenticated testing.</p>{scan.diagnostic?.partial && <p className="mt-3 text-sm leading-6 text-amber-200"><strong>Partial scan.</strong> {scan.diagnostic.coverageNote}</p>}</section>
-        {freeFix && <section className="mt-6 rounded-2xl border border-[var(--signal)]/25 bg-[var(--signal)]/[0.05] p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="flex items-center gap-2 text-sm font-semibold text-[var(--signal)]"><Sparkles className="h-4 w-4" /> One free fix included</p><h2 className="mt-2 text-lg font-semibold">{freeFix.title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[#9aa5b3]">Start with the highest-priority actionable finding in this report. Review the steps or copy its fix prompt into your coding agent, then verify the finding before changing code.</p></div><button onClick={openFreeFix} className="button-primary shrink-0">Open your free fix <ArrowUpRight className="h-4 w-4" /></button></div></section>}
 
         {readiness.length > 0 && <section className="mt-8">
           <div className="mb-4"><p className="eyebrow">SaaS readiness</p><h2 className="mt-2 text-xl font-semibold tracking-[-0.025em]">Discovery, trust, and crawl essentials</h2><p className="mt-1 text-xs leading-5 text-[#717c8b]">Operational signals that sit beside the security score and do not change it.</p></div>
@@ -297,32 +325,11 @@ export default function ScanResultPage() {
           </div>
         </section>}
 
-        <div className="mt-8 grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_19rem]">
-          <section className="min-w-0">
-            {scan.comparison && <div className="surface-muted mb-6 rounded-2xl p-5">
-              <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-base font-semibold tracking-[-0.02em]">Since your previous scan</h2><Link href={`/scan/${scan.comparison.previousScanId}`} className="text-xs text-[#8f99a7] hover:text-white">{new Date(scan.comparison.previousCreatedAt).toLocaleDateString()} · score {scan.comparison.previousScore ?? "—"} → {scan.overallScore ?? "—"}</Link></div>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-xl bg-[#b9ff66]/[0.06] px-3 py-3"><p className="text-2xl font-semibold text-[#b9ff66]">{scan.comparison.resolved.length}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">Resolved</p></div>
-                <div className="rounded-xl bg-[#ff6b6b]/[0.06] px-3 py-3"><p className="text-2xl font-semibold text-[#ff8585]">{scan.comparison.added.length}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">New</p></div>
-                <div className="rounded-xl bg-white/[0.035] px-3 py-3"><p className="text-2xl font-semibold text-white">{scan.comparison.stillOpen}</p><p className="mt-1 text-[0.66rem] uppercase tracking-[.09em] text-[#8f99a7]">Still open</p></div>
-              </div>
-              {(scan.comparison.resolved.length > 0 || scan.comparison.added.length > 0) && <ul className="mt-4 space-y-1 text-xs leading-5 text-[#a5afbd]">{scan.comparison.resolved.map((title) => <li key={`r-${title}`}><span className="mr-2 text-[#b9ff66]">✓</span>{title}</li>)}{scan.comparison.added.map((title) => <li key={`a-${title}`}><span className="mr-2 text-[#ff8585]">+</span>{title}</li>)}</ul>}
-            </div>}
-            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-semibold tracking-[-0.025em]">{filter === "all" ? "All findings" : `${severityConfig[filter].label} findings`}</h2><p className="mt-1 text-xs text-[#717c8b]">Ordered from highest to lowest priority</p></div>{filter !== "all" && <button onClick={() => setFilter("all")} className="text-xs text-[var(--signal)] hover:underline">Clear filter</button>}</div>
-            {visibleFindings.length ? <div className="space-y-3">{visibleFindings.map((finding, index) => <FindingCard key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={index === 0} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[var(--signal)]" /><p className="mt-4 font-medium">No {filter} findings.</p></div>}
-          </section>
 
-          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-            <div className="surface-muted rounded-2xl p-5"><p className="text-xs font-semibold uppercase tracking-[.12em] text-[#6e7988]">Next move</p><p className="mt-4 text-lg font-semibold tracking-[-0.025em]">{priorityCount ? `Start with ${priorityCount} priority finding${priorityCount === 1 ? "" : "s"}.` : findings.length ? "Work through the medium-risk findings." : "Keep monitoring after releases."}</p><p className="mt-3 text-sm leading-6 text-[#7f8998]">{priorityCount ? "Critical and high findings can have the largest impact. Verify each one before making a production change." : "A clean automated result is useful, but it does not prove the app is vulnerability-free."}</p></div>
-            {!scan.access?.requiresAccount && !canViewRemedies && lockedFixCount > 0 && <div className="rounded-2xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.05] p-5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--signal)]/10 text-[var(--signal)]"><Lock className="h-4 w-4" /></span><h3 className="mt-5 font-semibold">Unlock the remaining fixes.</h3><p className="mt-2 text-sm leading-6 text-[#8f99a7]">{freeFix ? "Your first actionable fix is included. Paid plans add the remaining implementation steps and scan credits for follow-up checks." : "Paid plans add implementation steps and scan credits for follow-up checks."}</p><Link href="/pricing" className="button-primary mt-5 w-full">View plans</Link></div>}
-            <button onClick={rescan} className="button-secondary w-full"><RotateCw className="h-4 w-4" /> {verificationRescan && !(userCredits && userCredits > 0) ? "Verify your fixes (free rescan)" : "Scan this site again"}</button>
-            <Link href="/" className="flex items-center justify-center gap-2 py-2 text-xs text-[#737e8d] hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Scan another website</Link>
-          </aside>
-        </div>
       </div>
 
-      <ScanningOverlay url={scan.url} isOpen={rescanning} onClose={() => setRescanning(false)} />
-      {limit && <ScanLimitDialog limit={limit} signedIn={Boolean(session?.user)} onClose={() => setLimit(null)} />}
+      <ScanningOverlay reportId={scan.id} url={scan.url} isOpen={rescanning} onClose={() => setRescanning(false)} />
+      {limit && <ScanLimitDialog limit={limit} signedIn={Boolean(session?.user)} returnTo={reportReturnHref(scan.id)} onClose={() => setLimit(null)} />}
       <ToastContainer />
     </main>
   );

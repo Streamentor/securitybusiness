@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Github, Loader2, Lock, Mail } from "lucide-react";
-import { reportReturnHref, deeperScanAuthHref, authReturnHref, validPendingPlan } from "@/lib/scan-journey";
-import { pendingScanFrom, safeAuthRedirect } from "@/lib/scan-auth-return";
+import { authPageHref, authReturnHref, validPendingPlan } from "@/lib/scan-journey";
+import { validPendingScanId, safeAuthRedirect } from "@/lib/scan-auth-return";
 import { AuthFrame } from "@/components/AuthFrame";
 
 function GoogleMark() {
@@ -19,21 +19,24 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [providerLoading, setProviderLoading] = useState<string | null>(null);
+  useEffect(() => { try { localStorage.removeItem("pendingPlan"); } catch {} }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const registered = searchParams.get("registered");
-  const redirectTo = searchParams.get("redirect");
   const authError = searchParams.get("error");
   const authErrorMessage = authError ? authError === "OAuthAccountNotLinked" ? "This email is already linked to another sign-in method." : "Sign-in failed. Please try again." : null;
 
+  const selectedPlan = validPendingPlan(searchParams.get("plan"));
+  const selectedFinding = validPendingScanId(searchParams.get("finding"));
+  const scanId = validPendingScanId(searchParams.get("scan"));
+  const returnTo = safeAuthRedirect(searchParams.get("redirect"));
+  const switchHref = authPageHref("register", {scanId, finding: selectedFinding, plan: selectedPlan, redirect: returnTo});
   function pendingScan() {
-    const id = pendingScanFrom(window.location.search, sessionStorage.getItem("pendingScanId"));
-    if (id) sessionStorage.setItem("pendingScanId", id);
-    return id;
+    if (scanId) sessionStorage.setItem("pendingScanId", scanId);
+    return scanId;
   }
   function callbackUrl() {
-    const pendingScanId = pendingScan();
-    return authReturnHref(pendingScanId, new URLSearchParams(window.location.search).get("intent"), localStorage.getItem("pendingPlan"), safeAuthRedirect(redirectTo));
+    return authReturnHref(pendingScan(), selectedFinding, selectedPlan, returnTo);
   }
 
   async function handleProvider(provider: "google" | "github") {
@@ -52,25 +55,12 @@ function LoginForm() {
         setLoading(false);
         return;
       }
-      const pendingPlan = validPendingPlan(localStorage.getItem("pendingPlan"));
       const pendingScanId = pendingScan();
-      if (pendingPlan) {
-        if (pendingScanId) {
-          const claimed = await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: pendingScanId }) }).catch(() => null);
-          if (claimed?.ok) sessionStorage.removeItem("pendingScanId");
-        }
-        const response = await fetch("/api/stripe/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: pendingPlan }) });
-        const data = await response.json();
-        if (data.url) { localStorage.removeItem("pendingPlan"); window.location.href = data.url; return; }
-        setError(data.error || "Checkout could not be started. Please try again.");
-        setLoading(false);
-        return;
-      }
       if (pendingScanId) {
         const claimed = await fetch("/api/scan/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scanId: pendingScanId }) }).catch(() => null);
         if (claimed?.ok) sessionStorage.removeItem("pendingScanId");
-        router.push(reportReturnHref(pendingScanId, new URLSearchParams(window.location.search).get("intent")));
-      } else router.push(safeAuthRedirect(redirectTo));
+      }
+      router.push(callbackUrl());
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -79,7 +69,8 @@ function LoginForm() {
   }
 
   return (
-    <AuthFrame title="Welcome back" subtitle="Sign in to open your scan history, remaining credits, and remediation guides.">
+    <AuthFrame title={selectedPlan ? `Continue with ${selectedPlan === "starter" ? "Starter" : "Pro"}` : "Welcome back"} subtitle={selectedPlan ? "Sign in to review your selected plan before checkout. No payment is made when you sign in." : scanId ? "Sign in to open your saved report and finding details." : "Sign in to open your scan history, remaining credits, and remediation guides."}>
+      {scanId && <Link href={authReturnHref(scanId, selectedFinding, null, "/dashboard")} className="mb-4 inline-block text-sm text-[#aeb8c5] underline">Back to your report</Link>}
       <div className="space-y-3">
         {registered && <div className="flex items-center gap-2 rounded-xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.06] px-4 py-3 text-sm text-[var(--signal)]"><CheckCircle2 className="h-4 w-4" /> Account created. Sign in to continue.</div>}
         {(error || authErrorMessage) && <div className="rounded-xl border border-[#ff6b6b]/20 bg-[#ff6b6b]/[0.07] px-4 py-3 text-sm text-[#ff9696]">{error || authErrorMessage}</div>}
@@ -92,7 +83,7 @@ function LoginForm() {
         <label className="block text-sm font-medium text-[#c5ccd5]">Password<div className="input-shell mt-2 flex items-center gap-3 rounded-xl px-3.5"><Lock className="h-4 w-4 text-[#667180]" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Your password" className="w-full bg-transparent py-3.5 text-sm text-white placeholder:text-[#586372] focus:outline-none" /></div></label>
         <button type="submit" disabled={loading} className="button-primary w-full">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}</button>
       </form>
-      <p className="mt-6 text-center text-sm text-[#7f8998]">New to ScanMySaaS? <Link href="#" onClick={(event) => {event.preventDefault(); const id = pendingScan(); router.push(id ? (new URLSearchParams(window.location.search).get("intent") === "deeper" ? deeperScanAuthHref(id) : `/register?scan=${id}`) : `/register?redirect=${encodeURIComponent(safeAuthRedirect(redirectTo))}`);}} className="font-medium text-white hover:text-[var(--signal)]">Create an account</Link></p>
+      <p className="mt-6 text-center text-sm text-[#7f8998]">New to ScanMySaaS? <Link href={switchHref} onClick={pendingScan} className="font-medium text-white hover:text-[var(--signal)]">Create an account</Link></p>
     </AuthFrame>
   );
 }
