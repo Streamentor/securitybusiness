@@ -28,7 +28,8 @@ import {
   ArrowRightLeft,
   FileCode,
 } from "lucide-react";
-import { toast } from "@/components/Toast";
+import { ScanLimitDialog } from "@/components/ScanLimitDialog";
+import { scanLimit, deeperScanAuthHref, type ScanLimit } from "@/lib/scan-journey";
 import { beginScanSessionVerification } from "@/lib/scan-session-verification";
 
 interface ScanProgress {
@@ -110,17 +111,19 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
   const [progress, setProgress] = useState<ScanProgress[]>([]);
   const [currentStep, setCurrentStep] = useState<ScanProgress | null>(null);
   const [complete, setComplete] = useState<ScanComplete | null>(null);
+  const [limit, setLimit] = useState<ScanLimit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [totalFound, setTotalFound] = useState(0);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
   const hasStarted = useRef(false);
+  const [viewerPlan, setViewerPlan] = useState<string | null>(null);
   const [verifiedLoggedIn, setVerifiedLoggedIn] = useState(false);
 
   // Verify the user actually exists in DB (handles stale JWT after DB reset)
   useEffect(() => {
     if (!isOpen || authStatus !== "authenticated") return;
-    return beginScanSessionVerification(setVerifiedLoggedIn);
+    return beginScanSessionVerification(setVerifiedLoggedIn, setViewerPlan);
   }, [isOpen, authStatus]);
 
   // Reset between runs so users can launch another scan without reloading.
@@ -132,9 +135,11 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
       setCurrentStep(null);
       setComplete(null);
       setError(null);
+      setLimit(null);
       setTotalFound(0);
       setTerminalLines([]);
       setVerifiedLoggedIn(false);
+      setViewerPlan(null);
     });
     return () => cancelAnimationFrame(frame);
   }, [isOpen]);
@@ -165,10 +170,9 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
             const errData = await res.json();
             const errorMsg = errData.error || "Failed to start scan. Please try again.";
 
-            // Domain abuse / credits exhausted → show toast and auto-close overlay
-            if (res.status === 403) {
-              toast(errorMsg, "warning");
-              onClose();
+            const admissionLimit = scanLimit(res.status, errorMsg, res.headers.get("Retry-After"));
+            if (admissionLimit) {
+              setLimit(admissionLimit);
               return;
             }
 
@@ -264,6 +268,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
     : 0;
 
   if (!isOpen) return null;
+  if (limit) return <ScanLimitDialog limit={limit} signedIn={authStatus === "authenticated" && verifiedLoggedIn} onClose={onClose} />;
 
   return (
     <AnimatePresence>
@@ -282,7 +287,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           {/* Header */}
           <div className="border-b border-gray-800 bg-gray-900/50 px-6 py-4">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${complete && (complete.totalVulnerabilities > 0 || complete.coverage?.partial) ? "bg-red-500/15 text-red-300" : "bg-gray-800 text-gray-200"}`}>
                   <Shield className="h-5 w-5 text-white" />
                   {!complete && !error && (
@@ -293,7 +298,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                     />
                   )}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h2 className="font-semibold text-white">
                     {complete ? complete.totalVulnerabilities > 0 ? "Scan complete. Findings need review." : "Scan complete" : error ? "Scan Failed" : "Scanning…"}
                   </h2>
@@ -307,7 +312,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", delay: 0.3 }}
-                  className={`flex h-14 w-14 items-center justify-center rounded-2xl font-bold text-xl ${
+                  className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-bold text-xl ${
                     complete.critical > 0 ? "bg-red-500/20 text-red-400"
                       : complete.high > 0 || complete.medium > 0 || complete.low > 0 || complete.coverage?.partial ? "bg-yellow-500/20 text-yellow-400"
                       : complete.score >= 80
@@ -498,10 +503,10 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
             >
               <div className={`mb-4 rounded-xl border p-4 ${complete.totalVulnerabilities > 0 ? "border-red-400/30 bg-red-400/[0.06]" : "border-gray-700 bg-gray-900"}`}>
                 <p className="text-xl font-semibold text-white">{complete.totalVulnerabilities > 0 ? `${complete.totalVulnerabilities} findings. See what needs attention.` : "Your public surface scan is ready."}</p>
-                <p className="mt-2 text-sm leading-6 text-gray-300">{complete.totalVulnerabilities > 0 ? "A high score does not mean there is nothing to fix. Open the affected pages, review the evidence and start with one free fix." : "No findings were observed. This scan does not assess private routes, ownership checks or database permissions in your code."}</p>
+                <p className="mt-2 text-sm leading-6 text-gray-300">{complete.totalVulnerabilities > 0 ? "A high score is not an all-clear. Review the evidence, then scan the code behind your app." : "No findings were observed. This scan does not assess private routes, ownership checks or database permissions in your code."}</p>
               </div>
               <p className="mb-3 text-sm text-gray-300">Public surface score: {complete.score}/100. Repository code was not assessed in this scan.</p>
-              {complete.coverage?.partial && <p className="mb-3 text-sm text-amber-200">Partial scan. {complete.coverage.note}</p>}
+              {complete.coverage?.partial && <details className="mb-3 text-sm text-amber-200"><summary className="cursor-pointer">Partial scan — some checks could not finish</summary><p className="mt-2 leading-6">{complete.coverage.note}</p></details>}
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 {complete.critical > 0 && (
                   <span className="rounded-full bg-red-500/20 px-3 py-1 text-sm font-medium text-red-400">
@@ -531,22 +536,21 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               </div>
 
               {authStatus === "authenticated" && verifiedLoggedIn ? (
-                <button
-                  onClick={() => router.push(`/scan/${complete.scanId}`)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-medium text-white transition hover:from-emerald-600 hover:to-cyan-600"
-                >
-                  View Full Report
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+                <div className="space-y-3">
+                  {viewerPlan === "free" && <><p className="text-sm leading-6 text-gray-300">Go deeper with private repository scans, AI code review and every available fix prompt.</p><button onClick={() => router.push("/pricing#plans")} className="button-primary w-full">Unlock maximum scan <ArrowRight className="h-4 w-4" /></button></>}
+                  <button onClick={() => router.push(`/scan/${complete.scanId}`)} className={viewerPlan === "free" ? "button-secondary w-full" : "button-primary w-full"}>View full report <ArrowRight className="h-4 w-4" /></button>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-sm leading-6 text-gray-300">Your report is ready. Create a free account to see every affected page and finding description, save the report and use your first available fix prompt.</p>
+                  <p className="text-sm leading-6 text-gray-300">Your website report is ready. Create a free account to open all finding details, then connect your repository for a deeper code scan. Public repos are free; private repos and AI review require a paid plan.</p>
                   <button onClick={() => {
                     sessionStorage.setItem("pendingScanId", complete.scanId);
                     void fetch(`/api/scan/${complete.scanId}/signup`, {method: "POST", keepalive: true}).catch(() => undefined);
-                    router.push(`/register?scan=${encodeURIComponent(complete.scanId)}`);
-                  }} className="button-primary w-full">Create free account &amp; open report <ArrowRight className="h-4 w-4" /></button>
-                  <p className="text-center text-xs text-gray-400">No card needed. Remaining fixes require a paid plan.</p>
+                    router.push(deeperScanAuthHref(complete.scanId));
+                  }} className="button-primary w-full">Run a deeper scan <ArrowRight className="h-4 w-4" /></button>
+                  <p className="text-center text-xs text-gray-400">Free account first. Choose a plan for private repos, AI review and all available fixes.</p>
+                  <button onClick={() => router.push("/pricing#plans")} className="button-secondary w-full">Unlock maximum scan</button>
+                  <button onClick={() => { sessionStorage.setItem("pendingScanId", complete.scanId); router.push(deeperScanAuthHref(complete.scanId, "login")); }} className="block w-full py-2 text-sm text-gray-300 underline underline-offset-4">Already have an account? Sign in</button>
                   <button onClick={() => router.push(`/scan/${complete.scanId}`)} className="block w-full py-2 text-sm text-gray-400 underline underline-offset-4 hover:text-white">See the preview first</button>
                 </div>
               )}

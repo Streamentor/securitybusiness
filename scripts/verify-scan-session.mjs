@@ -46,19 +46,21 @@ try {
   await flush();
   assert.deepEqual(observed, [{ run: 2, verified: true }], "a canceled run's rejection must not reset the current UI");
 
-  for (const [response, expected] of [
-    [Response.json({ plan: "free" }), true],
-    [Response.json({ plan: "starter" }), true],
-    [Response.json({ plan: "pro" }), true],
-    [Response.json({ plan: "anonymous" }), false],
-    [Response.json({ error: "session unavailable" }), false],
-    [Response.json({ plan: "free" }, { status: 500 }), false],
+  for (const [response, expected, expectedPlan] of [
+    [Response.json({ plan: "free" }), true, "free"],
+    [Response.json({ plan: "starter" }), true, "starter"],
+    [Response.json({ plan: "pro" }), true, "pro"],
+    [Response.json({ plan: "anonymous" }), false, null],
+    [Response.json({ error: "session unavailable" }), false, null],
+    [Response.json({ plan: "free" }, { status: 500 }), false, null],
   ]) {
     globalThis.fetch = async () => response;
     const updates = [];
-    const cleanup = beginScanSessionVerification((verified) => updates.push(verified));
+    const plans = [];
+    const cleanup = beginScanSessionVerification((verified) => updates.push(verified), plan => plans.push(plan));
     await flush();
     assert.deepEqual(updates, [expected], "only a successful supported DB plan may verify the account");
+    assert.deepEqual(plans, [expectedPlan], "upsell eligibility must use the DB-verified plan");
     cleanup();
   }
 
