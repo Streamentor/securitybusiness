@@ -29,6 +29,7 @@ import {
 import { Brand } from "@/components/Brand";
 import { CopyPromptButton } from "@/components/CopyPromptButton";
 import ScanningOverlay from "@/components/ScanningOverlay";
+import { ReportUpgradeBanner } from "@/components/ReportUpgradeBanner";
 import { ScanLimitDialog } from "@/components/ScanLimitDialog";
 import { deeperScanAuthHref, type ScanLimit } from "@/lib/scan-journey";
 import { ToastContainer, toast } from "@/components/Toast";
@@ -235,6 +236,8 @@ export default function ScanResultPage() {
   return (
     <main className="min-h-screen pb-20">
       <header className="border-b border-white/[0.08] bg-[#07090d]/88 backdrop-blur-xl"><div className="app-shell flex min-h-16 flex-wrap items-center justify-between gap-3 py-3"><Brand /><div className="flex items-center gap-2">{userCredits !== null && <span className="hidden items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-[#aab3bf] sm:flex"><Zap className="h-3.5 w-3.5 text-[var(--amber)]" />{userCredits} left</span>}{ownsScan && <button onClick={shareReport} disabled={sharingBusy} className="button-secondary !min-h-9 !px-3 !py-2"><Share2 className="h-3.5 w-3.5" /><span>{scan.access?.sharingEnabled ? "Replace share link" : "Create share link"}</span></button>}{session?.user && <button onClick={rescan} aria-label="Rescan this website" className="button-primary !min-h-9 !px-3 !py-2"><RotateCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Rescan</span></button>}<Link href={session?.user ? "/dashboard" : "/"} className="ml-1 text-xs text-[#8a94a2] hover:text-white"><span className="hidden sm:inline">{session?.user ? "Dashboard" : "New scan"}</span><ArrowLeft className="h-4 w-4 sm:hidden" /></Link></div></div></header>
+
+      {!canViewRemedies && <ReportUpgradeBanner />}
 
       <div className="app-shell py-8 sm:py-12">
         {ownsScan && <section className="surface-muted mb-6 rounded-xl p-4" aria-label="Report sharing">

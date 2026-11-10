@@ -28,6 +28,7 @@ import {
   ArrowRightLeft,
   FileCode,
 } from "lucide-react";
+import { ReportUpgradeBanner } from "@/components/ReportUpgradeBanner";
 import { ScanLimitDialog } from "@/components/ScanLimitDialog";
 import { scanLimit, deeperScanAuthHref, type ScanLimit } from "@/lib/scan-journey";
 import { beginScanSessionVerification } from "@/lib/scan-session-verification";
@@ -327,6 +328,8 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               )}
             </div>
           </div>
+
+          {complete && viewerPlan !== "starter" && viewerPlan !== "pro" && <ReportUpgradeBanner />}
 
           {/* Progress bar */}
           {!complete && !error && (
