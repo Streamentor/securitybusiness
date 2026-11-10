@@ -25,6 +25,7 @@ import {ProductFigure} from "@/components/visuals/ProductFigure";
 import {OutsideInsideDiagram} from "@/components/visuals/OutsideInsideDiagram";
 import {PrivateAccessDiagram} from "@/components/visuals/PrivateAccessDiagram";
 
+import {validPendingScanId} from "@/lib/scan-auth-return";
 import { RepoReport, type RepoReportResult } from "@/components/RepoReport";
 import { PrivateRepoPanel } from "@/components/PrivateRepoPanel";
 import { repoFaqs, repoScanSteps } from "@/lib/site-content";
@@ -39,6 +40,7 @@ const checks = [
 ];
 
 export default function RepositoryScannerPage() {
+  const [sourceReport, setSourceReport] = useState<string | null>(null);
   const [repository, setRepository] = useState("");
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,6 +53,7 @@ export default function RepositoryScannerPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    setSourceReport(validPendingScanId(params.get("report")));
     if (params.get("tab") === "private" || params.get("github")) setTab("private");
     setConnectResult(params.get("github"));
   }, []);
@@ -82,6 +85,7 @@ export default function RepositoryScannerPage() {
 
   return <main className="min-h-screen">
     <SiteHeader />
+    {sourceReport && <div className="app-shell pt-5"><Link href={`/scan/${sourceReport}`} className="text-sm text-[var(--signal)] underline underline-offset-4">Back to your website report</Link><p className="mt-1 text-xs text-[#98a2b3]">Your website report is saved. Repository scanning is a separate check.</p></div>}
     <section className="relative overflow-hidden border-b border-white/[0.07] py-14 sm:py-20">
       <div className="pointer-events-none absolute inset-0 -z-10 hairline-grid [mask-image:linear-gradient(to_bottom,black,transparent)]" />
       <div className="app-shell grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-16">

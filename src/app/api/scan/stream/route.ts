@@ -5,6 +5,7 @@ import { websiteFailure } from "@/lib/website-scan-failure";
 import { prisma } from "@/lib/db";
 import { scanWebsite, type ScanProgress, validateScanTarget, type VulnerabilityResult, WebsiteScanError } from "@/lib/scanner";
 import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
+import { previewFindingTitles } from "@/lib/scan-journey";
 import { admitWebsiteScan } from "@/lib/scan-gate";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
@@ -129,6 +130,7 @@ export async function POST(req: NextRequest) {
           score: results.score,
           coverage: results.coverage,
           totalVulnerabilities: actionable.length,
+          previewFindings: previewFindingTitles(actionable),
           pagesScanned: results.pagesScanned,
           critical: actionable.filter((v: VulnerabilityResult) => v.severity === "critical").length,
           high: actionable.filter((v: VulnerabilityResult) => v.severity === "high").length,

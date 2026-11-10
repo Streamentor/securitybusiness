@@ -62,6 +62,7 @@ export default function PricingPage() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   useEffect(() => {
+    try { localStorage.removeItem("pendingPlan"); } catch {}
     setContinuation(validPendingPlan(new URLSearchParams(window.location.search).get("checkout")));
     if (!session?.user?.id) return;
     const scanId = validPendingScanId(sessionStorage.getItem("pendingScanId"));
@@ -78,8 +79,7 @@ export default function PricingPage() {
       return;
     }
     if (!session?.user) {
-      localStorage.setItem("pendingPlan", planKey);
-      router.push("/register");
+      router.push(`/register?plan=${planKey}`);
       return;
     }
     setLoadingPlan(planKey);
@@ -117,7 +117,7 @@ export default function PricingPage() {
         {continuation && session?.user && <div className="mb-6 rounded-2xl border border-[var(--signal)]/30 bg-[var(--signal)]/[0.05] p-5"><h2 className="text-xl font-semibold">Your account is ready. Continue with {continuation === "starter" ? "Starter" : "Pro"}.</h2><p className="mt-2 text-sm text-[#98a2b3]">Review the plan below, then continue to secure checkout.</p><button type="button" disabled={Boolean(loadingPlan)} onClick={() => handleSubscribe(continuation)} className="button-primary mt-4">{loadingPlan ? "Opening checkout…" : `Continue to ${continuation === "starter" ? "Starter" : "Pro"} checkout`} <ArrowRight className="h-4 w-4" /></button></div>}
         <div className="grid gap-4 lg:grid-cols-3">
           {plans.map((plan) => (
-            <article key={plan.name} className={`relative flex min-h-[34rem] flex-col overflow-hidden rounded-2xl p-6 sm:p-7 ${plan.accent ? "border border-[var(--signal)]/40 bg-[var(--signal)]/[0.055] shadow-[0_22px_80px_rgba(185,255,102,.08)]" : "surface-muted"}`}>
+            <article key={plan.name} id={plan.key === "starter" ? "paid-plans" : undefined} className={`${plan.key === "starter" ? "order-1 lg:order-2" : plan.key === "pro" ? "order-2 lg:order-3" : "order-3 lg:order-1"} scroll-mt-6 relative flex min-h-[34rem] flex-col overflow-hidden rounded-2xl p-6 sm:p-7 ${plan.accent ? "border border-[var(--signal)]/40 bg-[var(--signal)]/[0.055] shadow-[0_22px_80px_rgba(185,255,102,.08)]" : "surface-muted"}`}>
               {plan.accent && <div className="absolute right-5 top-5 rounded-full bg-[var(--signal)] px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[.1em] text-[#0a0d0b]">Most popular</div>}
               <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">{plan.name === "Free" ? <ShieldCheck className="h-5 w-5 text-[#aab3bf]" /> : plan.name === "Starter" ? <Zap className="h-5 w-5 text-[var(--signal)]" /> : <Sparkles className="h-5 w-5 text-[var(--cobalt)]" />}</div>
               <h2 className="mt-6 text-xl font-semibold">{plan.name}</h2>

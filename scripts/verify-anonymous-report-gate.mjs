@@ -74,6 +74,10 @@ assert.equal(res.status,200);let data = await res.json();assert.equal(data.acces
 assertPreview((await(await post.POST(req("/api/scan","POST",{}, {url:"https://owned.invalid"}))).json()).vulnerabilities);
 res = await stream.POST(req("/api/scan/stream","POST",{}, {url:"https://owned.invalid"}));
 const events = await res.text();
+const completeEvent = events.split("\n\n").find(event => event.startsWith("event: complete"));
+const completion = JSON.parse(completeEvent.split("data: ")[1]);
+assert.deepEqual(completion.previewFindings, [{title: "Finding high", severity: "high"}, {title: "Finding low", severity: "low"}]);
+for (const finding of completion.previewFindings) assert.deepEqual(Object.keys(finding).sort(), ["severity", "title"], "completion preview must not expose locked URLs, descriptions or fixes");
 assert.ok(!events.includes("private-path")); assert.ok(!events.includes("evidence-"));assert.ok(events.includes('"high":1'));
 res = await get.GET(req("/api/scan/fixture-scan","GET",{"x-report-share-token":share}),params);
 data = await res.json();assert.equal(data.access.requiresAccount,false);assert.equal(data.vulnerabilities[0].description,"evidence-low");assert.equal(data.vulnerabilities[0].remedy,"","sharing must not unlock paid remedies");
