@@ -277,13 +277,13 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="w-full max-w-3xl overflow-hidden rounded-3xl border border-gray-800 bg-gray-950 shadow-2xl"
+          className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-3xl border border-gray-800 bg-gray-950 shadow-2xl"
         >
           {/* Header */}
           <div className="border-b border-gray-800 bg-gray-900/50 px-6 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500">
+                <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${complete && (complete.totalVulnerabilities > 0 || complete.coverage?.partial) ? "bg-red-500/15 text-red-300" : "bg-gray-800 text-gray-200"}`}>
                   <Shield className="h-5 w-5 text-white" />
                   {!complete && !error && (
                     <motion.div
@@ -295,9 +295,9 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 </div>
                 <div>
                   <h2 className="font-semibold text-white">
-                    {complete ? "Scan Complete" : error ? "Scan Failed" : "Scanning…"}
+                    {complete ? complete.totalVulnerabilities > 0 ? "Scan complete. Findings need review." : "Scan complete" : error ? "Scan Failed" : "Scanning…"}
                   </h2>
-                  <p className="text-sm text-gray-400 truncate max-w-md">{url}</p>
+                  <p className="text-sm text-gray-400 break-all max-w-md">{url}</p>
                 </div>
               </div>
 
@@ -309,7 +309,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                   transition={{ type: "spring", delay: 0.3 }}
                   className={`flex h-14 w-14 items-center justify-center rounded-2xl font-bold text-xl ${
                     complete.critical > 0 ? "bg-red-500/20 text-red-400"
-                      : complete.high > 0 || complete.coverage?.partial ? "bg-yellow-500/20 text-yellow-400"
+                      : complete.high > 0 || complete.medium > 0 || complete.low > 0 || complete.coverage?.partial ? "bg-yellow-500/20 text-yellow-400"
                       : complete.score >= 80
                       ? "bg-emerald-500/20 text-emerald-400"
                       : complete.score >= 50
@@ -344,7 +344,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
           )}
 
           {/* Check statuses grid */}
-          <div className="grid grid-cols-4 gap-2 p-4 sm:grid-cols-4">
+          {!complete && <div className="grid grid-cols-4 gap-2 p-4 sm:grid-cols-4">
             {[
               { step: "crawl", label: "Crawl" },
               { step: "ssl", label: "SSL/TLS" },
@@ -378,7 +378,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                   className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-all ${
                     done
                       ? done.found && done.found > 0
-                        ? "border-yellow-500/30 bg-yellow-500/10"
+                        ? "border-red-500/30 bg-red-500/10"
                         : "border-emerald-500/30 bg-emerald-500/10"
                       : isRunning
                         ? "border-cyan-500/50 bg-cyan-500/10"
@@ -389,7 +389,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                     <Loader2 className={`h-3.5 w-3.5 animate-spin ${color}`} />
                   ) : done ? (
                     done.found && done.found > 0 ? (
-                      <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-300" />
                     ) : (
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                     )
@@ -408,7 +408,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                     {item.label}
                   </span>
                   {done?.found !== undefined && done.found > 0 && (
-                    <span className="ml-auto rounded-full bg-yellow-500/20 px-1.5 text-[10px] font-bold text-yellow-400">
+                    <span className="ml-auto rounded-full bg-red-500/20 px-1.5 text-[10px] font-bold text-red-300">
                       {done.found}
                     </span>
                   )}
@@ -417,8 +417,11 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
             })}
           </div>
 
+          }
+
           {/* Terminal output */}
-          <div className="mx-4 mb-4 overflow-hidden rounded-xl border border-gray-800 bg-gray-950">
+          <details className="mx-4 mb-4 overflow-hidden rounded-xl border border-gray-800 bg-gray-950" open={!complete}>
+            <summary className="cursor-pointer px-4 py-3 text-xs text-gray-400">{complete ? "View scan log and technical checks" : "Live scan log"}</summary>
             <div className="flex items-center gap-2 border-b border-gray-800 bg-gray-900/80 px-4 py-2">
               <div className="h-3 w-3 rounded-full bg-red-500/80" />
               <div className="h-3 w-3 rounded-full bg-yellow-500/80" />
@@ -470,7 +473,7 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 </motion.span>
               )}
             </div>
-          </div>
+          </details>
 
           {/* Stats footer */}
           {!complete && !error && (
@@ -493,6 +496,10 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
               animate={{ opacity: 1, y: 0 }}
               className="border-t border-gray-800 px-6 py-4"
             >
+              <div className={`mb-4 rounded-xl border p-4 ${complete.totalVulnerabilities > 0 ? "border-red-400/30 bg-red-400/[0.06]" : "border-gray-700 bg-gray-900"}`}>
+                <p className="text-xl font-semibold text-white">{complete.totalVulnerabilities > 0 ? `${complete.totalVulnerabilities} findings. See what needs attention.` : "Your public surface scan is ready."}</p>
+                <p className="mt-2 text-sm leading-6 text-gray-300">{complete.totalVulnerabilities > 0 ? "A high score does not mean there is nothing to fix. Open the affected pages, review the evidence and start with one free fix." : "No findings were observed. This scan does not assess private routes, ownership checks or database permissions in your code."}</p>
+              </div>
               <p className="mb-3 text-sm text-gray-300">Public surface score: {complete.score}/100. Repository code was not assessed in this scan.</p>
               {complete.coverage?.partial && <p className="mb-3 text-sm text-amber-200">Partial scan. {complete.coverage.note}</p>}
               <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -533,8 +540,14 @@ export default function ScanningOverlay({ url, isOpen, onClose }: ScanningOverla
                 </button>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-sm text-gray-300">Preview your score and one complete finding. A free account opens the affected pages and details for the rest.</p>
-                  <button onClick={() => router.push(`/scan/${complete.scanId}`)} className="button-primary w-full">View scan preview <ArrowRight className="h-4 w-4" /></button>
+                  <p className="text-sm leading-6 text-gray-300">Your report is ready. Create a free account to see every affected page and finding description, save the report and use your first available fix prompt.</p>
+                  <button onClick={() => {
+                    sessionStorage.setItem("pendingScanId", complete.scanId);
+                    void fetch(`/api/scan/${complete.scanId}/signup`, {method: "POST", keepalive: true}).catch(() => undefined);
+                    router.push(`/register?scan=${encodeURIComponent(complete.scanId)}`);
+                  }} className="button-primary w-full">Create free account &amp; open report <ArrowRight className="h-4 w-4" /></button>
+                  <p className="text-center text-xs text-gray-400">No card needed. Remaining fixes require a paid plan.</p>
+                  <button onClick={() => router.push(`/scan/${complete.scanId}`)} className="block w-full py-2 text-sm text-gray-400 underline underline-offset-4 hover:text-white">See the preview first</button>
                 </div>
               )}
             </motion.div>

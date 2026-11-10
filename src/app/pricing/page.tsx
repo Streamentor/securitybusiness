@@ -99,7 +99,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <section className="app-shell pb-24">
+      <section id="plans" className="app-shell scroll-mt-6 pb-24">
         <div className="grid gap-4 lg:grid-cols-3">
           {plans.map((plan) => (
             <article key={plan.name} className={`relative flex min-h-[34rem] flex-col overflow-hidden rounded-2xl p-6 sm:p-7 ${plan.accent ? "border border-[var(--signal)]/40 bg-[var(--signal)]/[0.055] shadow-[0_22px_80px_rgba(185,255,102,.08)]" : "surface-muted"}`}>
