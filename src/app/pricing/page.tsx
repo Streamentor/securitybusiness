@@ -1,7 +1,9 @@
 "use client";
+import { validPendingScanId } from "@/lib/scan-auth-return";
+import { validPendingPlan } from "@/lib/scan-journey";
 import { pricingFaqs } from "@/lib/site-content";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ArrowRight, Check, ChevronDown, Loader2, Minus, ShieldCheck, Sparkles, Zap } from "lucide-react";
@@ -56,7 +58,19 @@ const plans = [
 export default function PricingPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const [continuation, setContinuation] = useState<"starter" | "pro" | null>(null);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+
+  useEffect(() => {
+    setContinuation(validPendingPlan(new URLSearchParams(window.location.search).get("checkout")));
+    if (!session?.user?.id) return;
+    const scanId = validPendingScanId(sessionStorage.getItem("pendingScanId"));
+    if (scanId) {
+      void fetch("/api/scan/claim", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({scanId})}).then(response => {
+        if (response.ok) sessionStorage.removeItem("pendingScanId");
+      }).catch(() => undefined);
+    }
+  }, [session?.user?.id]);
 
   async function handleSubscribe(planKey: string | null) {
     if (!planKey) {
@@ -76,7 +90,7 @@ export default function PricingPage() {
         body: JSON.stringify({ plan: planKey, emailCampaign: new URLSearchParams(window.location.search).get("utm_source") === "email" ? new URLSearchParams(window.location.search).get("utm_campaign") : undefined }),
       });
       const data = await response.json();
-      if (data.url) window.location.href = data.url;
+      if (data.url) { localStorage.removeItem("pendingPlan"); window.location.href = data.url; }
       else toast(data.error || "Checkout could not be started.", "error");
     } catch {
       toast("Checkout could not be started. Please try again.", "error");
@@ -99,7 +113,8 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <section className="app-shell pb-24">
+      <section id="plans" className="app-shell scroll-mt-6 pb-24">
+        {continuation && session?.user && <div className="mb-6 rounded-2xl border border-[var(--signal)]/30 bg-[var(--signal)]/[0.05] p-5"><h2 className="text-xl font-semibold">Your account is ready. Continue with {continuation === "starter" ? "Starter" : "Pro"}.</h2><p className="mt-2 text-sm text-[#98a2b3]">Review the plan below, then continue to secure checkout.</p><button type="button" disabled={Boolean(loadingPlan)} onClick={() => handleSubscribe(continuation)} className="button-primary mt-4">{loadingPlan ? "Opening checkout…" : `Continue to ${continuation === "starter" ? "Starter" : "Pro"} checkout`} <ArrowRight className="h-4 w-4" /></button></div>}
         <div className="grid gap-4 lg:grid-cols-3">
           {plans.map((plan) => (
             <article key={plan.name} className={`relative flex min-h-[34rem] flex-col overflow-hidden rounded-2xl p-6 sm:p-7 ${plan.accent ? "border border-[var(--signal)]/40 bg-[var(--signal)]/[0.055] shadow-[0_22px_80px_rgba(185,255,102,.08)]" : "surface-muted"}`}>

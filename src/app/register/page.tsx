@@ -5,7 +5,8 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Github, Loader2, Lock, Mail, User } from "lucide-react";
-import { pendingScanFrom } from "@/lib/scan-auth-return";
+import { deeperScanAuthHref, authReturnHref } from "@/lib/scan-journey";
+import { pendingScanFrom, safeAuthRedirect } from "@/lib/scan-auth-return";
 import { AuthFrame } from "@/components/AuthFrame";
 
 function GoogleMark() {
@@ -38,10 +39,7 @@ export default function RegisterPage() {
   }
   function callbackUrl() {
     const pendingScanId = pendingScan();
-    if (pendingScanId) return `/scan/${pendingScanId}`;
-    const pendingPlan = localStorage.getItem("pendingPlan");
-    if (pendingPlan) return `/pricing?checkout=${pendingPlan}`;
-    return "/dashboard";
+    return authReturnHref(pendingScanId, new URLSearchParams(window.location.search).get("intent"), localStorage.getItem("pendingPlan"), safeAuthRedirect(new URLSearchParams(window.location.search).get("redirect")));
   }
 
   async function handleProvider(provider: "google" | "github") {
@@ -60,8 +58,8 @@ export default function RegisterPage() {
       const data = await response.json();
       if (!response.ok) { setError(data.error || "Account could not be created."); setLoading(false); return; }
       const pendingScanId = pendingScan();
-      if (pendingScanId) { router.push(`/login?registered=true&scan=${pendingScanId}&redirect=/scan/${pendingScanId}`); }
-      else router.push("/login?registered=true");
+      if (pendingScanId) { router.push(`/login?registered=true&scan=${pendingScanId}&intent=${new URLSearchParams(window.location.search).get("intent") === "deeper" ? "deeper" : "report"}`); }
+      else router.push(`/login?registered=true&redirect=${encodeURIComponent(callbackUrl())}`);
     } catch {
       setError("Something went wrong. Please try again.");
       setLoading(false);
@@ -69,7 +67,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthFrame title="Create your account" subtitle="Start with one full scan. Keep the report and decide whether the findings deserve a deeper workflow.">
+    <AuthFrame title="Create your account" subtitle="Save your website findings, then connect GitHub for a deeper code scan. Public repos are free; private repos and AI review are on paid plans.">
       {error && <div className="mb-3 rounded-xl border border-[#ff6b6b]/20 bg-[#ff6b6b]/[0.07] px-4 py-3 text-sm text-[#ff9696]">{error}</div>}
       <label className="mb-4 flex items-start gap-2 text-sm text-[#98a2b3]"><input type="checkbox" checked={emailUpdates} onChange={e => setEmailUpdates(e.target.checked)} className="mt-1" /><span>Email me about my scans and ScanMySaaS. Optional. Unsubscribe anytime.</span></label>
       <div className="space-y-3">
@@ -85,7 +83,7 @@ export default function RegisterPage() {
       </form>
       <p className="mt-3 text-xs text-[#98a2b3]">If you opt in, we&apos;ll email you about your scans and ScanMySaaS. Unsubscribe anytime. <Link href="/privacy" className="underline">Privacy</Link>.</p>
       <p className="mt-4 text-center text-xs leading-5 text-[#667180]">By continuing, you agree to the <Link href="/terms" className="underline hover:text-white">Terms</Link> and <Link href="/privacy" className="underline hover:text-white">Privacy Policy</Link>.</p>
-      <p className="mt-5 text-center text-sm text-[#7f8998]">Already have an account? <Link href="/login" onClick={pendingScan} className="font-medium text-white hover:text-[var(--signal)]">Sign in</Link></p>
+      <p className="mt-5 text-center text-sm text-[#7f8998]">Already have an account? <Link href="#" onClick={(event) => {event.preventDefault(); const id = pendingScan(); router.push(id ? (new URLSearchParams(window.location.search).get("intent") === "deeper" ? deeperScanAuthHref(id, "login") : `/login?scan=${id}`) : `/login?redirect=${encodeURIComponent(callbackUrl())}`);}} className="font-medium text-white hover:text-[var(--signal)]">Sign in</Link></p>
     </AuthFrame>
   );
 }

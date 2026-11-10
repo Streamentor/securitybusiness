@@ -1,5 +1,5 @@
 /** One verification per open modal; cleanup rejects updates from an older run. */
-export function beginScanSessionVerification(onVerified: (verified: boolean) => void) {
+export function beginScanSessionVerification(onVerified: (verified: boolean) => void, onPlan?: (plan: string | null) => void) {
   const controller = new AbortController();
   let active = true;
 
@@ -8,7 +8,9 @@ export function beginScanSessionVerification(onVerified: (verified: boolean) => 
     .then((data: unknown) => {
       if (!active) return;
       const plan = data && typeof data === "object" && "plan" in data ? data.plan : null;
-      onVerified(plan === "free" || plan === "starter" || plan === "pro");
+      const valid = plan === "free" || plan === "starter" || plan === "pro";
+      onVerified(valid);
+      onPlan?.(valid ? plan as string : null);
     })
     .catch(() => {
       if (active) onVerified(false);
