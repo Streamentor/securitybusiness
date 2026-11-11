@@ -64,7 +64,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
         </header>
 
         <div className="app-shell grid gap-12 py-12 lg:grid-cols-[minmax(0,1fr)_17rem] lg:py-16">
-          <div className="max-w-3xl">
+          <div className="min-w-0 max-w-3xl [overflow-wrap:anywhere]">
             <GuideCover src={guide.cover} alt={guide.coverAlt} priority />
             <div className="space-y-5 text-lg leading-8 text-[#b3bbc5]">{guide.intro.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
             <Link href={isRepositoryGuide ? "/repo-scan" : "/free-website-vulnerability-scanner"} className="mt-8 flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-4 text-sm text-[#cfd6de] transition hover:border-[var(--signal)]/30 hover:text-white"><span>{isRepositoryGuide ? "Check your repository for these issues with the free GitHub repo scanner." : "Check your site for these issues with the free website vulnerability scanner."}</span><span className="shrink-0 font-semibold text-[var(--signal)]">Scan now →</span></Link>
