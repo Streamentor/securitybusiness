@@ -30,7 +30,8 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const guide = getGuide(slug);
   if (!guide) notFound();
-  const related = guides.filter((item) => item.slug !== guide.slug).slice(0, 2);
+  const curated = (guide.related ?? []).map(getGuide).filter((item): item is NonNullable<typeof item> => item !== undefined && item.slug !== guide.slug);
+  const related = curated.length > 0 ? curated : guides.filter((item) => item.slug !== guide.slug).slice(0, 2);
   const isRepositoryGuide = guide.slug.includes("github-") || guide.slug.includes("supabase-");
   const url = `${SITE_URL}/guides/${guide.slug}`;
   const jsonLd = {
@@ -74,11 +75,12 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
                   <div className="mt-5 space-y-4 text-[0.98rem] leading-8 text-[#a3acb8]">{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
                   <GuideFigure kind={section.figure} />
                   {section.bullets && <ul className="mt-6 space-y-3">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-3 text-sm leading-6 text-[#a3acb8]"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[var(--signal)]" /><span>{bullet}</span></li>)}</ul>}
+                  {section.links && section.links.length > 0 && <p className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#7f8998]"><span>Related:</span>{section.links.map((link) => <Link key={link.href} href={link.href} className="text-[var(--signal)] hover:underline">{link.label}</Link>)}</p>}
                 </section>
               ))}
             </div>
-            {guide.sources && <section className="mt-12 border-t border-white/[0.08] pt-8"><h2 className="text-lg font-semibold text-white">Primary source</h2><ul className="mt-4 space-y-3">{guide.sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-[var(--signal)] hover:underline">{source.label} <ArrowRight className="h-3.5 w-3.5" /></a></li>)}</ul></section>}
-            <div className="mt-14 rounded-2xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.045] p-6 sm:p-8"><p className="eyebrow">{isRepositoryGuide ? "Check your repository" : "Check your production site"}</p><h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">See which of these issues are visible now.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-[#909aa8]">{isRepositoryGuide ? "ScanMySaaS reads a bounded set of security-relevant files from a public GitHub repository. It never runs repository code or reveals matched secret values." : "ScanMySaaS checks the public surface and keeps the affected URL with every finding. Verify results before changing production."}</p><Link href={isRepositoryGuide ? "/repo-scan" : "/#scan"} className="button-primary mt-6">{isRepositoryGuide ? "Scan a public repository" : "Run a free scan"} <ArrowRight className="h-4 w-4" /></Link></div>
+            {guide.sources && <section className="mt-12 border-t border-white/[0.08] pt-8"><h2 className="text-lg font-semibold text-white">{guide.sources.length > 1 ? "Sources" : "Source"}</h2><ul className="mt-4 space-y-3">{guide.sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-[var(--signal)] hover:underline">{source.label} <ArrowRight className="h-3.5 w-3.5" /></a></li>)}</ul></section>}
+            <div className="mt-14 rounded-2xl border border-[var(--signal)]/20 bg-[var(--signal)]/[0.045] p-6 sm:p-8"><p className="eyebrow">{isRepositoryGuide ? "Check your repository" : "Check your production site"}</p><h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">See which of these issues are visible now.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-[#909aa8]">{isRepositoryGuide ? "ScanMySaaS reads a bounded set of security-relevant files from a public repository, or a private one on Starter and Pro through a read-only GitHub App. It never runs repository code or reveals matched secret values." : "ScanMySaaS checks the public surface and keeps the affected URL with every finding. Verify results before changing production."}</p><Link href={isRepositoryGuide ? "/repo-scan" : "/#scan"} className="button-primary mt-6">{isRepositoryGuide ? "Scan a repository" : "Run a free scan"} <ArrowRight className="h-4 w-4" /></Link></div>
           </div>
 
           <aside className="lg:sticky lg:top-24 lg:self-start">

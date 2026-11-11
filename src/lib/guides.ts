@@ -3,6 +3,8 @@ export interface GuideSection {
   figure?: "header-anatomy" | "cert-timeline" | "leak-timeline" | "pr-target" | "crawl-flow" | "rls-flow" | "boundary-map";
   paragraphs: string[];
   bullets?: string[];
+  /** Contextual internal links rendered under the section. */
+  links?: Array<{ label: string; href: string }>;
 }
 
 export interface Guide {
@@ -14,6 +16,7 @@ export interface Guide {
   coverAlt?: string;
   description: string;
   eyebrow: string;
+  /** Computed from the guide text (about 230 words per minute). */
   readTime: string;
   publishedAt?: string;
   updatedAt?: string;
@@ -21,9 +24,19 @@ export interface Guide {
   intro: string[];
   sections: GuideSection[];
   sources?: Array<{ label: string; url: string }>;
+  /** Slugs shown under "Keep reading". */
+  related?: string[];
 }
 
-export const guides: Guide[] = [
+const WORDS_PER_MINUTE = 230;
+
+function readTimeFor(guide: Omit<Guide, "readTime">) {
+  const text = [...guide.intro, ...guide.sections.flatMap((section) => [section.heading, ...section.paragraphs, ...(section.bullets ?? [])])].join(" ");
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return `${Math.max(2, Math.round(words / WORDS_PER_MINUTE))} min read`;
+}
+
+const guideData: Array<Omit<Guide, "readTime">> = [
   {
     slug: "saas-launch-security-checklist",
     cover: "/images/guides/saas-launch-security-checklist.webp",
@@ -32,7 +45,6 @@ export const guides: Guide[] = [
     seoTitle: "SaaS Security Checklist Before Launch (2026, Vibe-Coded Apps)",
     description: "Check tenant isolation, Supabase RLS, sessions, Stripe webhooks, and public exposure before your SaaS launch, with a find, fix, and retest worksheet.",
     eyebrow: "Before you launch",
-    readTime: "9 min read",
     publishedAt: "2026-09-06",
     updatedAt: "2026-09-06",
     relatedChecks: ["Public security headers", "Exposed files", "Cookie settings", "Repository secret patterns"],
@@ -156,7 +168,6 @@ export const guides: Guide[] = [
     seoTitle: "HTTP Security Headers Checklist for SaaS (CSP, HSTS, X-Frame)",
     description: "A practical guide to CSP, HSTS, clickjacking protection, MIME sniffing, referrer policy, and permissions policy for SaaS teams.",
     eyebrow: "Browser security",
-    readTime: "8 min read",
     relatedChecks: ["Content Security Policy", "HSTS", "X-Frame-Options", "X-Content-Type-Options"],
     intro: [
       "Security headers are small response headers with an outsized job. They tell a browser which scripts may run, whether a page may be framed, and whether an insecure connection is acceptable. A SaaS can have solid application code and still leave these browser defenses unset.",
@@ -208,7 +219,6 @@ export const guides: Guide[] = [
     seoTitle: "SSL/TLS Checklist for SaaS: Certificates, HSTS & HTTPS Redirects",
     description: "Check certificate trust and expiry, HTTPS redirects, HSTS, mixed content, cookies, and redirect chains before they become incidents.",
     eyebrow: "Transport security",
-    readTime: "7 min read",
     relatedChecks: ["Certificate expiry", "HTTPS redirect", "HSTS", "Mixed content"],
     intro: [
       "A valid padlock is the beginning of transport security, not the end. SaaS traffic can still pass through an HTTP redirect, load an insecure asset, or lose cookie protection because one layer of the stack sees the wrong protocol.",
@@ -257,7 +267,6 @@ export const guides: Guide[] = [
     seoTitle: "robots.txt & Sitemap for SaaS: Fix \"Blocked by robots.txt\" Errors",
     description: "Configure robots.txt and XML sitemaps without leaking private routes or accidentally blocking the public pages that should rank.",
     eyebrow: "Technical SEO",
-    readTime: "8 min read",
     updatedAt: "2026-11-07",
     relatedChecks: ["robots.txt", "XML sitemap", "Indexability", "Canonical URL"],
     intro: [
@@ -320,7 +329,6 @@ export const guides: Guide[] = [
     title: "llms.txt for SaaS: useful file, realistic expectations",
     description: "What an llms.txt file can communicate, what it cannot guarantee, and how to publish a concise version for a SaaS product.",
     eyebrow: "AI discovery",
-    readTime: "6 min read",
     relatedChecks: ["llms.txt", "Canonical links", "Public documentation", "XML sitemap"],
     intro: [
       "An llms.txt file is a plain-text guide placed at the root of a website. Its purpose is to give compatible AI systems a compact description of the product and point them toward the most useful public pages.",
@@ -364,7 +372,6 @@ export const guides: Guide[] = [
     title: "Exposed files and source maps in production",
     description: "Find and remove public environment files, Git metadata, backups, debug pages, and JavaScript source maps from a SaaS deployment.",
     eyebrow: "Application exposure",
-    readTime: "8 min read",
     relatedChecks: [".env exposure", "Git metadata", "Backup files", "Source maps"],
     intro: [
       "A deployment can work perfectly while publishing files that were never meant for a browser. Environment files, repository metadata, database backups, logs, and source maps often appear because the build artifact is too broad or the web root points at the wrong directory.",
@@ -411,7 +418,6 @@ export const guides: Guide[] = [
     title: "GitHub secret scanning for vibe-coded apps",
     description: "What to do when an AI-built app commits an .env file, API key, database URL, private key, or service credential to GitHub.",
     eyebrow: "Repository security",
-    readTime: "8 min read",
     relatedChecks: ["Committed .env files", "Provider tokens", "Private keys", "Database URLs"],
     intro: [
       "A committed secret is an incident, even when the repository is private and the file was deleted five minutes later. Git keeps history. Build logs, forks, caches, and local clones may keep another copy.",
@@ -463,7 +469,6 @@ export const guides: Guide[] = [
     title: "GitHub Actions security for vibe-coded apps",
     description: "Review workflow token permissions, pull_request_target, secret handling, third-party actions, and release jobs before an AI-generated workflow reaches production.",
     eyebrow: "CI and deployment",
-    readTime: "9 min read",
     relatedChecks: ["GITHUB_TOKEN permissions", "pull_request_target", "Pinned actions", "Secret output"],
     intro: [
       "A GitHub Actions file is production code with credentials. It can publish a package, deploy an app, write to the repository, and read any secret explicitly provided to the job.",
@@ -507,56 +512,87 @@ export const guides: Guide[] = [
     coverAlt: "",
     title: "Supabase security checklist for vibe-coded apps",
     seoTitle: "Supabase Security: RLS, API Keys & Storage Checklist (2026)",
-    description: "A Supabase security checklist for apps built with Lovable, Bolt, Cursor or Claude: Row Level Security, anon vs service-role keys, tenant-aware policies, storage buckets, edge functions and how to test each one.",
+    description: "Supabase security checklist for Lovable, Bolt, Cursor or Claude apps: RLS, table grants, publishable vs secret keys, storage, edge functions and tests.",
     eyebrow: "Database security",
-    readTime: "12 min read",
     publishedAt: "2026-08-13",
-    updatedAt: "2026-11-07",
+    updatedAt: "2026-11-11",
     relatedChecks: ["Row Level Security", "Service-role keys", "Public environment variables", "SQL migrations"],
+    related: ["vibe-coding-security-checklist", "github-secret-scanning-for-vibe-coded-apps"],
     intro: [
-      "Supabase makes a browser-to-database product possible with very little code. The safety of that design depends on Row Level Security and the difference between a publishable key and a privileged server key.",
-      "A working login screen proves authentication. It does not prove that one user cannot read or update another user's rows. Use this Supabase security checklist on a project you own, in the order below: the first two items cause most real data leaks.",
+      "Supabase lets the browser talk to the database with very little code. That design is only safe when Row Level Security is correct, each table is granted to the right roles, and privileged keys never reach the browser.",
+      "A working login screen proves authentication. It does not prove that one user cannot read or update another user's rows. Use this Supabase security checklist on a project you own, in the order below.",
     ],
     sections: [
       {
         heading: "Enable RLS on every exposed table",
         figure: "rls-flow",
-        paragraphs: ["Supabase says Row Level Security must be enabled on tables in an exposed schema such as public. Tables created in the dashboard receive RLS by default, but raw SQL migrations need an explicit ALTER TABLE statement. Check migrations, not only the current dashboard state."],
+        paragraphs: [
+          "Supabase says Row Level Security must be enabled on tables in an exposed schema such as public. Tables created in the dashboard get RLS by default. Tables created in raw SQL migrations, which is how most AI tools create them, need an explicit ALTER TABLE statement, so read the migrations as well as the dashboard.",
+          "Supabase also documents event triggers that enable RLS automatically on every new table, which catches the table an AI tool adds without telling you.",
+        ],
         bullets: [
           "Enable RLS before production data is written.",
           "Create separate policies for select, insert, update, and delete when their rules differ.",
-          "Test as anon, as a signed-in user, as another tenant, and with no session.",
+          "Test with only the publishable key (no session), as user A, as user B in another tenant, and as a member against admin-only rows.",
           "Apply the same ownership model to storage objects and database functions.",
+        ],
+        links: [
+          { label: "Scan migrations with the GitHub repo scanner", href: "/repo-scan" },
+          { label: "Lovable security scanner", href: "/lovable-security-scanner" },
+        ],
+      },
+      {
+        heading: "Grant table access explicitly (required since October 30, 2026)",
+        paragraphs: [
+          "Supabase changed how new tables reach the Data API. New tables in the public schema are no longer exposed automatically. This became the default for new projects on May 30, 2026 and was applied to all existing projects on October 30, 2026. A request to a new table without a GRANT fails with error 42501, permission denied for table.",
+          "Put the grant, the RLS statement and the policies in the same migration, and grant only what each role needs. A table that only signed-in users read should not be granted to anon.",
+        ],
+        bullets: [
+          "grant select on public.your_table to anon; (only for public data)",
+          "grant select, insert, update, delete on public.your_table to authenticated;",
+          "alter table public.your_table enable row level security;",
+          "Then create one policy per operation that needs it.",
         ],
       },
       {
         heading: "A policy must match the tenant model",
         paragraphs: [
           "A check such as user_id = auth.uid() works for rows owned directly by one user. Team SaaS products usually need membership joins, organization IDs, role checks, and rules for invitations or suspended accounts. Copying a single-user policy into a multi-tenant app can either expose data or block legitimate work.",
-          "Write tests that create two tenants and attempt every read and write across the boundary. The denied case is the test that matters.",
+          "Write tests that create two tenants and attempt every read and write across the boundary; the denied cases are the ones to keep in CI.",
         ],
+        bullets: [
+          "Wrap auth.uid() as (select auth.uid()) in policies so Postgres evaluates it once per statement.",
+          "UPDATE needs a matching SELECT policy, and the WITH CHECK clause decides what the updated row may look like, so a user cannot move a row to another tenant.",
+        ],
+        links: [{ label: "SaaS launch security checklist", href: "/guides/saas-launch-security-checklist" }],
       },
       {
         heading: "Keep privileged keys on the server",
-        paragraphs: ["Supabase publishable keys (sb_publishable_…) and legacy anon keys are intended for public clients when RLS is correct. Secret keys (sb_secret_…) and legacy service-role keys bypass RLS and belong only in controlled backend code. Never give them a NEXT_PUBLIC_, VITE_, or REACT_APP_ prefix.", "Supabase is retiring the legacy anon and service_role keys by the end of 2026. Create the new publishable and secret keys, deploy them, then disable the legacy keys in Settings > API Keys. If a service-role key was ever committed, treat the switch as a rotation."],
+        paragraphs: [
+          "Supabase publishable keys (sb_publishable_…) and legacy anon keys are meant for public clients when RLS is correct. Secret keys (sb_secret_…) and legacy service_role keys bypass RLS and belong only in controlled backend code. Never give them a NEXT_PUBLIC_, VITE_, or REACT_APP_ prefix.",
+          "Supabase is deprecating the legacy anon and service_role keys by the end of 2026. Creating publishable and secret keys does not disable the legacy ones: they stay valid until you turn them off in Settings > API Keys. Replace the anon key in client code and the service_role key in backend code, Database Webhooks and CI, confirm nothing still uses the legacy keys, then deactivate them. If a service_role key was ever committed, the leak is only closed once that legacy key is deactivated.",
+          "Supabase rejects a secret key sent from a browser with 401. A leaked secret key still works from curl or a script, so rotate it anyway.",
+        ],
         bullets: [
           "Only the publishable or anon key appears in browser code.",
-          "The secret or service-role key is read from a server-side environment variable.",
-          "Legacy keys are disabled once the new keys are live.",
+          "The secret or service_role key is read from a server-side environment variable.",
+          "Legacy keys are deactivated once the new keys are live.",
         ],
+        links: [{ label: "GitHub secret scanning and key rotation", href: "/guides/github-secret-scanning-for-vibe-coded-apps" }],
       },
       {
         heading: "Review server routes and edge functions too",
-        paragraphs: ["A server route or edge function using a privileged Supabase client becomes its own authorization boundary. Verify the signed-in user from the JWT, check the tenant and role, validate the input, then perform the administrative query. Never accept a user ID or role from the request body as proof of identity. The service key will not repair a missing authorization check."],
+        paragraphs: ["A server route or edge function that uses a privileged Supabase client is its own authorization boundary. Verify the signed-in user from the JWT, check the tenant and role, validate the input, and only then run the administrative query. A user ID or role sent in the request body proves nothing, and the secret key cannot make up for a missing check."],
         bullets: [
-          "Read the user from supabase.auth.getUser() with the request's token, not from a field the browser sends.",
+          "Verify the request's access token on the server with supabase.auth.getClaims() (verified locally when the project uses asymmetric JWT signing keys) or getUser(), and take the user ID from the verified claims, never from the request body.",
+          "For Edge Functions called with the new API keys, read them from SUPABASE_SECRET_KEYS or SUPABASE_PUBLISHABLE_KEYS, send them only in the apikey header, set verify_jwt = false and authorize the request in your own code.",
           "Return 401 for no session and 403 for the wrong tenant or role before touching data.",
-          "Keep functions that need the service-role key small, and log what they change.",
+          "Keep functions that need the secret key small, and log what they change.",
         ],
       },
       {
         heading: "Lock down storage buckets",
-        paragraphs: ["Storage objects are rows in storage.objects and follow the same RLS model. A public bucket serves every file to anyone with the URL. For user uploads such as documents, invoices or avatars that should stay private, use a private bucket with policies that tie the object path to the owner, for example a folder named after auth.uid()."],
+        paragraphs: ["Storage objects are rows in storage.objects and follow the same RLS model. A public bucket serves every file to anyone with the URL. For user uploads such as documents, invoices or avatars that should stay private, use a private bucket with policies that tie the object path to the owner: for example a policy on storage.objects with bucket_id = 'documents' and (storage.foldername(name))[1] = (select auth.jwt()->>'sub'), so each user can only write inside a folder named after their user ID."],
         bullets: [
           "Mark a bucket public only when every file in it is meant to be public.",
           "Add select, insert, update and delete policies on storage.objects scoped to the bucket and owner.",
@@ -567,27 +603,36 @@ export const guides: Guide[] = [
         heading: "Check database functions and views",
         paragraphs: ["Functions declared SECURITY DEFINER run with the privileges of their owner and can bypass RLS. Views in an exposed schema can also expose rows from tables that have RLS, depending on how they are created. Review both whenever an AI tool adds a migration."],
         bullets: [
-          "Prefer SECURITY INVOKER functions; when DEFINER is required, set a fixed search_path and check auth.uid() inside.",
-          "Create views with security_invoker = true so the caller's RLS applies.",
-          "Revoke execute on sensitive functions from anon when they are not meant to be public.",
+          "Prefer SECURITY INVOKER functions. When DEFINER is required, set search_path = '' and schema-qualify every name, and check auth.uid() inside.",
+          "On Postgres 15 and later, create views with security_invoker = true so the caller's RLS applies; otherwise keep the view out of exposed schemas.",
+          "Revoke execute on sensitive functions from public, anon and authenticated when they are not meant to be called over the Data API.",
         ],
       },
       {
         heading: "Test it like an attacker would",
-        paragraphs: ["The anon key and project URL are in your JavaScript, so assume anyone can call the Data API directly. Using a project you own, send requests with only the anon key, then as user A against user B's rows, and confirm the denied cases. Run Supabase's Security Advisor in the dashboard to catch tables without RLS and risky functions, and scan the repository so new migrations are checked before they ship."],
+        paragraphs: [
+          "The publishable (or legacy anon) key and project URL are in your JavaScript, so assume anyone can call the Data API directly. Using a project you own, send requests with only that key, then as user A against user B's rows, and confirm the denied cases. Run Supabase's Security Advisor in the dashboard to catch tables without RLS and risky functions, and scan the repository so new migrations are checked before they ship.",
+          "From a terminal: curl 'https://YOUR_PROJECT.supabase.co/rest/v1/YOUR_TABLE?select=*' -H 'apikey: YOUR_PUBLISHABLE_KEY'. For a private table the result must be an empty array or a 42501 permission error. Repeat with a user's access token in an Authorization: Bearer header to test user A against user B's rows.",
+        ],
         bullets: [
-          "Anonymous request to a private table: returns no rows, not an error you ignore.",
+          "Publishable-key request to a private table: an empty array or a 42501 permission error, never rows.",
           "User A updating user B's row: zero rows changed.",
           "Security Advisor shows no RLS-disabled tables in exposed schemas.",
-          "Repository scan shows no tables created without RLS and no secret keys in client code.",
+          "Repository scan shows no migration that creates a table without enabling RLS and no Supabase secret or service_role key committed. The scan reads a bounded set of files and does not judge policy logic or grants.",
+        ],
+        links: [
+          { label: "GitHub repo scanner", href: "/repo-scan" },
+          { label: "Vibe coding security", href: "/vibe-coding-security" },
         ],
       },
     ],
     sources: [
       { label: "Supabase: Row Level Security", url: "https://supabase.com/docs/guides/database/postgres/row-level-security" },
+      { label: "Supabase changelog: tables not exposed to the Data API automatically", url: "https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically" },
       { label: "Supabase: Securing your data and API keys", url: "https://supabase.com/docs/guides/database/secure-data" },
+      { label: "Supabase: Migrating to publishable and secret API keys", url: "https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys" },
       { label: "Supabase: Storage access control", url: "https://supabase.com/docs/guides/storage/security/access-control" },
-      { label: "Supabase: Database advisors", url: "https://supabase.com/docs/guides/database/database-advisors" },
+      { label: "Supabase: Database advisors", url: "https://supabase.com/docs/guides/observability/advisors" },
     ],
   },
   {
@@ -598,7 +643,6 @@ export const guides: Guide[] = [
     seoTitle: "Vibe Coding Security Checklist: 47 Checks Before You Ship (2026)",
     description: "A practical vibe coding security checklist for apps built with Lovable, Cursor, Bolt, Claude Code or Codex: secrets, auth, ownership checks, Supabase RLS, payments, headers and what you can automate.",
     eyebrow: "Checklist",
-    readTime: "11 min read",
     publishedAt: "2026-11-07",
     updatedAt: "2026-11-07",
     relatedChecks: ["Committed secrets and public env vars", "Supabase tables without RLS", "Security headers and CSP", "Exposed files and source maps", "Cookie flags", "GitHub Actions permissions"],
@@ -730,6 +774,8 @@ export const guides: Guide[] = [
     ],
   },
 ];
+
+export const guides: Guide[] = guideData.map((guide) => ({ ...guide, readTime: readTimeFor(guide) }));
 
 export function getGuide(slug: string) {
   return guides.find((guide) => guide.slug === slug);
