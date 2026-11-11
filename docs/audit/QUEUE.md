@@ -10,8 +10,8 @@ Instructions for each item are in:
 
 Order (highest value first):
 
-- [ ] 1. Guide template `src/app/guides/[slug]/page.tsx` + `src/lib/guides.ts` interface (guides.md §T). Do this first: it adds in-body links and fixes the outdated "public repository" CTA, which every later guide edit relies on.
-- [ ] 2. `supabase-security-for-vibe-coded-apps` (guides.md §1). Supabase grant change of 2026-10-30, 42501 denial, getClaims, edge function keys, description wording.
+- [x] 1. Guide template `src/app/guides/[slug]/page.tsx` + `src/lib/guides.ts` interface (guides.md §T). Do this first: it adds in-body links and fixes the outdated "public repository" CTA, which every later guide edit relies on. (done 2026-11-11, PR #23)
+- [x] 2. `supabase-security-for-vibe-coded-apps` (guides.md §1). Supabase grant change of 2026-10-30, 42501 denial, getClaims, edge function keys, description wording. (done 2026-11-11, PR #23)
 - [ ] 3. `vibe-coding-security-checklist` (guides.md §3). Automated-vs-manual claims, Stripe success-page rule, CORS bullet, CSP first-page caveat.
 - [ ] 4. `/repo-scan` (landing-pages.md §3). Meta "free ... private" claim, dependency coverage accuracy, limits.
 - [ ] 5. `ssl-tls-checklist-for-saas` (guides.md §2). 2026 certificate lifetime limits, Let's Encrypt changes, HSTS preload redirect rule.
