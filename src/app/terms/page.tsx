@@ -108,7 +108,7 @@ export default function TermsOfServicePage() {
               THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT ANY WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR ACCURACY.
             </p>
             <p className="mt-3">
-              We do not warrant that the Service will detect all vulnerabilities in your web applications. The absence of reported vulnerabilities does not guarantee that your website is secure. Our scans are automated and may produce false positives or miss certain vulnerability types. The Service is not a substitute for professional penetration testing or security audits.
+              We do not warrant that the Service will detect all vulnerabilities in your web applications. The absence of reported vulnerabilities does not guarantee that your website is secure. Our scans are automated and may produce false positives or miss certain vulnerability types. The Service is not a substitute for professional penetration testing or security audits. Privacy, cookie consent and accessibility checks are automated signals, not legal advice, and do not establish that a website complies with any law.
             </p>
           </section>
 

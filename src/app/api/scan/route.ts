@@ -7,6 +7,7 @@ import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { auth } from "@/lib/auth";
 import { admitWebsiteScan } from "@/lib/scan-gate";
 import { serializeWebsiteFindings } from "@/lib/scan-remediation";
+import { complianceScanOptions } from "@/lib/compliance-scan-options";
 
 export const maxDuration = 120;
 
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     // Run the scan
     try {
-      const results = await scanWebsite(normalizedUrl);
+      const results = await scanWebsite(normalizedUrl, undefined, await complianceScanOptions(userId, userPlan));
 
       // Save vulnerabilities in batch
       if (results.vulnerabilities.length > 0) {

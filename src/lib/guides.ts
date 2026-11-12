@@ -773,6 +773,144 @@ const guideData: Array<Omit<Guide, "readTime">> = [
       { label: "Stripe: Verify webhook signatures", url: "https://docs.stripe.com/webhooks#verify-events" },
     ],
   },
+  {
+    slug: "cookie-consent-for-saas",
+    title: "Cookie consent for SaaS: what to block until the visitor says yes",
+    seoTitle: "Cookie Consent for SaaS: GDPR Banner Checklist",
+    description: "Which cookies need consent, how to load Google Analytics and ad pixels only after a yes, why Reject must be as easy as Accept, and how to test it.",
+    eyebrow: "Privacy",
+    publishedAt: "2026-11-12",
+    updatedAt: "2026-11-12",
+    relatedChecks: ["Tracking cookies before consent", "Reject button on the banner", "Global Privacy Control", "Consent tool detection"],
+    related: ["privacy-policy-checklist-for-saas", "vibe-coding-security-checklist"],
+    intro: [
+      "Most SaaS cookie banners fail the same way: the banner appears, and Google Analytics, the Meta Pixel and Hotjar have already set their cookies behind it. The banner asks a question the page has stopped waiting for.",
+      "This guide covers EU and UK consent rules first, because they are the strictest, then what changes for US visitors. It is practical guidance, not legal advice.",
+    ],
+    sections: [
+      {
+        heading: "Which cookies need consent",
+        paragraphs: [
+          "Article 5(3) of the EU ePrivacy Directive requires consent before a site stores or reads anything on a visitor's device, unless it is strictly necessary for a service the visitor asked for. The UK has the same rule in PECR. GDPR then defines what valid consent is: freely given, specific, informed and an active choice.",
+          "Strictly necessary covers the login session, a CSRF token, a load balancer cookie and the cookie that stores the consent choice itself. Analytics, advertising pixels and session replay are not necessary for the service, so they wait. France's CNIL exempts some audience-measurement setups that meet strict conditions, but a default Google Analytics install is not one of them.",
+        ],
+        bullets: [
+          "No consent needed: session, CSRF, load balancing, language preference, the consent record.",
+          "Consent needed: Google Analytics, Google Ads, Meta Pixel, LinkedIn, TikTok, Hotjar, Microsoft Clarity, most product analytics that set identifiers.",
+          "Cookieless analytics is not automatically exempt: reading identifiers from the device can still fall under Article 5(3), and the data is still personal data under GDPR.",
+        ],
+      },
+      {
+        heading: "Load tags only after a yes",
+        paragraphs: [
+          "The fix is about load order, not the banner design. Nothing that sets a tracking cookie may run before the visitor accepts, and it must check the stored choice again on every page load.",
+          "For Google tags, set consent mode to denied before gtag or Google Tag Manager loads, then update it when the visitor accepts. Google then sends cookieless pings until consent is given. For every other tag, let your consent tool inject the script, or ship it as type=\"text/plain\" with the tool's category attribute so the browser does not run it.",
+        ],
+        bullets: [
+          "gtag('consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });",
+          "On accept: gtag('consent', 'update', { analytics_storage: 'granted', ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' });",
+          "In Next.js, render analytics scripts only from a client component that reads the stored consent, never unconditionally in app/layout.tsx.",
+        ],
+      },
+      {
+        heading: "Make Reject as easy as Accept",
+        paragraphs: [
+          "A banner with \"Accept all\" and a small \"Settings\" link is the most common design and the one regulators fine. In January 2022 the CNIL fined Google 150 million euros and Facebook 60 million euros because refusing cookies took more clicks than accepting them. Put \"Reject all\" on the first layer, with the same size and weight as \"Accept all\".",
+          "Pre-ticked boxes do not count either. In Planet49 (C-673/17), the Court of Justice of the EU held that a pre-checked checkbox is not valid consent. The same applies to a marketing checkbox on a sign-up form.",
+        ],
+      },
+      {
+        heading: "US visitors: opt-out instead of opt-in",
+        paragraphs: [
+          "California's CCPA, as amended by the CPRA, works the other way round. A covered business may set advertising cookies first, but if sharing data with ad platforms counts as selling or sharing, it must offer a \"Do Not Sell or Share My Personal Information\" link and treat the Global Privacy Control browser signal as an opt-out. The law applies only above its revenue or data thresholds, so check whether you are covered before building it.",
+        ],
+      },
+      {
+        heading: "Test it yourself in five minutes",
+        paragraphs: ["Use a private window so no earlier choice is stored. If your banner only shows to EU visitors, test through an EU connection."],
+        bullets: [
+          "Open the site and do not click anything. In DevTools > Application > Cookies, look for _ga, _gcl_au, _fbp, _hj or _clck. Any of them means tags run before consent.",
+          "Click Reject, reload the page, and check again. Delete the old cookies first so you see only what comes back.",
+          "Accept, reload, and confirm analytics now works. A setup that never loads after consent loses data for nothing.",
+          "A ScanMySaaS website scan lists the trackers it finds in your HTML on every plan. On Starter and Pro it also loads the page in a real browser and runs the first two tests automatically.",
+        ],
+        links: [
+          { label: "GDPR cookie checker", href: "/gdpr-cookie-checker" },
+          { label: "Privacy policy checklist", href: "/guides/privacy-policy-checklist-for-saas" },
+        ],
+      },
+    ],
+    sources: [
+      { label: "ePrivacy Directive 2002/58/EC (Article 5(3))", url: "https://eur-lex.europa.eu/eli/dir/2002/58/oj" },
+      { label: "GDPR, Regulation (EU) 2016/679", url: "https://eur-lex.europa.eu/eli/reg/2016/679/oj" },
+      { label: "CJEU, Planet49 (C-673/17)", url: "https://curia.europa.eu/juris/liste.jsf?num=C-673/17" },
+      { label: "Google: Set up consent mode", url: "https://developers.google.com/tag-platform/security/guides/consent" },
+      { label: "California Privacy Protection Agency: CCPA regulations", url: "https://cppa.ca.gov/regulations/" },
+    ],
+  },
+  {
+    slug: "privacy-policy-checklist-for-saas",
+    title: "Privacy policy checklist for SaaS: what the page has to say",
+    seoTitle: "Privacy Policy Checklist for SaaS (GDPR, CCPA)",
+    description: "What a SaaS privacy policy needs under GDPR and the CCPA: who you are, what you collect, which vendors get data, retention, user rights and where to link it.",
+    eyebrow: "Privacy",
+    publishedAt: "2026-11-12",
+    updatedAt: "2026-11-12",
+    relatedChecks: ["Privacy policy link", "Vendors named in the policy", "Email forms", "Terms of service"],
+    related: ["cookie-consent-for-saas", "saas-launch-security-checklist"],
+    intro: [
+      "If your SaaS has a sign-up form, a newsletter box or Google Analytics, it collects personal data, and in the EU, the UK and several US states that means it needs a privacy policy. Apple's App Store and Google's OAuth consent screen also ask for a privacy policy URL before they let you ship.",
+      "The common failure is not a missing page. It is a generated template that lists tools you never used and leaves out the ones you did.",
+    ],
+    sections: [
+      {
+        heading: "What GDPR Article 13 asks you to tell people",
+        paragraphs: ["When you collect data directly from a person, Article 13 lists what they must be told at that moment. A privacy policy is where most SaaS products put it."],
+        bullets: [
+          "Who you are and how to contact you, plus your data protection officer if you have one.",
+          "What you collect, why, and the legal basis for each purpose (contract, consent, legitimate interests, legal obligation).",
+          "Who receives the data: your hosting, database, payment, email and analytics providers.",
+          "Transfers outside the EU and the safeguard you rely on.",
+          "How long you keep each kind of data.",
+          "The rights to access, correct, delete, restrict, object and port data, how to use them, and how to withdraw consent.",
+          "The right to complain to a data protection authority.",
+        ],
+      },
+      {
+        heading: "Name the vendors your site actually loads",
+        paragraphs: [
+          "Compare the policy with reality. Open your site, list every third-party script in DevTools > Network, and add your backend processors: hosting, database, payments, transactional email, error tracking. Every one of them should appear in the policy or in a linked subprocessor list.",
+          "A ScanMySaaS scan does part of this for you: it reads your privacy policy and flags trackers it found on the site that the policy never names, such as a Hotjar or Meta Pixel tag added after the policy was written.",
+        ],
+        links: [{ label: "Cookie consent for SaaS", href: "/guides/cookie-consent-for-saas" }],
+      },
+      {
+        heading: "Link it where data is collected",
+        paragraphs: ["A policy nobody can find does not inform anyone. Put the link in the footer of every page, next to every form that asks for an email, on the sign-up page, in the cookie banner and in your app store listing."],
+      },
+      {
+        heading: "US privacy laws",
+        paragraphs: [
+          "The CCPA requires covered businesses to publish a privacy policy that lists the categories of personal information collected, the purposes, the categories of third parties it is shared with, and how Californians can exercise their rights, and to update it at least once every 12 months. Other state laws, such as those in Virginia and Colorado, have similar notice duties. Most apply only above revenue or data-volume thresholds.",
+        ],
+      },
+      {
+        heading: "Keep it true",
+        paragraphs: ["Update the policy when you add a tool, change the date at the top, and keep the old version. A short policy that matches what the product does is better than a long one that does not."],
+        bullets: [
+          "Add a line to your release checklist: does this change send personal data to a new service?",
+          "Publish terms of service next to the policy if users create accounts or pay.",
+          "Have a privacy lawyer review the final text if you have users in the EU, UK or California.",
+        ],
+        links: [{ label: "GDPR cookie checker", href: "/gdpr-cookie-checker" }],
+      },
+    ],
+    sources: [
+      { label: "GDPR, Regulation (EU) 2016/679 (Articles 13 and 14)", url: "https://eur-lex.europa.eu/eli/reg/2016/679/oj" },
+      { label: "California Consumer Privacy Act (statute)", url: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf" },
+      { label: "California Privacy Protection Agency: CCPA regulations", url: "https://cppa.ca.gov/regulations/" },
+    ],
+  },
 ];
 
 export const guides: Guide[] = guideData.map((guide) => ({ ...guide, readTime: readTimeFor(guide) }));
