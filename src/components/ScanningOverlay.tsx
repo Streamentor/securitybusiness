@@ -16,6 +16,7 @@ import {
   Cookie,
   Code2,
   Fingerprint,
+  Scale,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -77,6 +78,7 @@ const stepIcons: Record<string, React.ElementType> = {
   html: Code2,
   "source-maps": FileCode,
   fingerprint: Fingerprint,
+  compliance: Scale,
   saving: CheckCircle2,
 };
 
@@ -99,6 +101,7 @@ const stepColors: Record<string, string> = {
   html: "text-indigo-400",
   "source-maps": "text-orange-300",
   fingerprint: "text-violet-400",
+  compliance: "text-sky-300",
   saving: "text-emerald-400",
 };
 
@@ -365,6 +368,7 @@ export default function ScanningOverlay({ url, isOpen, onClose, reportId }: Scan
               { step: "html", label: "HTML" },
               { step: "source-maps", label: "Src Maps" },
               { step: "fingerprint", label: "Tech" },
+              { step: "compliance", label: "Privacy" },
             ].map((item) => {
               const done = progress.find((p) => p.step === item.step);
               const isRunning = currentStep?.step === item.step && currentStep.status === "running";

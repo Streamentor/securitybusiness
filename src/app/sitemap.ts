@@ -49,6 +49,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
+      url: `${baseUrl}/gdpr-cookie-checker`,
+      lastModified: new Date("2026-11-12"),
+      changeFrequency: "monthly",
+      priority: 0.85,
+    },
+    {
       url: `${baseUrl}/repo-scan`,
       lastModified: new Date("2026-11-07"),
       changeFrequency: "weekly",

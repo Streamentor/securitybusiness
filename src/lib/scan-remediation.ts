@@ -26,7 +26,7 @@ export function isVisibleWebsiteFinding(finding: Pick<RemediationFinding, "type"
 }
 
 const severityRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-const categoryRank: Record<string, number> = { "sensitive-file": 0, xss: 1, cors: 2, "api-exposure": 3, ssl: 4, cookies: 5, csrf: 6, headers: 7, csp: 8 };
+const categoryRank: Record<string, number> = { "sensitive-file": 0, xss: 1, cors: 2, "api-exposure": 3, ssl: 4, cookies: 5, csrf: 6, headers: 7, csp: 8, privacy: 10, "cookies-consent": 10, accessibility: 11 };
 
 /** Server-side entitlement boundary: one stable actionable fix per free report. */
 export function applyWebsiteRemediationAccess<T extends RemediationFinding>(findings: readonly T[], plan: unknown): Array<T & { remediationAccess: RemediationAccess }> {

@@ -7,6 +7,7 @@ import { isIP } from "node:net";
 import type { LookupFunction } from "node:net";
 import { connect as connectTls } from "node:tls";
 import { Agent } from "undici";
+import type { ComplianceRunner } from "./compliance-runner";
 
 export interface VulnerabilityResult {
   type: string;
@@ -1283,7 +1284,7 @@ async function checkRedirectChain(url: string): Promise<VulnerabilityResult[]> {
 }
 
 // ─── Score calculation ─────────────────────────────────────────────
-function calculateScore(vulns: VulnerabilityResult[]): number {
+export function calculateScore(vulns: VulnerabilityResult[]): number {
   // Category-based scoring: each category has a weight and we calculate
   // how much of that category's budget is lost based on findings.
   // This prevents a site with many low/info issues from getting 0.
@@ -1310,6 +1311,10 @@ function calculateScore(vulns: VulnerabilityResult[]): number {
     sri: 3,
     iframe: 1,
     seo: 0,
+    // Privacy, consent and accessibility findings are reported beside the security score, not in it.
+    privacy: 0,
+    "cookies-consent": 0,
+    accessibility: 0,
     fingerprint: 0,
     "scan-meta": 0,
   };
@@ -1373,19 +1378,36 @@ function calculateScore(vulns: VulnerabilityResult[]): number {
 }
 
 // ─── MAIN SCAN FUNCTION ───────────────────────────────────────────
-export async function scanWebsite(url: string, onProgress?: ProgressCallback): Promise<ScanResult> {
-  return scanBudget.run({deadline: Date.now() + 90000, exhausted: false, failedRequests: 0}, () => scanWebsiteWithinBudget(url, onProgress));
+export interface ScanOptions {
+  /** Privacy, consent and accessibility checks. Injected by the API routes so the scanner core stays dependency-free. */
+  compliance?: ComplianceRunner;
+}
+
+export async function scanWebsite(url: string, onProgress?: ProgressCallback, options: ScanOptions = {}): Promise<ScanResult> {
+  return scanBudget.run({deadline: Date.now() + 90000, exhausted: false, failedRequests: 0}, () => scanWebsiteWithinBudget(url, onProgress, options));
+}
+
+function remainingBudget() {
+  const budget = scanBudget.getStore();
+  return budget ? budget.deadline - Date.now() : 60_000;
+}
+
+async function fetchComplianceHtml(pageUrl: string) {
+  const res = await safeFetch(pageUrl, { timeout: 8000 });
+  if (!res || !res.ok || !(res.headers.get("content-type") || "").includes("text/html")) return null;
+  try { return { url: pageUrl, html: await res.text() }; } catch { return null; }
 }
 async function scanWebsiteWithinBudget(
   url: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  options: ScanOptions = {},
 ): Promise<ScanResult> {
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
 
   const allVulns: VulnerabilityResult[] = [];
-  const totalSteps = 17;
+  const totalSteps = 18;
   let currentStepNum = 0;
 
   const report = (
@@ -1410,6 +1432,12 @@ async function scanWebsiteWithinBudget(
     throw new WebsiteScanError(failure.message, failure);
   }
   report(`Found ${pages.length} page(s)`, "crawl", "done", 0, pages.length);
+
+  // The browser consent test (paid plans) runs beside the HTTP checks so it does not add to scan time.
+  options.compliance?.start(pages[0], {
+    timeoutMs: Math.max(5_000, Math.min(45_000, remainingBudget() - 25_000)),
+    assertPublicHost: async (hostname) => { await validateScanTarget(`https://${hostname}/`); },
+  });
 
   // ── Steps 2-7: Independent checks — PARALLEL BATCH 1 ──────────
   currentStepNum = 2;
@@ -1556,6 +1584,20 @@ async function scanWebsiteWithinBudget(
   allVulns.push(...srcMapV);
   report("Source maps complete", "source-maps", "done", srcMapV.length);
 
+  // Privacy, consent and accessibility
+  currentStepNum = 18;
+  if (options.compliance) {
+    report("Checking privacy & consent…", "compliance", "running");
+    const htmlPages = pages.flatMap((pageUrl) => {
+      const snapshot = snapshots.get(pageUrl);
+      return snapshot && (snapshot.headers.get("content-type") || "").includes("text/html") ? [{ url: pageUrl, html: snapshot.html }] : [];
+    });
+    const complianceV = await options.compliance.finish({ url, pages: htmlPages, fetchHtml: fetchComplianceHtml, remainingMs: remainingBudget })
+      .catch(() => [] as VulnerabilityResult[]);
+    allVulns.push(...complianceV);
+    report("Privacy & consent complete", "compliance", "done", complianceV.filter((item) => item.type !== "scan-meta" && item.severity !== "info").length);
+  }
+
   // Deduplicate
   const seen = new Set<string>();
   const unique = allVulns.filter((v) => {
@@ -1572,3 +1614,4 @@ async function scanWebsiteWithinBudget(
       : "Public website checks only. Up to 25 linked HTML pages; authenticated routes and repository code were not reviewed."},
   };
 }
+

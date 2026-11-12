@@ -6,6 +6,11 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // The browser consent test needs the serverless Chromium binary, which file tracing does not pick up on its own.
+  outputFileTracingIncludes: {
+    "/api/scan": ["./node_modules/@sparticuz/chromium/bin/**/*"],
+    "/api/scan/stream": ["./node_modules/@sparticuz/chromium/bin/**/*"],
+  },
   async headers() {
     return [{
       source: "/:path*",
