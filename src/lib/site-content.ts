@@ -65,7 +65,7 @@ export const productFeatures = [
 
 export const repoScanSteps = [
   { title: "Paste a repository or connect GitHub", copy: "Paste a public github.com URL, including a /tree/branch link, or connect the read-only ScanMySaaS GitHub App and pick a private repository." },
-  { title: "We read one exact commit", copy: "The branch is resolved to a commit SHA and up to 60 security-relevant files are read from it, highest-risk first: middleware, API routes, auth, payments, configs and workflows." },
+  { title: "We read one exact commit", copy: "The branch is resolved to a commit SHA and up to 60 security-relevant files are read from it in this order: environment and key files, GitHub workflows and agent configs, lockfiles and SQL migrations, build configs, then source files ranked by risk (middleware, API routes, auth and payment code)." },
   { title: "Get findings with file and line", copy: "Each finding names the file and line, explains why it was flagged and comes with a fix prompt for Cursor, Claude or Codex. Rescan after fixing to confirm." },
 ] as const;
 
@@ -76,11 +76,15 @@ export const repoFaqs = [
   },
   {
     question: "How do I scan a GitHub repository for secrets and vulnerabilities?",
-    answer: "Paste the repository URL into the repo scanner and confirm you own it or have permission. For a private repository, sign in, connect GitHub with the read-only ScanMySaaS GitHub App and choose the repository. The scan reads one pinned commit and returns findings with file paths and line numbers, usually within a minute.",
+    answer: "Paste the repository URL into the repo scanner and confirm you own it or have permission. For a private repository, sign in, connect GitHub with the read-only ScanMySaaS GitHub App and choose the repository. The scan reads one pinned commit and returns findings with file paths and line numbers.",
   },
   {
     question: "Is the repo scanner free?",
     answer: "Public repository scans are free. Private repository scans and the AI logic review are included in the Starter and Pro plans.",
+  },
+  {
+    question: "Do repository scans use scan credits?",
+    answer: "No. Credits are only used for website scans. Public repository scans are free, and private repository scans are included in Starter and Pro.",
   },
   {
     question: "Can I scan a private GitHub repository?",
