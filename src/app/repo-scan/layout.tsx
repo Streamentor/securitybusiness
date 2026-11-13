@@ -5,7 +5,7 @@ const SITE_URL = "https://www.scanmysaas.com";
 
 export const metadata: Metadata = {
   title: { absolute: "GitHub Repo Security Scanner: Free Scan for Secrets & Vulnerabilities" },
-  description: "Free GitHub repo scanner. Scan public or private repos (read-only) for committed .env files, API keys, risky GitHub Actions, Supabase RLS gaps and vulnerable dependencies.",
+  description: "GitHub repo scanner: free for public repos, private repos on paid plans. Finds committed .env files, API keys, risky Actions, RLS gaps and vulnerable deps.",
   alternates: { canonical: "/repo-scan" },
   openGraph: {
     title: "GitHub Repo Scanner for Secrets & Vulnerabilities | ScanMySaaS",
@@ -25,7 +25,7 @@ const jsonLd = {
   applicationCategory: "SecurityApplication",
   operatingSystem: "Any",
   isAccessibleForFree: true,
-  description: "A read-only GitHub repo scanner for public and private repositories: committed secrets, risky workflows, client-code exposure, database configuration and vulnerable dependencies.",
+  description: "A read-only GitHub repo scanner. Public repositories are free; private repositories are included in Starter and Pro. Checks committed secrets, risky workflows, client-code exposure, Supabase RLS and vulnerable dependencies.",
   }, {
     "@type": "FAQPage",
     "@id": `${SITE_URL}/repo-scan#faq`,
