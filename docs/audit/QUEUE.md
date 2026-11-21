@@ -16,8 +16,8 @@ Order (highest value first):
 - [x] 4. `/repo-scan` (landing-pages.md §3). Meta "free ... private" claim, dependency coverage accuracy, limits. (done 2026-11-13, PR #26)
 - [x] 5. `ssl-tls-checklist-for-saas` (guides.md §2). 2026 certificate lifetime limits, Let's Encrypt changes, HSTS preload redirect rule. (done 2026-11-17, PR #27)
 - [x] 6. `robots-txt-and-sitemap-for-saas` (guides.md §4). Remove invented Search Console warning, priority/changefreq, cover "Blocked by robots.txt" or change the seoTitle. (done 2026-11-17, PR #27)
-- [ ] 7. `/pricing` (landing-pages.md §5). Pro feature list, "10 website scans", repo-credits FAQ, Offer schema. Do NOT change prices or plan limits; only make copy match `src/lib/stripe.ts`. Leave "Most popular" and "Existing subscriber prices stay unchanged" as they are unless Stefan confirmed them.
-- [ ] 8. `security-headers-for-saas` (guides.md §5). Referrer-Policy and Permissions-Policy sections, HSTS advice vs scanner remedy, read time.
+- [x] 7. `/pricing` (landing-pages.md §5). Pro feature list, "10 website scans", repo-credits FAQ, Offer schema. Do NOT change prices or plan limits; only make copy match `src/lib/stripe.ts`. Leave "Most popular" and "Existing subscriber prices stay unchanged" as they are unless Stefan confirmed them. (done 2026-11-21, PR #28)
+- [x] 8. `security-headers-for-saas` (guides.md §5). Referrer-Policy and Permissions-Policy sections, HSTS advice vs scanner remedy, read time. (done 2026-11-21, PR #28)
 - [ ] 9. `/vibe-coding-security` (landing-pages.md §4). Archived OWASP link, research numbers, meta overpromise, dateModified, H1.
 - [ ] 10. `/lovable-security-scanner` remaining items (landing-pages.md §7 items 12 and 16): H1 tail, Lovable Cloud FAQ. Item 16 only after a real test scan shows the repo RLS check fires on a Lovable Cloud repo; if it cannot be verified, skip 16 and note why.
 - [ ] 11. `github-actions-security-for-vibe-coded-apps` (guides.md §6). pull_request_target change 2025-12-08, SHA-pinning policy, workflow lockfiles, workflow_run artifacts.
