@@ -75,6 +75,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
                   <div className="mt-5 space-y-4 text-[0.98rem] leading-8 text-[#a3acb8]">{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
                   <GuideFigure kind={section.figure} />
                   {section.bullets && <ul className="mt-6 space-y-3">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-3 text-sm leading-6 text-[#a3acb8]"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[var(--signal)]" /><span>{bullet}</span></li>)}</ul>}
+                  {section.code && section.code.length > 0 && <div className="mt-6 space-y-4">{section.code.map((block) => <figure key={block.label}><figcaption className="mb-2 text-xs font-semibold uppercase tracking-[.08em] text-[#7f8998]">{block.label}</figcaption><pre className="overflow-x-auto rounded-xl border border-white/[0.08] bg-[#0a0e14] p-4 text-[0.8rem] leading-6 text-[#cfd6de]"><code>{block.content}</code></pre></figure>)}</div>}
                   {section.links && section.links.length > 0 && <p className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#7f8998]"><span>Related:</span>{section.links.map((link) => <Link key={link.href} href={link.href} className="text-[var(--signal)] hover:underline">{link.label}</Link>)}</p>}
                 </section>
               ))}

@@ -5,6 +5,8 @@ export interface GuideSection {
   bullets?: string[];
   /** Contextual internal links rendered under the section. */
   links?: Array<{ label: string; href: string }>;
+  /** Copy-paste config snippets rendered as preformatted blocks. */
+  code?: Array<{ label: string; content: string }>;
 }
 
 export interface Guide {
@@ -165,31 +167,35 @@ const guideData: Array<Omit<Guide, "readTime">> = [
     cover: "/images/guides/security-headers-for-saas.webp",
     coverAlt: "",
     title: "Security headers for SaaS: what to add first",
-    seoTitle: "HTTP Security Headers Checklist for SaaS (CSP, HSTS, X-Frame)",
-    description: "A practical guide to CSP, HSTS, clickjacking protection, MIME sniffing, referrer policy, and permissions policy for SaaS teams.",
+    seoTitle: "HTTP Security Headers Checklist (CSP, HSTS, X-Frame-Options)",
+    description: "A practical guide to CSP, HSTS, clickjacking protection, MIME sniffing, referrer policy, and permissions policy for SaaS teams, with copy-paste config.",
     eyebrow: "Browser security",
-    relatedChecks: ["Content Security Policy", "HSTS", "X-Frame-Options", "X-Content-Type-Options"],
+    updatedAt: "2026-11-21",
+    relatedChecks: ["Content Security Policy", "HSTS", "X-Frame-Options", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy"],
     intro: [
-      "Security headers are small response headers with an outsized job. They tell a browser which scripts may run, whether a page may be framed, and whether an insecure connection is acceptable. A SaaS can have solid application code and still leave these browser defenses unset.",
-      "The hard part is not adding every possible header. It is choosing a safe order, measuring what breaks, and avoiding a copied policy that does not match your product.",
+      "Security headers tell a browser which scripts may run, whether a page may be framed, and whether an insecure connection is acceptable. A SaaS can have solid application code and still leave these browser defenses unset.",
+      "Most of the work is choosing an order, measuring what breaks, and not pasting a policy written for someone else's product.",
     ],
     sections: [
       {
         heading: "Start with the headers that close clear gaps",
         figure: "header-anatomy",
-        paragraphs: ["For most SaaS products, four headers deserve attention first. They cover transport, framing, content interpretation, and script execution."],
+        paragraphs: ["Start with these six. ScanMySaaS reports each one when it is missing from the first HTML page it scans."],
         bullets: [
           "Strict-Transport-Security tells supporting browsers to return over HTTPS after the first secure visit.",
           "Content-Security-Policy limits where scripts, styles, images, frames, and connections may come from.",
           "X-Content-Type-Options: nosniff stops a browser from guessing a different content type.",
           "frame-ancestors in CSP, or X-Frame-Options for older clients, limits clickjacking through hostile frames.",
+          "Referrer-Policy: strict-origin-when-cross-origin sends only the origin to other sites, so tokens or IDs in URLs do not leak through the Referer header.",
+          "Permissions-Policy turns off browser features you do not use, for example camera=(), microphone=(), geolocation=().",
         ],
       },
       {
         heading: "Roll out CSP without breaking production",
         paragraphs: [
           "A strict CSP copied from another app can block payments, analytics, support widgets, or your own inline code. Begin with Content-Security-Policy-Report-Only, collect violations, and map each required third party to the narrowest directive that allows it.",
-          "Avoid treating unsafe-inline and a wildcard as the finished policy. They may make the report quiet while leaving much of the original risk in place. Nonces or hashes are a better long-term answer for inline scripts.",
+          "Report-Only only works as an HTTP header, not a meta tag, and browsers send reports only when the policy has a report-to directive (with a Reporting-Endpoints header) or the older report-uri. MDN suggests setting both. frame-ancestors also only works as a header, and it does not inherit from default-src.",
+          "unsafe-inline plus a wildcard source can make the violation report go quiet while most of the original risk stays. For inline scripts, use nonces or hashes. In Next.js 16, generate a fresh nonce per request in proxy.ts (the renamed middleware) and pass it through the Content-Security-Policy request header; nonced pages must be dynamically rendered. If you need static pages, Next.js has experimental hash-based CSP through Subresource Integrity.",
         ],
         bullets: [
           "Inventory scripts, API connections, images, fonts, frames, and form destinations.",
@@ -202,14 +208,39 @@ const guideData: Array<Omit<Guide, "readTime">> = [
         heading: "Do not enable HSTS by reflex",
         paragraphs: [
           "HSTS is valuable only when every affected hostname is ready for HTTPS. Start with a shorter max-age on the primary host. Add includeSubDomains after checking forgotten subdomains, status pages, and customer-facing custom domains. Preload is a separate commitment and is difficult to undo quickly.",
+          "Check what your host already sends before adding your own header; some platforms set HSTS for you. Preload has fixed requirements: a max-age of at least 31536000, includeSubDomains, the preload directive, and an HTTP to HTTPS redirect on the same host. ScanMySaaS reports a max-age below about six months as a low finding, which you can accept while you ramp up. Its fix text shows includeSubDomains and preload; add those two only once the checks above pass.",
           "Also keep the server-side HTTP to HTTPS redirect. HSTS improves repeat visits, but a new visitor can still arrive over HTTP before the browser has learned the policy.",
+        ],
+        links: [{ label: "SSL and TLS checklist (redirects and staged HSTS)", href: "/guides/ssl-tls-checklist-for-saas" }],
+      },
+      {
+        heading: "Copy-paste starting point",
+        paragraphs: [
+          "These blocks set the static headers. CSP is left out on purpose: it needs the exact sources your app loads, so build it with the report-only steps above. The HSTS value has no includeSubDomains or preload yet.",
+          "Next.js also sends X-Powered-By: Next.js by default, which the scanner reports as technology disclosure. Set poweredByHeader: false in next.config.ts to drop it.",
+        ],
+        code: [
+          { label: "Next.js (next.config.ts)", content: "async headers() {\n  return [{\n    source: '/:path*',\n    headers: [\n      { key: 'X-Content-Type-Options', value: 'nosniff' },\n      { key: 'X-Frame-Options', value: 'DENY' },\n      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },\n      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },\n      { key: 'Strict-Transport-Security', value: 'max-age=31536000' },\n    ],\n  }];\n}" },
+          { label: "Vercel (vercel.json)", content: "{\n  \"headers\": [{\n    \"source\": \"/(.*)\",\n    \"headers\": [\n      { \"key\": \"X-Content-Type-Options\", \"value\": \"nosniff\" },\n      { \"key\": \"X-Frame-Options\", \"value\": \"DENY\" },\n      { \"key\": \"Referrer-Policy\", \"value\": \"strict-origin-when-cross-origin\" }\n    ]\n  }]\n}" },
+          { label: "Netlify (_headers)", content: "/*\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Referrer-Policy: strict-origin-when-cross-origin" },
+          { label: "Check the live response", content: "curl -sI https://your-domain | grep -iE 'strict-transport|content-security|x-frame|x-content-type|referrer-policy|permissions-policy'" },
         ],
       },
       {
         heading: "A sensible release check",
-        paragraphs: ["Test headers on the final public response, not only in application code. A CDN, reverse proxy, or hosting platform can add, remove, or duplicate them. Scan the production hostname after deployment, open important flows manually, and keep the change easy to roll back."],
+        paragraphs: ["Test headers on the final public response, not only in application code. A CDN, reverse proxy, or hosting platform can add, remove, or duplicate them. Run the free website scan against the production hostname after deployment, open important flows manually, and keep the change easy to roll back."],
+        links: [{ label: "Free website vulnerability scanner", href: "/free-website-vulnerability-scanner" }, { label: "Lovable security scanner (for Lovable sites)", href: "/lovable-security-scanner" }],
       },
     ],
+    sources: [
+      { label: "MDN: Strict-Transport-Security", url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security" },
+      { label: "MDN: Content-Security-Policy-Report-Only", url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy-Report-Only" },
+      { label: "MDN: CSP frame-ancestors", url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors" },
+      { label: "HSTS preload list submission requirements", url: "https://hstspreload.org/" },
+      { label: "Next.js: Content Security Policy guide", url: "https://nextjs.org/docs/app/guides/content-security-policy" },
+      { label: "Next.js: poweredByHeader", url: "https://nextjs.org/docs/app/api-reference/config/next-config-js/poweredByHeader" },
+    ],
+    related: ["ssl-tls-checklist-for-saas", "vibe-coding-security-checklist"],
   },
   {
     slug: "ssl-tls-checklist-for-saas",

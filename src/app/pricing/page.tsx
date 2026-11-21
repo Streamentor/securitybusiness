@@ -4,6 +4,7 @@ import { validPendingPlan } from "@/lib/scan-journey";
 import { pricingFaqs } from "@/lib/site-content";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ArrowRight, Check, ChevronDown, Loader2, Minus, ShieldCheck, Sparkles, Zap } from "lucide-react";
@@ -22,9 +23,9 @@ const plans = [
     cadence: "once",
     summary: "Find an issue and try one practical fix.",
     credits: "1 scan credit",
-    rollover: "—",
+    rollover: "None",
     accent: false,
-    features: ["Up to 25 pages", "60+ automated checks", "Security score", "Prioritized findings", "One actionable fix, when found", "One free rescan to verify your fix", "Public GitHub repository scans"],
+    features: ["Up to 25 pages", "60+ automated checks", "Security score", "Prioritized findings", "One actionable fix, when found", "One free rescan to verify your fix", "What was fixed and what is new on your rescan", "Public GitHub repository scans"],
     cta: "Run the free scan",
   },
   {
@@ -44,11 +45,11 @@ const plans = [
     key: "pro",
     price: "$79",
     cadence: "per month",
-    summary: "For teams checking multiple apps and environments.",
+    summary: "For founders running several apps, or staging and production.",
     credits: "30 credits / month",
     rollover: "Up to 60",
     accent: false,
-    features: ["Everything in Starter", "30 monthly credits", "Private GitHub repository scans (read-only)", "Background scans saved to your dashboard", "Step-by-step remediation", "Score trends"],
+    features: ["Everything in Starter", "30 credits a month", "Rollover up to 60 credits", "Higher monthly AI review limit"],
     cta: "Choose Pro",
   },
 ];
@@ -107,8 +108,8 @@ export default function PricingPage() {
         <div className="pointer-events-none absolute inset-0 -z-10 hairline-grid [mask-image:radial-gradient(circle_at_top,black,transparent_70%)]" />
         <div className="app-shell">
           <p className="eyebrow">Simple monthly plans</p>
-          <h1 className="section-title mx-auto mt-5 max-w-4xl text-balance sm:!text-[4.8rem]">Pay for scans, not security theater.</h1>
-          <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-8 text-[#98a2b3]">Start with a free scan and one actionable fix when an issue is found. Upgrade for guidance across the report and credits to check each release.</p>
+          <h1 className="section-title mx-auto mt-5 max-w-4xl text-balance sm:!text-[4.8rem]">Vulnerability scanner pricing</h1>
+          <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-8 text-[#98a2b3]">Start with a free website scan and one fix, when the report has an actionable finding. Paid plans add remediation for every finding and monthly credits to check each release.</p>
           <div className="mx-auto mt-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-[#aab3bf]"><ShieldCheck className="h-3.5 w-3.5 text-[var(--signal)]" /> Existing subscriber prices stay unchanged</div>
         </div>
       </section>
@@ -162,9 +163,10 @@ export default function PricingPage() {
       <div className="app-shell pb-20"><SeverityLadder /></div>
       <section className="border-t border-white/[0.07] bg-[#0a0e14] py-24">
         <div className="app-shell grid gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
-          <div><p className="eyebrow">Pricing FAQ</p><h2 className="section-title mt-4">No fine print.</h2></div>
+          <div><p className="eyebrow">Questions</p><h2 className="section-title mt-4">Pricing FAQ</h2></div>
           <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
             {pricingFaqs.map(([question, answer]) => <details key={question} className="group py-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium"><span>{question}</span><ChevronDown className="h-4 w-4 text-[#727d8c] transition group-open:rotate-180" /></summary><p className="max-w-2xl pt-4 text-sm leading-7 text-[#8f99a7]">{answer}</p></details>)}
+            <p className="pt-5 text-sm leading-7 text-[#8f99a7]">Only need one check? Try the <Link href="/free-website-vulnerability-scanner" className="text-white underline underline-offset-4">free website vulnerability scanner</Link>.</p>
           </div>
         </div>
       </section>
