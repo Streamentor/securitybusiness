@@ -23,6 +23,13 @@ Anonymous public repository scan results are returned to the browser and are not
 - SPF, DMARC, DNS, and other publicly available domain-level signals.
 - TLS certificate trust and expiry, robots.txt, XML sitemaps, llms.txt, security.txt, canonical URL, and homepage indexability are summarized in a separate readiness view on new reports.
 
+## Privacy, consent and accessibility coverage
+
+- Every plan: trackers found in the page HTML (Google Analytics, Google Ads, Meta Pixel, LinkedIn, TikTok, Hotjar, Microsoft Clarity, PostHog and others), whether a consent tool or Google consent mode default is present, privacy policy and terms links, trackers the privacy policy text does not name, email forms without a nearby privacy notice, pre-ticked marketing checkboxes, a "Do Not Sell or Share" link when advertising pixels are present, an Impressum hint for German-language sites, and basic WCAG signals (image alt text, form labels, accessible names, page language, disabled zoom).
+- Starter and Pro: the homepage is loaded in a real Chromium browser to list tracking cookies set before any click, to click the banner's Reject button and check that tracking cookies do not return after a reload, to test the Global Privacy Control signal, and to sample text contrast. The browser runs from a US data center, so banners shown only to EU visitors may not appear.
+- Pro: an AI review marks which privacy-policy topics from GDPR Article 13 the policy covers. It uses the same monthly token budget as the AI code review.
+- These findings appear in a separate report section, do not change the security score, and are not legal advice.
+
 Automated findings can include false positives or miss issues that require authentication, business context, source-code access, or active testing. Every finding should be verified before a production change.
 
 ## Reports and workflow

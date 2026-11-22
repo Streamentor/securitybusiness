@@ -25,7 +25,7 @@ const plans = [
     credits: "1 scan credit",
     rollover: "None",
     accent: false,
-    features: ["Up to 25 pages", "60+ automated checks", "Security score", "Prioritized findings", "One actionable fix, when found", "One free rescan to verify your fix", "What was fixed and what is new on your rescan", "Public GitHub repository scans"],
+    features: ["Up to 25 pages", "60+ automated checks", "Security score", "Prioritized findings", "One actionable fix, when found", "One free rescan to verify your fix", "What was fixed and what is new on your rescan", "Privacy, cookie and accessibility checks", "Public GitHub repository scans"],
     cta: "Run the free scan",
   },
   {
@@ -37,7 +37,7 @@ const plans = [
     credits: "10 credits / month",
     rollover: "Up to 20",
     accent: true,
-    features: ["Everything in Free", "Private GitHub repository scans (read-only)", "AI logic review (monthly token limits)", "Step-by-step remediation", "Resolved / new findings after each rescan", "Scan history and score trends", "Credits roll over"],
+    features: ["Everything in Free", "Private GitHub repository scans (read-only)", "AI logic review (monthly token limits)", "Real browser cookie consent test", "Step-by-step remediation", "Resolved / new findings after each rescan", "Scan history and score trends", "Credits roll over"],
     cta: "Choose Starter",
   },
   {
@@ -49,7 +49,7 @@ const plans = [
     credits: "30 credits / month",
     rollover: "Up to 60",
     accent: false,
-    features: ["Everything in Starter", "30 credits a month", "Rollover up to 60 credits", "Higher monthly AI review limit"],
+    features: ["Everything in Starter", "30 credits a month", "Rollover up to 60 credits", "Higher monthly AI review limit", "AI privacy policy review (monthly token limits)"],
     cta: "Choose Pro",
   },
 ];

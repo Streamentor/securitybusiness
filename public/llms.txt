@@ -11,6 +11,7 @@
 - Repository scans do not clone a repository, install packages, run builds, execute code, or reveal matched secret values. Anonymous public scans are returned to the browser and not saved; signed-in scans run in the background and are saved privately to the account.
 - Findings can be copied as technical prompts for Codex, Claude, Cursor, or another coding agent. Prompts require the agent to verify the signal, make a minimal fix, add regression tests, avoid exposing secrets, and report residual risk.
 - Private GitHub repositories can be connected on Starter and Pro through a read-only GitHub App (contents and metadata read). Files are processed in memory and discarded; reports are saved privately to the account. The scanner does not search full Git history.
+- Website scans also run privacy, cookie consent and accessibility checks: trackers found in the HTML and whether a consent tool is present, privacy policy and terms links, trackers the privacy policy does not name, email forms without a privacy notice, pre-ticked marketing checkboxes, a "Do Not Sell or Share" link when ad pixels are present, and basic WCAG signals. Starter and Pro add a real browser test of cookies before consent, after Reject and with Global Privacy Control; Pro adds an AI review of privacy policy topics. These findings do not change the security score and are not legal advice.
 - New scans also report a SaaS readiness snapshot for TLS certificate trust and expiry, robots.txt, XML sitemaps, llms.txt, security.txt, canonical URL, and homepage indexability. These readiness signals do not change the security score.
 - Free reports include a security score, severity breakdown, affected URLs, finding descriptions, and one prioritized remediation when an actionable finding is available.
 - Paid plans unlock remediation for the remaining findings, configuration examples, monthly credits, saved scan history, rescans, and score trends.
@@ -21,6 +22,7 @@
 
 - [Homepage and scanner](https://www.scanmysaas.com/) — Product overview and the free website vulnerability scanner.
 - [Free website vulnerability scanner](https://www.scanmysaas.com/free-website-vulnerability-scanner) — Free online website security scan of up to 25 pages.
+- [GDPR cookie checker](https://www.scanmysaas.com/gdpr-cookie-checker): Trackers before consent, Reject button, privacy policy gaps and accessibility basics.
 - [GitHub repo scanner](https://www.scanmysaas.com/repo-scan) — Read-only scans of public and private GitHub repositories.
 - [Vibe coding security](https://www.scanmysaas.com/vibe-coding-security) — Security workflow for SaaS apps built with Codex, Claude, Cursor, and other coding agents.
 - [Lovable security scan](https://www.scanmysaas.com/lovable-security-scanner) — Scan a Lovable app and its synced GitHub repo for Supabase RLS gaps, exposed keys, headers and source maps.
