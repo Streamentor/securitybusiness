@@ -7,6 +7,7 @@ import { scanWebsite, type ScanProgress, validateScanTarget, type VulnerabilityR
 import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import { previewFindingTitles } from "@/lib/scan-journey";
 import { admitWebsiteScan } from "@/lib/scan-gate";
+import { complianceScanOptions } from "@/lib/compliance-scan-options";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
 
@@ -75,14 +76,14 @@ export async function POST(req: NextRequest) {
         // Run scan with progress callbacks
         const results = await scanWebsite(normalizedUrl, (progress: ScanProgress) => {
           send("progress", !userId && progress.step === "html" ? {...progress, label: "Analyzing page HTML…"} : progress);
-        });
+        }, await complianceScanOptions(userId, admission.plan));
 
         send("progress", {
           step: "saving",
           label: "Saving results to database…",
           status: "running",
-          totalSteps: 18,
-          currentStep: 18,
+          totalSteps: 19,
+          currentStep: 19,
         });
 
         // Save vulnerabilities

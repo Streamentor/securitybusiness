@@ -36,6 +36,7 @@ import { ToastContainer, toast } from "@/components/Toast";
 import { formatDate } from "@/lib/utils";
 import { buildFixPrompt } from "@/lib/fix-prompt";
 import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
+import { COMPLIANCE_COVERAGE_TITLE, COMPLIANCE_DISCLAIMER, isComplianceFinding, parseComplianceCoverage } from "@/lib/compliance-types";
 import type { RemediationAccess } from "@/lib/scan-remediation";
 
 interface Vulnerability { id: string; type: string; severity: string; title: string; description?: string; url?: string; remedy?: string; detailsLocked?: boolean; remediationAccess: RemediationAccess }
@@ -69,6 +70,8 @@ function guideForFinding(finding: Vulnerability) {
   if (finding.type === "headers" || finding.type === "csp" || finding.type === "iframe") return "/guides/security-headers-for-saas";
   if (finding.type === "source-maps" || finding.type === "sensitive-file" || finding.type === "info-disclosure") return "/guides/exposed-files-and-source-maps";
   if (finding.type === "seo") return "/guides/robots-txt-and-sitemap-for-saas";
+  if (finding.type === "cookies-consent") return "/guides/cookie-consent-for-saas";
+  if (finding.type === "privacy") return "/guides/privacy-policy-checklist-for-saas";
   return null;
 }
 
@@ -153,7 +156,11 @@ export default function ScanResultPage() {
   }, [loading, scan?.id]);
 
   const canViewRemedies = userPlan === "starter" || userPlan === "pro";
-  const findings = useMemo(() => [...(scan?.vulnerabilities || [])].filter(isVisibleWebsiteFinding).sort((a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity)), [scan]);
+  const allFindings = useMemo(() => [...(scan?.vulnerabilities || [])].filter(isVisibleWebsiteFinding).sort((a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity)), [scan]);
+  // Privacy, consent and accessibility findings have their own section and do not count toward the security summary.
+  const findings = useMemo(() => allFindings.filter((finding) => !isComplianceFinding(finding)), [allFindings]);
+  const complianceFindings = useMemo(() => allFindings.filter(isComplianceFinding), [allFindings]);
+  const complianceCoverage = useMemo(() => parseComplianceCoverage(scan?.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === COMPLIANCE_COVERAGE_TITLE)?.description), [scan]);
   const readiness = useMemo<ReadinessItem[]>(() => {
     const snapshot = scan?.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === "SaaS readiness snapshot");
     if (!snapshot) return [];
@@ -164,9 +171,9 @@ export default function ScanResultPage() {
   }, [scan]);
   const counts = useMemo(() => Object.fromEntries(severityOrder.map((severity) => [severity, findings.filter((finding) => finding.severity === severity).length])) as Record<string, number>, [findings]);
   const visibleFindings = filter === "all" ? findings : findings.filter((finding) => finding.severity === filter);
-  const freeFix = findings.find((finding) => finding.remediationAccess === "free");
-  const displayedFindings = scan?.access?.requiresAccount && filter === "all" && freeFix ? [freeFix, ...visibleFindings.filter(finding => finding.id !== freeFix.id)] : visibleFindings;
-  const lockedFixCount = findings.filter((finding) => finding.remediationAccess === "locked").length;
+  const freeFix = allFindings.find((finding) => finding.remediationAccess === "free");
+  const displayedFindings = scan?.access?.requiresAccount && filter === "all" && freeFix && !isComplianceFinding(freeFix) ? [freeFix, ...visibleFindings.filter(finding => finding.id !== freeFix.id)] : visibleFindings;
+  const lockedFixCount = allFindings.filter((finding) => finding.remediationAccess === "locked").length;
 
   const registerHref = authPageHref("register", {scanId: String(params.id)});
   function startRegistration() {
@@ -290,6 +297,17 @@ export default function ScanResultPage() {
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[#b7c0cd]">Create a free account to see every affected page and finding description. You will return to this report. One available fix is included; remaining fixes are on paid plans.</p>
           <div className="mt-5 flex flex-wrap gap-3"><Link href={registerHref} onClick={startRegistration} className="button-primary">Create free account to open findings <ArrowUpRight className="h-4 w-4" /></Link><Link href={authPageHref("login", {scanId: scan.id})} onClick={() => sessionStorage.setItem("pendingScanId", scan.id)} className="button-secondary">Already have an account? Sign in</Link></div>
           <p className="mt-3 text-xs text-[#98a2b3]">No card needed. One fix included when available; remaining fix steps require a paid plan.</p>
+        </section>}
+
+        {(complianceCoverage || complianceFindings.length > 0) && <section id="compliance" className="mt-8" aria-label="Privacy and compliance">
+          <div className="mb-4"><p className="eyebrow">Privacy & compliance</p><h2 className="mt-2 text-xl font-semibold tracking-[-0.025em]">{complianceFindings.filter((finding) => finding.severity !== "info").length ? `${complianceFindings.filter((finding) => finding.severity !== "info").length} privacy, consent or accessibility finding${complianceFindings.filter((finding) => finding.severity !== "info").length === 1 ? "" : "s"}` : "No privacy or accessibility findings in the checks that ran"}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-[#8f99a7]">{COMPLIANCE_DISCLAIMER} These findings do not change the security score.</p>
+            {complianceCoverage && <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#717c8b]">
+              <li>{complianceCoverage.browser === "ran" ? "Browser consent test ran (first visit, Reject, Global Privacy Control)" : complianceCoverage.browser === "plan" ? "Browser consent test: Starter and Pro" : "Browser consent test could not run this time"}</li>
+              <li>{complianceCoverage.ai === "ran" ? "AI privacy policy review ran" : complianceCoverage.ai === "plan" ? "AI privacy policy review: Pro" : complianceCoverage.ai === "off" ? "AI review is off in your account" : complianceCoverage.ai === "no-policy" ? "No readable privacy policy to review" : "AI privacy policy review was unavailable"}</li>
+              {complianceCoverage.policyUrl && <li><a href={complianceCoverage.policyUrl} target="_blank" rel="noreferrer" className="hover:text-white hover:underline">Privacy policy read</a></li>}
+            </ul>}
+          </div>
+          {complianceFindings.length ? <div className="space-y-3">{complianceFindings.map((finding) => <FindingCard key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={false} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-8 text-center text-sm text-[#a5aeba]"><CheckCircle2 className="mx-auto h-6 w-6 text-[var(--signal)]" /><p className="mt-3">No missing privacy pages, consent problems or accessibility issues were detected on the scanned pages.</p></div>}
         </section>}
 
         <section className="mt-6 grid gap-4 lg:grid-cols-2" aria-label="Scan the code and unlock fixes">
