@@ -1,5 +1,6 @@
 import type { Browser, BrowserContext, Frame, Page } from "playwright-core";
 import type { VulnerabilityResult } from "./scanner";
+import { notChecked, type CheckItem } from "@/lib/website-check-state";
 import { TRACKERS, detectTrackers, type TrackerSignature } from "@/lib/compliance";
 
 /**
@@ -10,13 +11,17 @@ import { TRACKERS, detectTrackers, type TrackerSignature } from "@/lib/complianc
 
 export interface BrowserConsentResult {
   status: "ran" | "unavailable";
+  reason?: "timeout" | "blocked" | "error";
   findings: VulnerabilityResult[];
   trackers: TrackerSignature[];
   bannerFound: boolean;
+  checks?: CheckItem[];
 }
 
 export interface BrowserOptions {
   timeoutMs: number;
+  /** Browser binary for local verification. */
+  executablePath?: string;
   /** Fetches one response through the scanner's bounded public-address transport. */
   fetchResource: (url: string, init: RequestInit) => Promise<Response | null>;
 }
@@ -36,7 +41,7 @@ function trackerCookies(cookies: Array<{ name: string; domain: string }>) {
   });
 }
 
-async function launch(): Promise<Browser> {
+async function launch(executablePath?: string): Promise<Browser> {
   const { chromium } = await import("playwright-core");
   // A closed proxy prevents browser traffic that bypasses route interception.
   const networkArgs = ["--proxy-server=http://127.0.0.1:1", "--proxy-bypass-list=<-loopback>", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic"];
@@ -44,7 +49,7 @@ async function launch(): Promise<Browser> {
     const serverless = (await import("@sparticuz/chromium")).default;
     return chromium.launch({ executablePath: await serverless.executablePath(), args: [...serverless.args, ...networkArgs], headless: true });
   }
-  return chromium.launch({ headless: true, args: networkArgs });
+  return chromium.launch({ executablePath, headless: true, args: networkArgs });
 }
 
 async function guardedContext(browser: Browser, options: BrowserOptions, extra: Parameters<Browser["newContext"]>[0] = {}) {
@@ -119,6 +124,9 @@ async function findBanner(page: Page) {
 async function open(context: BrowserContext, url: string) {
   const page = await context.newPage();
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15_000 });
+  if (response && ([401, 403, 429].includes(response.status()) || response.headers()["cf-mitigated"] === "challenge" || response.headers()["x-vercel-mitigated"] === "challenge")) {
+    throw Object.assign(new Error("Consent test page was blocked."), { blocked: true });
+  }
   if (!response?.ok()) throw new Error("Consent test page was unavailable.");
   await page.waitForLoadState("load", { timeout: 6_000 }).catch(() => undefined);
   await page.waitForTimeout(3_500);
@@ -179,7 +187,7 @@ export async function runBrowserConsentCheck(url: string, options: BrowserOption
   let timer: ReturnType<typeof setTimeout> | undefined;
   let cancelled = false;
   const work = (async (): Promise<BrowserConsentResult> => {
-    browser = await launch();
+    browser = await launch(options.executablePath);
     if (cancelled) { await browser.close().catch(() => undefined); throw new Error("Browser check cancelled."); }
     const findings: VulnerabilityResult[] = [];
 
@@ -198,7 +206,7 @@ export async function runBrowserConsentCheck(url: string, options: BrowserOption
       const names = [...new Set(before.map((cookie) => cookie.name))].slice(0, 8);
       const vendors = [...new Set(before.map((cookie) => cookie.tracker.name))];
       // With a banner on screen the site is clearly asking for consent it has not waited for. Without one, the banner may be geo-targeted.
-      findings.push({ type: "cookies-consent", severity: bannerFound ? "high" : "medium", title: "Tracking cookies are set before consent", url,
+      findings.push({ type: "cookies-consent", severity: bannerFound ? "high" : "medium", title: bannerFound ? "Tracking cookies are set before consent" : "Trackers found with no cookie consent tool", url,
         description: `On a first visit with no clicks, a real browser received these tracking cookies: ${names.join(", ")} (${vendors.join(", ")}).${bannerFound ? " A cookie banner was shown, but the cookies were already set." : ` No cookie banner was found. ${LOCATION}`} In the EU and UK, non-essential analytics and advertising cookies generally need consent before they are set. ${LAWYER}`,
         remedy: "Load these tags only after the visitor accepts. With Google tags, set consent mode to denied by default before gtag/GTM loads, and update it on accept. With other tools, let your consent tool inject the script, or block it with type=\"text/plain\" plus your consent tool's category attribute." });
     }
@@ -209,13 +217,14 @@ export async function runBrowserConsentCheck(url: string, options: BrowserOption
     }
 
     // 2. Reject, then reload: tracking cookies must not come back. 3. Global Privacy Control.
-    const rejectCheck = (async () => {
-      if (!banner.reject) return;
+    const rejectItem = { key: "consent-reject", label: "Tracking after Reject" };
+    const rejectCheck = (async (): Promise<CheckItem> => {
+      if (!banner.reject) return { ...rejectItem, ...notChecked("not_applicable"), detail: "No Reject button was available to test." };
       const context = await guardedContext(browser!, options);
       try {
         const rejectPage = await open(context, url);
         const again = await findBanner(rejectPage);
-        if (!again.rejectFrame) return;
+        if (!again.rejectFrame) return { ...rejectItem, ...notChecked("error") };
         await again.rejectFrame.locator("[data-smr-reject='1']").first().click({ timeout: 4_000 });
         await rejectPage.waitForTimeout(1_500);
         for (const tracker of TRACKERS) for (const pattern of tracker.cookies) await context.clearCookies({ name: pattern });
@@ -228,11 +237,13 @@ export async function runBrowserConsentCheck(url: string, options: BrowserOption
             description: `After clicking the banner's reject button and reloading, the browser received tracking cookies again: ${names.join(", ")} (${[...new Set(after.map((c) => c.tracker.name))].join(", ")}). A refusal that does not stop tracking is not a valid choice under GDPR and ePrivacy rules. ${LAWYER}`,
             remedy: "Make sure every tag reads the stored consent state on each page load before it runs. Test by rejecting, reloading and checking DevTools > Application > Cookies." });
         }
+        return { ...rejectItem, status: after.length ? "issue" : "pass", detail: after.length ? "Tracking cookies came back after Reject and reload." : "No recognized tracking cookies came back after Reject and reload." };
       } finally { await context.close().catch(() => undefined); }
-    })().catch(() => undefined);
+    })().catch(() => ({ ...rejectItem, ...notChecked("error") }));
 
-    const gpcCheck = (async () => {
-      if (!trackers.some((tracker) => tracker.kind === "advertising")) return;
+    const gpcItem = { key: "consent-gpc", label: "Global Privacy Control" };
+    const gpcCheck = (async (): Promise<CheckItem> => {
+      if (!trackers.some((tracker) => tracker.kind === "advertising")) return { ...gpcItem, ...notChecked("not_applicable"), detail: "No advertising tracker signal triggered this check." };
       const context = await guardedContext(browser!, options, { extraHTTPHeaders: { "Sec-GPC": "1" } });
       try {
         await context.addInitScript(() => { Object.defineProperty(Navigator.prototype, "globalPrivacyControl", { get: () => true }); });
@@ -243,22 +254,23 @@ export async function runBrowserConsentCheck(url: string, options: BrowserOption
             description: `With the Global Privacy Control signal on (Sec-GPC: 1), advertising cookies were still set on the first visit: ${[...new Set(ads.map((c) => c.name))].slice(0, 6).join(", ")}. California's CCPA regulations treat GPC as a valid opt-out of sale or sharing for businesses the law covers. ${LAWYER}`,
             remedy: "If the CCPA applies to you, read navigator.globalPrivacyControl (or the Sec-GPC header) and treat it as an opt-out: do not load advertising tags for that visitor." });
         }
+        return { ...gpcItem, status: ads.length ? "issue" : "pass", detail: ads.length ? "Advertising cookies appeared with Global Privacy Control enabled." : "No recognized advertising cookies appeared with Global Privacy Control enabled." };
       } finally { await context.close().catch(() => undefined); }
-    })().catch(() => undefined);
+    })().catch(() => ({ ...gpcItem, ...notChecked("error") }));
 
-    await Promise.all([rejectCheck, gpcCheck]);
+    const checks = await Promise.all([rejectCheck, gpcCheck]);
 
     if (contrast.length) {
       findings.push({ type: "accessibility", severity: "low", title: "Text with very low contrast", url,
         description: `Text on the first screens has a contrast ratio below 3:1 against its background, under the WCAG 1.4.3 minimum of 4.5:1 for normal text. Examples: ${contrast.join("; ")}. Only solid backgrounds were measured.`,
         remedy: "Darken the text or lighten the background until normal text reaches at least 4.5:1 and large text 3:1. Check with your browser DevTools color picker." });
     }
-    return { status: "ran", findings, trackers, bannerFound };
+    return { status: "ran", findings, trackers, bannerFound, checks };
   })();
   try {
-    return await Promise.race([work, new Promise<BrowserConsentResult>((resolve) => { timer = setTimeout(() => resolve(unavailable), options.timeoutMs); })]);
-  } catch {
-    return unavailable;
+    return await Promise.race([work, new Promise<BrowserConsentResult>((resolve) => { timer = setTimeout(() => resolve({ ...unavailable, reason: "timeout" }), options.timeoutMs); })]);
+  } catch (error) {
+    return { ...unavailable, reason: error instanceof Error && "blocked" in error ? "blocked" : error instanceof Error && error.name === "TimeoutError" ? "timeout" : "error" };
   } finally {
     cancelled = true;
     if (timer) clearTimeout(timer);

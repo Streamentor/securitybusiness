@@ -30,7 +30,7 @@ Plans (`src/lib/stripe.ts`, `src/lib/billing-credit-store.ts`)
 - No team, seat or member model in prisma/schema.prisma.
 
 Repo scanner (`src/lib/github-scanner.ts`, `secret-patterns.ts`, `repo-security-rules.ts`)
-- Reads up to 60 files (github-scanner.ts:11), 240 KB per file, 6 MB total (:12-14), from one pinned commit (:494-500). Trees over 100,000 entries are refused (:501). No Git history.
+- Reads eligible source and configuration files from one pinned commit archive. Limits are 360 KB per source file, 5 MB per supported lockfile and 112 MB of retained text, plus archive size and time bounds. The report shows checked and skipped files. Git history is outside the scan scope.
 - Priority order (`candidatePriority`, :211-221): `.env*` / `.pem` / `.key` / `.npmrc` → workflows and agent files → lockfiles, Supabase and migrations, `.sql` → `.gitignore` / `package.json` / next and vite configs → everything else, sorted by `riskScore` (middleware +6; api/routes, auth, payments +4).
 - Secret patterns: 11 provider and format regexes (secret-patterns.ts:4-14), service_role JWT decode (github-scanner.ts:302), `NEXT_PUBLIC_`/`VITE_`/`REACT_APP_` secret-like names (:306), generic secret-like literals (:314-316).
 - Actions: write-all, missing `permissions`, pull_request_target + PR checkout, unpinned actions, secret echo (:320-341).
@@ -220,8 +220,8 @@ Competitor and SERP notes
 | # | Quoted claim | Verdict | Correct fact / source |
 |---|---|---|---|
 | 1 | **Meta: "Free GitHub repo scanner. Scan public or private repos (read-only)..."** (layout.tsx:8) | **MISLEADING** | Private repos need Starter/Pro (repo-scan-jobs.ts:9, 91) |
-| 2 | "Reads up to 60 security-relevant files from one pinned commit, highest-risk first. It does not search full Git history." (page.tsx:105) | CORRECT | github-scanner.ts:11, 494-500 |
-| 3 | Step 2: "up to 60 security-relevant files ... highest-risk first: middleware, API routes, auth, payments, configs and workflows" (site-content.ts:73) | IMPRECISE | Real order: .env/keys/.npmrc → workflows and agent files → lockfiles, migrations, .sql → .gitignore/package.json/next and vite config → source ranked by risk (github-scanner.ts:211-221, 198-209) |
+| 2 | "Runs rules over eligible source and configuration files in one pinned commit." | CORRECT | github-scanner.ts:11, 494-500 |
+| 3 | Step 2: "one source archive is read in memory" (site-content.ts) | IMPRECISE | Real order: .env/keys/.npmrc → workflows and agent files → lockfiles, migrations, .sql → .gitignore/package.json/next and vite config → source ranked by risk (github-scanner.ts:211-221, 198-209) |
 | 4 | "Exact versions from npm, Python, Go, and Rust lock data checked against the OSV advisory database." (page.tsx:33) | PARTLY WRONG | npm = package-lock.json/npm-shrinkwrap only. Python = `==` lines in requirements*.txt (not a lockfile). Go = go.mod (not go.sum). pnpm/Yarn/Bun lockfiles are not parsed (repo-security-rules.ts:163-205). Cap of 180 deps (:28) |
 | 5 | "Agent permissions, remote MCP transport, unpinned tool packages, destructive commands, and secret-transfer paths." (page.tsx:34) | CORRECT | repo-security-rules.ts:67-130 |
 | 6 | "Supabase service-role exposure and SQL migrations that create tables without visible RLS enablement." (page.tsx:32) | CORRECT, with caveats | Runs only if the repo references supabase-js or supabase.co (github-scanner.ts:408). Ignores GRANTs, so after Supabase's Oct 30, 2026 change a flagged table may not be API-exposed |
@@ -252,7 +252,7 @@ Competitor and SERP notes
 - No cannibalization problem. The homepage title says "GitHub Repo Scan", which is fine.
 
 ### D) Usefulness gaps (true per code)
-- A limits box: 60 files, 240 KB per file, 6 MB total, repos up to 100,000 tree entries, no Git history (a secret deleted in a later commit is not found; link /guides/github-secret-scanning-for-vibe-coded-apps). pnpm/Yarn/Bun lockfiles are not checked against OSV yet. Rate limits: 5 public scans per 10 minutes without an account; 15 per hour and 2 at a time when signed in.
+- A limits box: 360 KB per source file, 5 MB per supported lockfile, 112 MB retained source, repos up to 100,000 tree entries, no Git history (a secret deleted in a later commit is not found; link /guides/github-secret-scanning-for-vibe-coded-apps). pnpm/Yarn/Bun lockfiles are not checked against OSV yet. Rate limits: 5 public scans per 10 minutes without an account; 15 per hour and 2 at a time when signed in.
 - Which secret formats are detected: private keys, AWS, GitHub (classic and fine-grained), Stripe live/restricted/webhook, Google API, Slack, Supabase `sb_secret_` and service_role JWTs, OpenAI project/service/admin keys, DB URLs with passwords.
 - That repo scans do not use website credits.
 

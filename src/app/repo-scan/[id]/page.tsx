@@ -26,7 +26,7 @@ interface Job {
 const STAGES = [
   { key: "resolving", label: "Resolving the branch to an exact commit", hint: "Every file is read from this one commit." },
   { key: "reading-tree", label: "Mapping the repository tree", hint: "Finding security-relevant files." },
-  { key: "reading-files", label: "Reading the highest-risk files first", hint: "Auth, API routes, payments, configs and workflows." },
+  { key: "reading-files", label: "Reading the pinned commit archive", hint: "Eligible source files, configuration, workflows and lockfiles." },
   { key: "analyzing", label: "Checking secrets, workflows and code patterns", hint: "Secret values never enter the report." },
   { key: "dependencies", label: "Matching exact dependency versions against OSV", hint: "Known vulnerabilities in your lockfiles." },
   { key: "ai-review", label: "Reviewing application logic with AI", hint: "Selected files only. Findings still need verification." },
@@ -111,6 +111,19 @@ export default function RepoScanJobPage() {
     else { setRetrying(false); setError(data.error || "The scan could not be restarted."); }
   }
 
+  async function reviewNextBatch() {
+    if (!job || retrying) return;
+    setRetrying(true);
+    setError("");
+    const response = await fetch("/api/repo-scans", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewParentId: job.id, authorized: true }),
+    }).catch(() => null);
+    const data = await response?.json().catch(() => null);
+    if (response?.ok && data?.id) router.push("/repo-scan/" + data.id);
+    else { setRetrying(false); setError(data?.error || "The next review could not be started."); }
+  }
+
   const running = job && (job.status === "queued" || job.status === "running");
   const current = stageIndex(job);
   const progress = job?.status === "completed" ? 100 : Math.min(95, Math.round(((current + 0.5) / STAGES.length) * 100));
@@ -167,7 +180,8 @@ export default function RepoScanJobPage() {
     </Centered>
     : job.result ? <>
       <div className="app-shell pt-8"><div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-xs text-[#8c96a4]"><span className="flex items-center gap-2">{job.visibility === "private" ? <Lock className="h-3.5 w-3.5 text-[#ffd66b]" /> : <Github className="h-3.5 w-3.5" />}Saved to your dashboard · visible only to you · {new Date(job.completedAt || job.createdAt).toLocaleString()}</span><span className="flex gap-3"><button type="button" onClick={retry} disabled={retrying} className="inline-flex items-center gap-1.5 hover:text-white"><RotateCw className="h-3.5 w-3.5" /> Rescan after fixing</button><Link href="/dashboard#repo-scans" className="hover:text-white">All repository scans</Link></span></div></div>
-      <RepoReport result={job.result} />
+      {error && <p role="alert" className="mb-4 text-sm text-amber-200">{error}</p>}
+      <RepoReport result={job.result} onNextBatch={reviewNextBatch} nextBatchBusy={retrying} />
     </> : null}
 
     <SiteFooter />

@@ -3,15 +3,14 @@ import { jwtRole, repositorySecretPatterns } from "@/lib/secret-patterns";
 
 import { analyzeAgentSecurityFile, analyzeDependencyHygiene, extractDependencyInventory, isAgentSecurityFile } from "@/lib/repo-security-rules";
 import type { RepoRuleCategory } from "@/lib/repo-security-rules";
+import { readRepoArchive, REPO_SOURCE_BYTES, REPO_FILE_BYTES, REPO_LOCKFILE_BYTES } from "@/lib/repo-archive";
+import type { ReadableStream } from "node:stream/web";
+import { formatDependencyFinding } from "@/lib/osv-advisory";
 import { queryKnownVulnerabilities } from "@/lib/osv";
+import { inventoryRepoRoutes, type RepoRoute } from "@/lib/repo-route-inventory";
 
 const GITHUB_API = "https://api.github.com";
-const GITHUB_RAW = "https://raw.githubusercontent.com";
 const API_VERSION = "2022-11-28";
-const MAX_FILES = 60;
-const MAX_FILE_BYTES = 240_000;
-const MAX_MANIFEST_BYTES = 1_500_000;
-const MAX_TOTAL_BYTES = 6_000_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export type RepoSeverity = "critical" | "high" | "medium" | "low";
@@ -57,6 +56,8 @@ export interface RepoScanResult {
   coverage: {
     candidateFiles: number;
     filesSkipped: number;
+    treeComplete?: boolean;
+    skippedByReason?: { perFile: number; sourceBudget: number; archiveUnread: number; ruleTime: number };
     /** Highest-risk supported files that did not fit the file budget. */
     skippedHighRiskFiles: string[];
     agentFilesScanned: number;
@@ -65,7 +66,8 @@ export interface RepoScanResult {
     knownVulnerabilities: number;
     dependencyStatus: "checked" | "partial" | "unavailable" | "not-detected";
   };
-  aiReview?: { status: string; note: string; findingsCount?: number; filesReviewed?: number };
+  routes?: RepoRoute[];
+  aiReview?: { status: string; note: string; findingsCount?: number; filesReviewed?: number; highRiskTotal?: number; highRiskReviewed?: number; highRiskNotReviewed?: string[]; reviewedPaths?: string[]; hasNextBatch?: boolean };
   scannedAt: string;
 }
 
@@ -82,6 +84,7 @@ interface GitTreeItem {
   path: string;
   type: "blob" | "tree";
   size?: number;
+  mode?: string;
 }
 
 interface GitTreeResponse {
@@ -141,18 +144,6 @@ export function parseGitHubRepository(input: string): { owner: string; repo: str
   return { owner, repo, refCandidates };
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 10_000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal, cache: "no-store" });
-  } catch {
-    throw new GitHubScannerError("upstream_unavailable", "GitHub could not be reached. Try again in a moment.");
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 function githubHeaders(accessToken?: string) {
   const token = accessToken || process.env.GITHUB_SCANNER_TOKEN;
   return {
@@ -164,7 +155,14 @@ function githubHeaders(accessToken?: string) {
 }
 
 async function githubJson<T>(path: string, accessToken?: string): Promise<T> {
-  const response = await fetchWithTimeout(`${GITHUB_API}${path}`, { headers: githubHeaders(accessToken) });
+  let response: Response;
+  try {
+    response = await fetch(GITHUB_API + path, {
+      headers: githubHeaders(accessToken), signal: AbortSignal.timeout(10_000), cache: "no-store",
+    });
+  } catch {
+    throw new GitHubScannerError("upstream_unavailable", "GitHub could not be reached. Try again in a moment.");
+  }
   if (response.status === 404) throw new GitHubScannerError("not_found", accessToken ? "The repository could not be found, or the GitHub App was not granted access to it." : "The public repository could not be found. To scan a private repository, connect GitHub first.");
   if (response.status === 403 || response.status === 429) {
     const reset = Number(response.headers.get("x-ratelimit-reset") || 0);
@@ -176,13 +174,14 @@ async function githubJson<T>(path: string, accessToken?: string): Promise<T> {
   catch { throw new GitHubScannerError("upstream_unavailable", "GitHub returned an unexpected response."); }
 }
 
-function isCandidateFile(item: GitTreeItem, includeOversized = false) {
-  if (item.type !== "blob" || !item.path || (!includeOversized && (item.size ?? 0) > fileByteLimit(item.path))) return false;
+function isCandidateFile(item: GitTreeItem) {
+  if (item.type !== "blob" || item.mode === "120000" || !item.path) return false;
   const path = item.path.toLowerCase();
-  if (/(^|\/)(node_modules|vendor|dist|build|\.next|coverage|\.cache|target|pods)(\/|$)/.test(path)) return false;
+  if (/(^|\/)(node_modules|vendor|dist|build|\.next|coverage|\.cache|target|pods|generated|__generated__)(\/|$)/.test(path)) return false;
   if (isAgentSecurityFile(item.path)) return true;
   const basename = path.split("/").pop() || "";
   if (["package-lock.json", "npm-shrinkwrap.json", "cargo.lock", "go.mod"].includes(basename) || /^requirements(?:-[a-z0-9_.-]+)?\.txt$/i.test(basename)) return true;
+  if (["pnpm-lock.yaml", "bun.lockb"].includes(basename)) return false;
   if (/\.(min\.js|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|eot|pdf|zip|gz|mp4|mov|mp3|lock)$/i.test(path)) return false;
   if (/^\.env($|\.)/.test(basename) || [".gitignore", ".npmrc", ".pypirc", ".netrc", "dockerfile", "package.json", "vercel.json", "netlify.toml", "supabase.toml"].includes(basename)) return true;
   if (path.startsWith(".github/workflows/") && /\.ya?ml$/.test(path)) return true;
@@ -191,7 +190,7 @@ function isCandidateFile(item: GitTreeItem, includeOversized = false) {
 
 function fileByteLimit(path: string) {
   const basename = path.toLowerCase().split("/").pop() || "";
-  return ["package-lock.json", "npm-shrinkwrap.json", "cargo.lock"].includes(basename) ? MAX_MANIFEST_BYTES : MAX_FILE_BYTES;
+  return ["package-lock.json", "npm-shrinkwrap.json", "cargo.lock"].includes(basename) ? REPO_LOCKFILE_BYTES : REPO_FILE_BYTES;
 }
 
 /** Higher means more security-relevant application code (auth, API, payments, data access). */
@@ -220,11 +219,6 @@ function candidatePriority(path: string) {
   return 4;
 }
 
-function rawUrl(owner: string, repo: string, branch: string, path: string) {
-  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-  return `${GITHUB_RAW}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodedPath}`;
-}
-
 function compareCandidates(a: GitTreeItem, b: GitTreeItem) {
   return candidatePriority(a.path) - candidatePriority(b.path)
     || riskScore(b.path) - riskScore(a.path)
@@ -232,45 +226,51 @@ function compareCandidates(a: GitTreeItem, b: GitTreeItem) {
     || a.path.localeCompare(b.path);
 }
 
-async function fetchRepositoryFiles(owner: string, repo: string, branch: string, items: GitTreeItem[], accessToken?: string) {
-  const candidateCount = items.filter((item) => isCandidateFile(item, true)).length;
-  const ranked = items
-    .filter((item) => isCandidateFile(item))
-    .sort(compareCandidates);
-  const selected = ranked.slice(0, MAX_FILES);
-  const files: Array<{ path: string; content: string }> = [];
-  let totalBytes = 0;
-
-  for (let index = 0; index < selected.length; index += 8) {
-    const batch = selected.slice(index, index + 8);
-    const loaded = await Promise.all(batch.map(async (item) => {
-      if (totalBytes >= MAX_TOTAL_BYTES) return null;
-      try {
-        // Private repositories are read through the contents API with a short-lived installation token.
-        const response = accessToken
-          ? await fetchWithTimeout(`${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${item.path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(branch)}`, { headers: { ...githubHeaders(accessToken), Accept: "application/vnd.github.raw" } }, 7000)
-          : await fetchWithTimeout(rawUrl(owner, repo, branch, item.path), { headers: { "User-Agent": "ScanMySaaS-Repo-Scanner/1.0" } }, 7000);
-        if (!response.ok) return null;
-        const contentLength = Number(response.headers.get("content-length") || item.size || 0);
-        const byteLimit = fileByteLimit(item.path);
-        if (contentLength > byteLimit) return null;
-        const content = await response.text();
-        const bytes = Buffer.byteLength(content, "utf8");
-        if (bytes > byteLimit) return null;
-        return { path: item.path, content, bytes };
-      } catch { return null; }
-    }));
-    for (const file of loaded) {
-      if (!file || totalBytes + file.bytes > MAX_TOTAL_BYTES) continue;
-      totalBytes += file.bytes;
-      files.push({ path: file.path, content: file.content });
-    }
-    if (totalBytes >= MAX_TOTAL_BYTES) break;
+async function fetchRepositoryFiles(owner: string, repo: string, commit: string, items: GitTreeItem[], accessToken?: string) {
+  const ranked = items.filter(isCandidateFile).sort(compareCandidates);
+  const selected = new Map<string, number>();
+  let bytes = 0;
+  let perFile = 0, sourceBudget = 0;
+  for (const item of ranked) {
+    const size = item.size ?? 0;
+    const limit = fileByteLimit(item.path);
+    if (size > limit) { perFile++; continue; }
+    if (bytes + size > REPO_SOURCE_BYTES) { sourceBudget++; continue; }
+    selected.set(item.path, limit);
+    bytes += size;
   }
+  if (!selected.size) return { files: [], ranked, endedEarly: false, perFile, sourceBudget, archiveUnread: 0 };
 
-  const loadedPaths = new Set(files.map((file) => file.path));
-  const skippedHighRiskFiles = ranked.filter((item) => !loadedPaths.has(item.path) && riskScore(item.path) >= 4).slice(0, 15).map((item) => item.path);
-  return { files, totalBytes, candidateCount, skippedHighRiskFiles };
+  const path = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tarball/${encodeURIComponent(commit)}`;
+  const signal = AbortSignal.timeout(55_000);
+  try {
+    let response = await fetch(path, { headers: githubHeaders(accessToken), redirect: "manual", cache: "no-store", signal });
+    if (response.status === 302) {
+      const location = response.headers.get("location");
+      await response.body?.cancel();
+      if (!location) throw new Error("Missing archive location.");
+      const download = new URL(location);
+      if (download.origin !== "https://codeload.github.com" || download.username || download.password) throw new Error("Unexpected archive location.");
+      // The short-lived GitHub download URL is scoped to this archive. Never
+      // pass the installation token through to a redirect destination.
+      response = await fetch(download, { redirect: "error", cache: "no-store", signal });
+    }
+    if (response.status === 403 || response.status === 429) {
+      await response.body?.cancel();
+      throw new GitHubScannerError("rate_limited", "GitHub limited access to the repository snapshot. Try again later.");
+    }
+    if (!response.ok || !response.body) {
+      await response.body?.cancel();
+      throw new Error("Archive response was unavailable.");
+    }
+    const archive = await readRepoArchive(response.body as ReadableStream<Uint8Array>, selected, signal);
+    const order = new Map(ranked.map((item, index) => [item.path, index]));
+    archive.files.sort((a, b) => order.get(a.path)! - order.get(b.path)!);
+    return { ...archive, ranked, perFile, sourceBudget, archiveUnread: selected.size - archive.files.length };
+  } catch (error) {
+    if (error instanceof GitHubScannerError) throw error;
+    throw new GitHubScannerError("upstream_unavailable", "No supported repository files could be read from the pinned GitHub archive.");
+  }
 }
 
 function lineOf(content: string, index: number) {
@@ -454,7 +454,7 @@ async function resolveCommit(owner: string, repo: string, candidates: string[], 
     try {
       const commit = await githubJson<{ sha?: unknown }>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${candidate.split("/").map(encodeURIComponent).join("/")}`, accessToken);
       if (typeof commit.sha === "string" && /^[0-9a-f]{40}$/i.test(commit.sha)) return { ref: candidate, commitSha: commit.sha.toLowerCase() };
-      return { ref: candidate, commitSha: candidate };
+      throw new GitHubScannerError("upstream_unavailable", "GitHub did not return a resolved commit.");
     } catch (error) {
       if (error instanceof GitHubScannerError && error.code === "not_found" && candidate !== candidates[candidates.length - 1]) continue;
       if (error instanceof GitHubScannerError && error.code === "not_found") throw new GitHubScannerError("not_found", `The branch, tag or commit "${candidate}" was not found in this public repository.`);
@@ -481,6 +481,7 @@ export function scanPublicGitHubRepository(input: string): Promise<RepoScanResul
 
 export async function scanGitHubRepository(input: string, options: RepoScanOptions = {}): Promise<RepoScanResult> {
   const { accessToken } = options;
+  const ruleDeadline = Date.now() + 78_000;
   const stage = async (name: RepoScanStage) => { try { await options.onStage?.(name); } catch { /* progress is best-effort */ } };
   const { owner, repo, refCandidates } = parseGitHubRepository(input);
   pruneCache();
@@ -493,7 +494,7 @@ export async function scanGitHubRepository(input: string, options: RepoScanOptio
   const cacheKey = repository.private || options.onFilesLoaded ? null : `${owner.toLowerCase()}/${repo.toLowerCase()}@${commitSha}`;
   const cached = cacheKey ? scanCache.get(cacheKey) : undefined;
   if (cached && cached.expiresAt > Date.now() && cached.result.repository.latestPush === repository.pushed_at && cached.result.repository.defaultBranch === repository.default_branch) return cached.result;
-  // Pin the tree and every raw file read to one commit so a push mid-scan cannot mix versions.
+  // Pin the tree and the source archive to one commit.
   await stage("reading-tree");
   const tree = await githubJson<GitTreeResponse>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(commitSha)}?recursive=1`, accessToken);
   if (!Array.isArray(tree.tree)) throw new GitHubScannerError("upstream_unavailable", "GitHub returned an invalid repository tree.");
@@ -504,36 +505,35 @@ export async function scanGitHubRepository(input: string, options: RepoScanOptio
   if (!loaded.files.length) {
     throw new GitHubScannerError("upstream_unavailable", "No supported repository files could be read. The repository may be empty, use unsupported file types, or be temporarily unavailable. Try again with a repository containing source or configuration files.");
   }
-  options.onFilesLoaded?.(loaded.files);
   await stage("analyzing");
   const repositoryPaths = tree.tree.filter((item) => item.type === "blob").map((item) => item.path);
   const findings: RepoFinding[] = [];
+  const checked: typeof loaded.files = [];
   for (const file of loaded.files) {
+    if (Date.now() >= ruleDeadline) break;
     scanEnvironmentFiles(file.path, file.content, findings);
     scanSecretPatterns(file.path, file.content, findings);
     scanWorkflow(file.path, file.content, findings);
     scanCodePatterns(file.path, file.content, findings);
     for (const finding of analyzeAgentSecurityFile(file)) addFinding(findings, finding);
+    checked.push(file);
   }
-  scanGitignore(loaded.files, findings, repositoryPaths, !tree.truncated);
-  scanSupabase(loaded.files, findings);
-  for (const finding of analyzeDependencyHygiene(loaded.files, repositoryPaths, !tree.truncated)) addFinding(findings, finding);
+  if (!checked.length) throw new GitHubScannerError("upstream_unavailable", "The repository rule pass could not complete before the time limit.");
+  const inventory = inventoryRepoRoutes(checked);
+  for (const finding of inventory.findings) addFinding(findings, finding);
+  const checkedPaths = new Set(checked.map((file) => file.path));
+  const skipped = loaded.ranked.filter((item) => !checkedPaths.has(item.path));
+  const complete = !tree.truncated && skipped.length === 0 && !loaded.endedEarly;
+  options.onFilesLoaded?.(checked);
+  scanGitignore(checked, findings, repositoryPaths, !tree.truncated);
+  if (!tree.truncated && !skipped.some((item) => /\.sql$/i.test(item.path))) scanSupabase(checked, findings);
+  for (const finding of analyzeDependencyHygiene(checked, repositoryPaths, !tree.truncated)) addFinding(findings, finding);
 
   await stage("dependencies");
-  const dependencyInventory = extractDependencyInventory(loaded.files);
+  const dependencyInventory = extractDependencyInventory(checked);
   const dependencyScan = await queryKnownVulnerabilities(dependencyInventory.dependencies, dependencyInventory.truncated);
   for (const match of dependencyScan.matches) {
-    const ids = match.ids.slice(0, 6);
-    addFinding(findings, {
-      severity: "medium",
-      category: "dependencies",
-      title: `Known vulnerability reported for ${match.dependency.name}@${match.dependency.version}`,
-      description: `OSV matched ${ids.join(", ")}${match.ids.length > ids.length ? ` and ${match.ids.length - ids.length} more` : ""} to this exact dependency version. Reachability and advisory severity still need verification.`,
-      file: match.dependency.file,
-      line: match.dependency.line,
-      remedy: "Open the advisory, identify the nearest fixed version, and upgrade through the existing package manager. Review breaking changes, regenerate the lockfile, run the relevant tests and build, and confirm whether the vulnerable code path is reachable in production.",
-      referenceUrl: `https://osv.dev/vulnerability/${encodeURIComponent(match.ids[0])}`,
-    });
+    addFinding(findings, formatDependencyFinding(match.dependency, match.ids, match.advisories ?? new Map()));
   }
 
   const severityOrder: Record<RepoSeverity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -545,15 +545,18 @@ export async function scanGitHubRepository(input: string, options: RepoScanOptio
     score,
     risk,
     filesInRepository: tree.tree.filter((item) => item.type === "blob").length,
-    filesScanned: loaded.files.length,
-    bytesScanned: loaded.totalBytes,
-    truncated: tree.truncated || loaded.candidateCount > loaded.files.length,
+    filesScanned: checked.length,
+    bytesScanned: checked.reduce((sum, file) => sum + file.bytes, 0),
+    truncated: !complete,
     findings,
+    routes: inventory.routes,
     coverage: {
-      candidateFiles: loaded.candidateCount,
-      filesSkipped: loaded.candidateCount - loaded.files.length,
-      skippedHighRiskFiles: loaded.skippedHighRiskFiles,
-      agentFilesScanned: loaded.files.filter((file) => isAgentSecurityFile(file.path)).length,
+      candidateFiles: loaded.ranked.length,
+      filesSkipped: skipped.length,
+      skippedHighRiskFiles: skipped.filter((item) => riskScore(item.path) >= 4).slice(0, 15).map((item) => item.path),
+      treeComplete: !tree.truncated,
+      skippedByReason: { perFile: loaded.perFile, sourceBudget: loaded.sourceBudget, archiveUnread: loaded.archiveUnread, ruleTime: loaded.files.length - checked.length },
+      agentFilesScanned: checked.filter((file) => isAgentSecurityFile(file.path)).length,
       dependencyManifests: dependencyInventory.manifests,
       dependenciesChecked: dependencyScan.dependenciesChecked,
       knownVulnerabilities: dependencyScan.matches.reduce((total, match) => total + match.ids.length, 0),

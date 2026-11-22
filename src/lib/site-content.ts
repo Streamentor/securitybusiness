@@ -65,7 +65,7 @@ export const productFeatures = [
 
 export const repoScanSteps = [
   { title: "Paste a repository or connect GitHub", copy: "Paste a public github.com URL, including a /tree/branch link, or connect the read-only ScanMySaaS GitHub App and pick a private repository." },
-  { title: "We read one exact commit", copy: "The branch is resolved to a commit SHA and up to 60 security-relevant files are read from it in this order: environment and key files, GitHub workflows and agent configs, lockfiles and SQL migrations, build configs, then source files ranked by risk (middleware, API routes, auth and payment code)." },
+  { title: "We read one exact commit", copy: "The branch is resolved to a commit SHA and one source archive is read in memory. Rules check eligible source and configuration files within the size and time limits. The report shows what was checked and which high-risk files were skipped." },
   { title: "Get findings with file and line", copy: "Each finding names the file and line, explains why it was flagged and comes with a fix prompt for Cursor, Claude or Codex. Rescan after fixing to confirm." },
 ] as const;
 

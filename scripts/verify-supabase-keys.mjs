@@ -1,3 +1,4 @@
+import { fixtureArchive } from "./fixture-repo-archive.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks, stripTypeScriptTypes } from "node:module";
@@ -36,11 +37,8 @@ globalThis.fetch = async (url) => {
   const parsed = new URL(String(url));
   if (parsed.hostname === "api.github.com" && parsed.pathname.includes("/git/trees/")) return Response.json({ truncated: false, tree: Object.keys(files).map((path) => ({ path, type: "blob", size: files[path].length })) });
   if (parsed.hostname === "api.github.com" && parsed.pathname.includes("/commits/")) return Response.json({ sha: "a".repeat(40) });
+  if (parsed.pathname.includes("/tarball/")) return fixtureArchive(Object.entries(files).map(([path, content]) => ({ path, content })));
   if (parsed.hostname === "api.github.com") return Response.json({ name: "fixture", full_name: "test/supabase-keys", html_url: "https://github.com/test/supabase-keys", private: false, default_branch: "main", pushed_at: "2026-11-07T10:00:00Z" });
-  if (parsed.hostname === "raw.githubusercontent.com") {
-    const path = Object.keys(files).find((item) => parsed.pathname.endsWith(`/${item}`));
-    return path ? new Response(files[path]) : new Response("Not found", { status: 404 });
-  }
   if (parsed.hostname === "api.osv.dev") return new Response("Unavailable", { status: 503 });
   throw new Error(`Unexpected fixture request: ${parsed.hostname}`);
 };

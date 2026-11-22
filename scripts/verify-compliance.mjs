@@ -25,17 +25,18 @@ const footer = `<footer><a href="/privacy">Privacy Policy</a> <a href="/terms">T
 const ga = `<script async src="https://www.googletagmanager.com/gtag/js?id=G-TEST123"></script><script>gtag('config', 'G-TEST123');</script>`;
 const titles = (result) => result.findings.map((finding) => finding.title);
 
-// Trackers with no consent tool: a medium HTML-only finding that names the tracker.
+// HTML can identify tracker signatures but cannot confirm browser consent behavior.
 let result = await compliance.checkCompliance("https://example.com", [{ url: "https://example.com/", html: page(`<h1>Hi</h1>${footer}`, { head: ga }) }], noFetch);
-assert.equal(result.noConsentToolFinding?.severity, "medium");
-assert.match(result.noConsentToolFinding.description, /Google Analytics/);
-assert.match(result.noConsentToolFinding.description, /JavaScript may not be visible/, "the HTML-only limit must be stated");
-assert.ok(titles(result).includes("Tracking and analytics services detected"));
+const tracking = result.findings.find((finding) => finding.title === "Tracking and analytics services detected");
+assert.equal(tracking?.severity, "info");
+assert.match(tracking.description, /Google Analytics/);
+assert.match(tracking.description, /not verified by the HTML check/);
+assert.ok(!titles(result).includes("Trackers found with no cookie consent tool"));
 
 // The same page with Cookiebot, with Google consent mode, or with banner markup: no consent finding.
 for (const extra of [`<script src="https://consent.cookiebot.com/uc.js" data-cbid="x"></script>`, `<script>gtag('consent', 'default', {analytics_storage: 'denied'});</script>`, `<div id="cookie-banner">We use cookies</div>`]) {
   result = await compliance.checkCompliance("https://example.com", [{ url: "https://example.com/", html: page(`<h1>Hi</h1>${extra}${footer}`, { head: ga }) }], noFetch);
-  assert.equal(result.noConsentToolFinding, undefined, `consent signal must suppress the finding: ${extra.slice(0, 40)}`);
+  assert.ok(!titles(result).includes("Trackers found with no cookie consent tool"), `consent signal must suppress the finding: ${extra.slice(0, 40)}`);
 }
 
 // A German footer link counts as a privacy policy.
@@ -54,7 +55,8 @@ assert.ok(titles(result).includes("Privacy Policy is not linked from the homepag
 const linked = [{ url: bare[0].url, html: page('<a href="/signup">Sign up</a>' + footer) }];
 const unreadable = "Linked privacy policy could not be verified";
 result = await compliance.checkCompliance(bare[0].url, linked, noFetch);
-assert.ok(titles(result).includes(unreadable), "an unreachable footer link needs a finding");
+assert.ok(!titles(result).includes(unreadable), "an unread policy does not create a finding");
+assert.equal(result.checks.find((item) => item.key === "policy").status, "not_checked");
 result = await compliance.checkCompliance(bare[0].url, linked, { fetchHtml: async (url) => ({ url, html: page("<h1>Privacy policy</h1><p>We collect email addresses.</p>") }) });
 assert.ok(!titles(result).includes(unreadable), "a readable short policy is still reachable");
 
@@ -115,8 +117,13 @@ const runnerModule = await import("../src/lib/compliance-runner.ts");
 const free = runnerModule.createComplianceRunner({ plan: "free" });
 free.start("https://example.com/", { timeoutMs: 1000, fetchResource: async () => { throw new Error("Free scans must not launch the browser"); } });
 const freeFindings = await free.finish({ url: "https://example.com/", pages: [{ url: "https://example.com/", html: page(`<h1>Hi</h1>${footer}`, { head: ga }) }], fetchHtml: async () => null, remainingMs: () => 60_000 });
-assert.ok(freeFindings.some((f) => f.title === "Trackers found with no cookie consent tool"));
-assert.deepEqual(types.parseComplianceCoverage(freeFindings.find((f) => f.title === types.COMPLIANCE_COVERAGE_TITLE).description), { browser: "plan", ai: "plan", policyUrl: undefined, trackers: ["Google Analytics / Google tag"] });
+assert.ok(freeFindings.some((finding) => finding.title === "Tracking and analytics services detected" && finding.severity === "info"));
+assert.ok(!freeFindings.some((finding) => finding.title === "Trackers found with no cookie consent tool"));
+const freeCoverage = types.parseComplianceCoverage(freeFindings.find((finding) => finding.title === types.COMPLIANCE_COVERAGE_TITLE).description);
+assert.equal(freeCoverage.browser, "plan");
+assert.equal(freeCoverage.ai, "plan");
+assert.deepEqual(freeCoverage.trackers, ["Google Analytics / Google tag"]);
+assert.equal(freeCoverage.checks.find((item) => item.key === "consent").reason, "plan");
 
 // Browser consent test against local pages. Skipped only when no Chromium is installed.
 const browserModule = await import("../src/lib/compliance-browser.ts");
@@ -134,7 +141,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-const options = { timeoutMs: 40_000, fetchResource: async (url, init) => new URL(url).origin === base ? fetch(url, init) : null };
+const options = { timeoutMs: 40_000, executablePath: process.env.SCAN_TEST_CHROME, fetchResource: async (url, init) => new URL(url).origin === base ? fetch(url, init) : null };
 try {
   let run = await browserModule.runBrowserConsentCheck(`${base}/before`, options);
   if (run.status === "unavailable") {

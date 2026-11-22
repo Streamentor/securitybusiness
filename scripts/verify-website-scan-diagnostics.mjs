@@ -31,7 +31,7 @@ for (const [response,code] of [
  [()=>new Response('{}',{headers:{'content-type':'application/json'}}),'not-html'],
  [()=>new Response('',{headers:{'content-type':'text/html'}}),'empty-html'],
  [()=>new Response('failed',{status:503}),'http-error'],
- [()=>new Response(null,{status:302,headers:{location:'https://other.invalid/parked'}}),'redirect'],
+ [()=>new Response(null,{status:302,headers:{location:'https://other.invalid/parked'}}),'redirect_offsite'],
 ]) {
  globalThis.fetch=async()=>response();
  await assert.rejects(scanner.scanWebsite(base),e=>e instanceof scanner.WebsiteScanError && e.failure.code===code);
