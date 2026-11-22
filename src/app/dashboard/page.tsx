@@ -108,16 +108,16 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen lg:grid lg:grid-cols-[15rem_1fr]">
-      <aside className="hidden border-r border-white/[0.08] bg-[#090c11] lg:flex lg:flex-col lg:p-5">
+      <aside className="hidden border-r border-white/[0.08] bg-[#090c11] lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:self-start lg:p-5">
         <Brand href="/dashboard" />
-        <nav className="mt-10 space-y-1 text-sm">
+        <nav className="mt-10 min-h-0 space-y-1 overflow-y-auto text-sm">
           <Link href="/dashboard" className="flex items-center gap-3 rounded-xl bg-white/[0.06] px-3 py-2.5 font-medium text-white"><BarChart3 className="h-4 w-4 text-[var(--signal)]" /> Overview</Link>
           <a href="#new-scan" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><Plus className="h-4 w-4" /> New scan</a>
           <a href="#history" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><History className="h-4 w-4" /> Scan history</a>
           <a href="#repo-scans" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><Github className="h-4 w-4" /> Repositories</a>
           <Link href="/pricing" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[#8f99a7] hover:bg-white/[0.04] hover:text-white"><Zap className="h-4 w-4" /> Plans</Link>
         </nav>
-        <div className="mt-auto rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
+        <div className="mt-auto shrink-0 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
           <p className="truncate text-xs font-medium text-[#cbd2da]">{session?.user?.name || session?.user?.email}</p>
           <p className="mt-1 truncate text-[0.68rem] text-[#687382]">{session?.user?.email}</p>
           <button onClick={() => signOut({ callbackUrl: "/" })} className="mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs text-[#7f8998] hover:bg-white/[0.05] hover:text-white"><LogOut className="h-3.5 w-3.5" /> Sign out</button>
@@ -125,7 +125,7 @@ export default function DashboardPage() {
       </aside>
 
       <div className="min-w-0">
-        <header className="border-b border-white/[0.08] bg-[#07090d]/85 backdrop-blur-xl lg:hidden"><div className="flex h-16 items-center justify-between px-4"><Brand href="/dashboard" /><button onClick={() => signOut({ callbackUrl: "/" })} className="rounded-lg border border-white/10 p-2 text-[#9aa4b1]" aria-label="Sign out"><LogOut className="h-4 w-4" /></button></div></header>
+        <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#07090d]/85 backdrop-blur-xl lg:hidden"><div className="flex h-16 items-center justify-between px-4"><Brand href="/dashboard" /><button onClick={() => signOut({ callbackUrl: "/" })} className="rounded-lg border border-white/10 p-2 text-[#9aa4b1]" aria-label="Sign out"><LogOut className="h-4 w-4" /></button></div></header>
         <div className="mx-auto max-w-[92rem] px-4 py-7 sm:px-7 sm:py-10 lg:px-10">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
             <div><p className="eyebrow">Security workspace</p><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">Good to see you{session?.user?.name ? `, ${session.user.name.split(" ")[0]}` : ""}.</h1><p className="mt-2 text-sm text-[#7f8998]">Run a check, review the priority issues, and verify the next fix.</p></div>
@@ -142,7 +142,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_20rem]">
-            <div id="new-scan" className="surface rounded-2xl p-5 sm:p-7">
+            <div id="new-scan" className="max-lg:scroll-mt-20 surface rounded-2xl p-5 sm:p-7">
               <div className="flex items-start justify-between"><div><p className="text-sm font-semibold">Scan a website</p><p className="mt-1 text-xs text-[#788392]">Use a public URL you own or have permission to test.</p></div><Globe2 className="h-5 w-5 text-[var(--signal)]" /></div>
               <form onSubmit={startScan} className="mt-6 flex flex-col gap-2 sm:flex-row">
                 <label className="input-shell flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3.5"><Globe2 className="h-4 w-4 shrink-0 text-[#697483]" /><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="app.yourcompany.com" inputMode="url" className="min-w-0 flex-1 bg-transparent py-3.5 text-sm text-white placeholder:text-[#596473] focus:outline-none" /></label>
