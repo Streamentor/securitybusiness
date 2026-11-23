@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { saveWebsiteDiagnostic } from "@/lib/website-scan-diagnostics";
 import { websiteFailure } from "@/lib/website-scan-failure";
@@ -7,6 +7,7 @@ import { scanWebsite, type ScanProgress, validateScanTarget, type VulnerabilityR
 import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import { previewFindingTitles } from "@/lib/scan-journey";
 import { admitWebsiteScan } from "@/lib/scan-gate";
+import { COMPLIANCE_COVERAGE_TITLE } from "@/lib/compliance-types";
 import { complianceScanOptions } from "@/lib/compliance-scan-options";
 
 export const maxDuration = 120; // Allow up to 2 minutes for Vercel
@@ -50,10 +51,13 @@ export async function POST(req: NextRequest) {
 
   // Create the readable stream
   const encoder = new TextEncoder();
+  let disconnected = false;
   const stream = new ReadableStream({
+    cancel() { disconnected = true; },
     async start(controller) {
       let scanId: string | null = null;
       function send(event: string, data: unknown) {
+        if (disconnected) return;
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
         );
@@ -106,6 +110,7 @@ export async function POST(req: NextRequest) {
           where: { id: scan.id },
           data: {
             status: "completed",
+          url: results.url ?? normalizedUrl,
             overallScore: results.score,
             pagesScanned: results.pagesScanned,
             totalPages: results.coverage?.pagesDiscovered ?? results.pagesScanned,
@@ -124,6 +129,13 @@ export async function POST(req: NextRequest) {
             },
           });
         }
+
+        const pending = results.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === COMPLIANCE_COVERAGE_TITLE);
+        const runCompliance = results.runCompliance;
+        if (pending && runCompliance) after(async () => {
+          const { finishWebsiteCompliance } = await import("@/lib/website-compliance-job");
+          await finishWebsiteCompliance(scan.id, pending, runCompliance);
+        });
 
         const actionable = results.vulnerabilities.filter((v: VulnerabilityResult) => isVisibleWebsiteFinding(v));
         send("complete", {
@@ -160,7 +172,7 @@ export async function POST(req: NextRequest) {
           message: failure.message, code: failure.code,
         });
       } finally {
-        controller.close();
+        if (!disconnected) controller.close();
       }
     },
   });

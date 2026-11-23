@@ -110,7 +110,7 @@ export default function RepositoryScannerPage() {
           <label className="mt-4 flex cursor-pointer items-start gap-3 text-xs leading-5 text-[#8c96a4]"><input type="checkbox" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} className="mt-1 h-4 w-4 accent-[#b9ff66]" /><span>I own this repository or have permission to scan it.</span></label>
           {error && <div className="mt-4 flex gap-2 rounded-xl border border-[#ff6b6b]/20 bg-[#ff6b6b]/[0.06] p-3 text-xs leading-5 text-[#ff9d9d]"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
           <button type="submit" disabled={loading || !repository.trim() || !authorized} className="button-primary mt-5 w-full">{loading ? <><Loader2 className="h-4 w-4 animate-spin" />Reading repository security files...</> : <><Search className="h-4 w-4" />Scan repository</>}</button>
-          <p className="mt-3 text-center text-[0.67rem] leading-5 text-[#5f6977]">Reads up to 60 security-relevant files from one pinned commit, highest-risk first. It does not search full Git history.</p>
+          <p className="mt-3 text-center text-[0.67rem] leading-5 text-[#5f6977]">Runs rules over eligible source and configuration files in one pinned commit. It does not search full Git history.</p>
           </form>}
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function RepositoryScannerPage() {
       <section className="app-shell pb-20 sm:pb-24">
         <div className="max-w-2xl"><p className="eyebrow">What a repo scan covers</p><h2 className="section-title mt-4 text-balance">Scan limits</h2><p className="mt-5 text-sm leading-7 text-[#8f99a7]">The scan reads a bounded set of files from one commit and never runs your code. These are the limits today.</p></div>
         <ul className="mt-8 grid max-w-3xl gap-3 text-sm leading-7 text-[#9aa4b1]">
-          <li>Up to 60 files from one commit, 240 KB per file (lockfiles up to 1.5 MB) and 6 MB in total. Repositories with more than 100,000 files and folders in the tree are refused.</li>
+          <li>Up to 360 KB per source file, 5 MB per supported lockfile, and 112 MB of retained text. Archive size and time limits also apply. The report shows how many files were checked and skipped.</li>
           <li>No <Link href="/guides/github-secret-scanning-for-vibe-coded-apps" className="text-[var(--signal)] hover:underline">Git history</Link>. A secret deleted in a later commit is not found, even though it can still be read from an older one.</li>
           <li>Up to 180 dependencies per scan are checked against OSV. pnpm, Yarn and Bun lockfiles are not checked yet.</li>
           <li>The Supabase RLS check runs only when the scanned files reference Supabase, and it reads migrations, not your live database.</li>

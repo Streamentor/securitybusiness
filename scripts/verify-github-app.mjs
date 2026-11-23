@@ -1,3 +1,4 @@
+import { fixtureArchive } from "./fixture-repo-archive.mjs";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, createVerify } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -132,7 +133,7 @@ fixture.db.repoScan.count = async () => 15;
 await assert.rejects(jobs.createRepoScanJob("user-a", "founder/open-app"), (error) => error.status === 429);
 globalThis.fetch = realFetch;
 
-// Scanner: private reads use the contents API with the installation token and are never cached
+// Scanner: private reads use the archive API with the installation token and are never cached
 const scanner = await import("../src/lib/github-scanner.ts");
 const SHA = "c".repeat(40);
 const seen = [];
@@ -142,7 +143,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (target.pathname === "/repos/founder/secret-app") return Response.json({ name: "secret-app", full_name: "founder/secret-app", html_url: "https://github.com/founder/secret-app", private: true, default_branch: "main", pushed_at: "t" });
   if (target.pathname.includes("/commits/")) return Response.json({ sha: SHA });
   if (target.pathname.includes("/git/trees/")) return Response.json({ truncated: false, tree: [{ path: "src/app/api/admin/route.ts", type: "blob", size: 40 }] });
-  if (target.pathname.includes("/contents/")) return new Response("export const ok = true;");
+  if (target.pathname.includes("/tarball/")) return fixtureArchive([{ path: "src/app/api/admin/route.ts", content: "export const ok = true;" }]);
   if (target.hostname === "api.osv.dev") return new Response("down", { status: 503 });
   throw new Error(`Unexpected request ${target}`);
 };

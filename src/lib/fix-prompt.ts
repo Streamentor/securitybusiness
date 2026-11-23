@@ -7,6 +7,7 @@ export interface FixPromptInput {
   evidence: string;
   remediation?: string;
   repository?: string;
+  stack?: string;
 }
 
 function confidenceNote(input: FixPromptInput) {
@@ -32,7 +33,7 @@ Finding: ${input.title}
 Severity: ${input.severity.toUpperCase()}
 Category: ${input.category}
 Observed surface: ${input.surface}
-${location}
+${location}${input.stack ? "\nDetected stack: " + input.stack : ""}
 
 Scanner evidence:
 ${input.evidence}

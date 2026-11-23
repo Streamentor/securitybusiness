@@ -1,4 +1,4 @@
-export type WebsiteFailureCode = "timeout" | "dns" | "tls" | "blocked" | "http-error" | "not-html" | "empty-html" | "response-too-large" | "redirect" | "network" | "internal";
+export type WebsiteFailureCode = "timeout" | "dns" | "tls" | "blocked" | "http-error" | "not-html" | "empty-html" | "response-too-large" | "redirect" | "redirect_offsite" | "network" | "internal";
 export interface WebsiteFailure {
   code: WebsiteFailureCode;
   message: string;

@@ -748,7 +748,7 @@ export default function AdminDashboard() {
                             <span className="capitalize text-gray-300">
                               {s.status}{s.diagnostic?.partial ? " (partial)" : ""}
                             </span>
-                            {s.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
+                            {s.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic?.failureCode && <span className="mr-1 font-mono">{s.diagnostic.failureCode}</span>}{s.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
                             {s.diagnostic?.partial && <p className="mt-2 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic.coverageNote}</p>}
                           </div>
                         </td>
@@ -993,7 +993,7 @@ export default function AdminDashboard() {
                           <span className="capitalize text-gray-300">
                             {s.status}{s.diagnostic?.partial ? " (partial)" : ""}
                           </span>
-                          {s.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
+                          {s.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic?.failureCode && <span className="mr-1 font-mono">{s.diagnostic.failureCode}</span>}{s.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
                           {s.diagnostic?.partial && <p className="mt-2 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{s.diagnostic.coverageNote}</p>}
                         </div>
                       </td>
@@ -1249,7 +1249,7 @@ export default function AdminDashboard() {
                                   <span className="capitalize text-gray-300">
                                     {sc.status}{sc.diagnostic?.partial ? " (partial)" : ""}
                                   </span>
-                                  {sc.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{sc.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
+                                  {sc.status === "failed" && <p className="mt-2 min-w-48 max-w-xs whitespace-normal text-xs leading-5 text-amber-200">{sc.diagnostic?.failureCode && <span className="mr-1 font-mono">{sc.diagnostic.failureCode}</span>}{sc.diagnostic?.failureMessage || "Failure reason not recorded."}</p>}
                                 </div>
                               </td>
                               <td

@@ -1,8 +1,9 @@
+import { prioritizeRepoReview } from "@/lib/repo-route-inventory";
 import { prisma } from "@/lib/db";
 import { ensureRepoTables } from "@/lib/repo-store";
 import { getGitHubAppConfig, getInstallationToken, GitHubAppError } from "@/lib/github-app";
 import { GitHubScannerError, parseGitHubRepository, riskScore, scanGitHubRepository, type RepoScanResult } from "@/lib/github-scanner";
-import { canReviewWithAI, resultForEntitlement, reviewRepositoryWithAI, scoreReviewedFindings, type ReviewFile } from "@/lib/ai-review";
+import { eligibleReviewFile, canReviewWithAI, resultForEntitlement, reviewRepositoryWithAI, scoreReviewedFindings, type ReviewFile } from "@/lib/ai-review";
 import { getAIReviewPreference, reserveAIReviewTokens, settleAIReviewTokens } from "@/lib/ai-review-store";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -49,11 +50,22 @@ async function repositoryVisibleWith(owner: string, repo: string, token?: string
  * Validate access and entitlement, then create a queued job. The caller schedules
  * runRepoScanJob with after() so the browser can leave while the scan runs.
  */
-export async function createRepoScanJob(userId: string, input: string): Promise<{ id: string }> {
+export async function createRepoScanJob(userId: string, input: string, reviewParentId?: string): Promise<{ id: string }> {
   await ensureRepoTables();
+  if (reviewParentId) {
+    const parent = await prisma.repoScan.findFirst({ where: { id: reviewParentId, userId, status: "completed" }, select: { repository: true, commitSha: true, result: true } });
+    const report = parent?.result as unknown as RepoScanResult | null;
+    if (!parent || !parent.commitSha || !/^[0-9a-f]{40}$/.test(parent.commitSha) || !report?.aiReview?.hasNextBatch) {
+      throw new RepoJobError(404, "No further AI batch is available for this report.", "no_next_batch");
+    }
+    input = parent.repository + "@" + parent.commitSha;
+  }
   const { owner, repo, refCandidates } = parseGitHubRepository(input);
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true, role: true } });
   if (!user) throw new RepoJobError(401, "Sign in to scan repositories.", "unauthorized");
+  if (reviewParentId && (!canReviewWithAI(user) || !process.env.OPENAI_API_KEY || !await getAIReviewPreference(userId))) {
+    throw new RepoJobError(403, "An enabled Starter or Pro AI review is required for another batch.", "ai_review_unavailable");
+  }
 
   const since = new Date(Date.now() - 60 * 60 * 1000);
   const [recent, active] = await Promise.all([
@@ -92,19 +104,38 @@ export async function createRepoScanJob(userId: string, input: string): Promise<
     throw new RepoJobError(402, "Private repository scans are included in Starter and Pro. Public repositories stay free.", "upgrade_required");
   }
 
-  const job = await prisma.repoScan.create({
-    data: {
-      userId,
-      repository: `${owner}/${repo}`,
-      requestedRef: refCandidates[0] ?? null,
-      visibility,
-      installationId,
-      status: "queued",
-      stage: "queued",
-    },
-    select: { id: true },
+  const data = {
+    userId, repository: owner + "/" + repo, requestedRef: refCandidates[0] ?? null,
+    visibility, installationId, status: "queued", stage: "queued", reviewParentId,
+  };
+  if (!reviewParentId) return prisma.repoScan.create({ data, select: { id: true } });
+  return prisma.$transaction(async (db) => {
+    // Serialize review requests for this account, then debit and enqueue together.
+    await db.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+    const existing = await db.repoScan.findFirst({
+      where: { userId, reviewParentId, status: { in: ["queued", "running", "completed"] } },
+      select: { id: true },
+    });
+    if (existing) return existing;
+    const reserved = await db.user.updateMany({
+      where: { id: userId, credits: { gt: 0 }, OR: [{ plan: { in: ["starter", "pro"] } }, { role: "admin" }] },
+      data: { credits: { decrement: 1 } },
+    });
+    if (!reserved.count) throw new RepoJobError(402, "One available scan credit is required for a new AI batch.", "no_credit");
+    return db.repoScan.create({ data, select: { id: true } });
   });
-  return job;
+}
+
+async function failRepoScanJob(job: { id: string; userId: string; reviewParentId: string | null }, message: string) {
+  await prisma.$transaction(async (db) => {
+    const changed = await db.repoScan.updateMany({
+      where: { id: job.id, status: { in: ["queued", "running"] } },
+      data: { status: "failed", stage: "failed", error: message, completedAt: new Date() },
+    });
+    if (changed.count && job.reviewParentId) {
+      await db.user.updateMany({ where: { id: job.userId }, data: { credits: { increment: 1 } } });
+    }
+  });
 }
 
 export async function runRepoScanJob(id: string): Promise<void> {
@@ -115,14 +146,35 @@ export async function runRepoScanJob(id: string): Promise<void> {
   const claim = await prisma.repoScan.updateMany({where: {id, status: "queued"}, data: {status: "running", startedAt: new Date(), stage: "resolving"}});
   if (claim.count !== 1) return;
   try {
+    const parent = job.reviewParentId ? await prisma.repoScan.findFirst({
+      where: { id: job.reviewParentId, userId: job.userId, commitSha: job.requestedRef, status: "completed" },
+      select: { result: true },
+    }) : null;
+    const previous = parent?.result as unknown as RepoScanResult | null;
+    if (job.reviewParentId && !previous?.aiReview?.reviewedPaths?.length) {
+      throw new RepoJobError(404, "The original review can no longer be used.", "no_next_batch");
+    }
+    if (job.installationId && !await prisma.gitHubInstallation.findFirst({
+      where: { userId: job.userId, installationId: job.installationId }, select: { id: true },
+    })) throw new RepoJobError(403, "Reconnect GitHub before starting another repository scan.", "needs_connection");
     const accessToken = job.installationId ? await getInstallationToken(job.installationId) : undefined;
     const input = job.requestedRef ? `${job.repository}@${job.requestedRef}` : job.repository;
     let files: ReviewFile[] = [];
     const result: RepoScanResult = await scanGitHubRepository(input, {
-      onFilesLoaded: (loaded) => { files = [...loaded].sort((a, b) => riskScore(b.path) - riskScore(a.path)); },
+      onFilesLoaded: (loaded) => { files = [...loaded]; },
       accessToken,
       onStage: (stage) => stage === "scoring" ? Promise.resolve() : prisma.repoScan.update({ where: { id }, data: { stage } }).then(() => undefined),
     });
+    const highRiskPaths = [...new Set([
+      ...(result.routes ?? []).filter((route) => route.priority >= 2).map((route) => route.file),
+      ...files.filter((file) => riskScore(file.path) >= 6 && eligibleReviewFile(file.path)).map((file) => file.path),
+    ])];
+    const alreadyReviewed = new Set(previous?.aiReview?.reviewedPaths ?? []);
+    const reviewCandidates = job.reviewParentId ? files.filter((file) => highRiskPaths.includes(file.path) && !alreadyReviewed.has(file.path)) : files;
+    const available = new Set(reviewCandidates.map((file) => file.path));
+    files = prioritizeRepoReview(files, result.routes ?? [], riskScore, eligibleReviewFile, alreadyReviewed)
+      .filter((file) => available.has(file.path));
+    if (previous) result.findings.push(...previous.findings.filter((finding) => finding.source === "ai"));
     const month = new Date().toISOString().slice(0, 7);
     let ai;
     try {
@@ -134,14 +186,25 @@ export async function runRepoScanJob(id: string): Promise<void> {
         settle: (reserved, charged) => settleAIReviewTokens(job.userId, month, reserved, charged),
       });
     } catch {
-      ai = {status: "failed", note: "AI review was unavailable. Rule-based checks completed.", findings: [], model: null, inputTokens: 0, outputTokens: 0, filesReviewed: 0};
+      ai = {status: "failed", note: "AI review was unavailable. Rule-based checks completed.", findings: [], model: null, inputTokens: 0, outputTokens: 0, filesReviewed: 0, reviewedPaths: [] as string[]};
     } finally { files = []; }
+    if (job.reviewParentId && !ai.filesReviewed) {
+      await failRepoScanJob(job, "No additional files were reviewed. Your scan credit was returned.");
+      return;
+    }
     result.findings.push(...ai.findings);
+    // Evidence excerpts are used to validate model output in memory. Persist
+    // only the description and file/line reference for each verified excerpt.
+    for (const finding of result.findings) if (finding.source === "ai") delete finding.evidence;
     Object.assign(result, scoreReviewedFindings(result.findings));
-    result.aiReview = {status: ai.status, note: ai.note, findingsCount: ai.findings.length, filesReviewed: ai.filesReviewed};
-    await prisma.repoScan.update({where: {id}, data: {stage: "scoring"}});
-    await prisma.repoScan.update({
-      where: { id },
+    const reviewed = new Set([...alreadyReviewed, ...ai.reviewedPaths]);
+    const remaining = highRiskPaths.filter((path) => !reviewed.has(path));
+    result.aiReview = {
+      status: ai.status, note: ai.note, findingsCount: ai.findings.length, filesReviewed: reviewed.size, reviewedPaths: [...reviewed], hasNextBatch: reviewed.size > 0 && remaining.length > 0,
+      highRiskTotal: highRiskPaths.length, highRiskReviewed: highRiskPaths.length - remaining.length, highRiskNotReviewed: remaining,
+    };
+    await prisma.repoScan.updateMany({
+      where: { id, status: "running" },
       data: {
         aiModel: ai.model, aiInputTokens: ai.model ? ai.inputTokens : null, aiOutputTokens: ai.model ? ai.outputTokens : null, aiFindingsCount: ai.findings.length,
         status: "completed",
@@ -155,9 +218,9 @@ export async function runRepoScanJob(id: string): Promise<void> {
       },
     });
   } catch (error) {
-    const message = error instanceof GitHubScannerError || error instanceof GitHubAppError ? error.message : "The repository scan failed. Try again in a moment.";
+    const message = error instanceof GitHubScannerError || error instanceof GitHubAppError || error instanceof RepoJobError ? error.message : "The repository scan failed. Try again in a moment.";
     if (!(error instanceof GitHubScannerError)) console.error("Repository job failed:", error instanceof Error ? error.message : "unknown");
-    await prisma.repoScan.update({ where: { id }, data: { status: "failed", stage: "failed", error: message, completedAt: new Date() } }).catch(() => undefined);
+    await failRepoScanJob(job, message).catch(() => console.error("Repository job failure could not be saved."));
   }
 }
 
@@ -167,8 +230,9 @@ export async function getRepoScanForUser(id: string, userId: string) {
   if (!job) return null;
   if (isStale(job)) {
     const message = "The scan took too long and was stopped. Try again; very large repositories may need a branch with fewer files.";
-    await prisma.repoScan.update({ where: { id }, data: { status: "failed", stage: "failed", error: message, completedAt: new Date() } });
-    job = { ...job, status: "failed", stage: "failed", error: message };
+    await failRepoScanJob(job, message);
+    job = await prisma.repoScan.findFirst({ where: { id, userId } });
+    if (!job) return null;
   }
   const user = await prisma.user.findUnique({where: {id: userId}, select: {plan: true, role: true}});
   if (!user || !canReviewWithAI(user)) {

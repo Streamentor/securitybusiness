@@ -7,7 +7,7 @@ const sourceRoot = new URL("../src/", import.meta.url);
 const shim = (source) => ({ url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next/server") return shim("export const NextRequest = Request; export const NextResponse = { json: Response.json.bind(Response) };");
+    if (specifier === "next/server") return shim("export const after = () => {}; export const NextRequest = Request; export const NextResponse = { json: Response.json.bind(Response) };");
     if (specifier === "@/lib/db") return shim("export const prisma = globalThis.scanRemediationFixture.db;");
     if (specifier === "@/lib/auth") return shim("export const auth = async () => globalThis.scanRemediationFixture.session;");
     if (specifier === "@/lib/scanner") return shim("export class WebsiteScanError extends Error {} export const validateScanTarget = async value => new URL(value); export const scanWebsite = async () => ({score:40,pagesScanned:1,vulnerabilities:globalThis.scanRemediationFixture.findings});");

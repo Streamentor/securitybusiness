@@ -1,3 +1,4 @@
+import { notChecked, type CheckItem, type NotCheckedReason } from "./website-check-state.ts";
 import * as cheerio from "cheerio";
 import type { VulnerabilityResult } from "./scanner";
 
@@ -81,14 +82,14 @@ export interface LegalLink { href: string; text: string; page: string; inFooter:
 export interface ComplianceDeps {
   /** Bounded, SSRF-safe HTML fetch. Returns null when the URL is unreachable or not HTML. */
   fetchHtml: (url: string) => Promise<CompliancePage | null>;
+  failureFor?: (url: string) => NotCheckedReason | undefined;
 }
 export interface StaticComplianceResult {
   findings: VulnerabilityResult[];
   trackers: TrackerSignature[];
   consentTools: string[];
   policy: { url: string; text: string } | null;
-  /** The finding that a browser test should replace when it runs. */
-  noConsentToolFinding?: VulnerabilityResult;
+  checks: CheckItem[];
 }
 
 export function detectTrackers(html: string): TrackerSignature[] {
@@ -244,6 +245,7 @@ function list(items: string[]) {
 export async function checkCompliance(baseUrl: string, pages: CompliancePage[], deps: ComplianceDeps): Promise<StaticComplianceResult> {
   const findings: VulnerabilityResult[] = [];
   const origin = new URL(baseUrl).origin;
+  const checks: CheckItem[] = [];
   const home = pages[0];
   const allHtml = pages.map((page) => page.html).join("\n");
   const trackers = detectTrackers(allHtml);
@@ -256,22 +258,26 @@ export async function checkCompliance(baseUrl: string, pages: CompliancePage[], 
 
   // Probe common paths only when no link was found, so a missing link does not become a false "no policy".
   let privacyUrl = legal.privacyUrl;
+  let privacyFailure: NotCheckedReason | undefined;
+  let termsFailure: NotCheckedReason | undefined;
   if (!privacyUrl) {
     for (const path of ["/privacy", "/privacy-policy"]) {
       const page = await deps.fetchHtml(origin + path);
+      privacyFailure ??= deps.failureFor?.(origin + path);
       if (page && PRIVACY_LINK.test(policyText(page.html).slice(0, 4000))) { privacyUrl = page.url; break; }
     }
   }
   let termsUrl = legal.termsUrl;
-  if (!termsUrl && hasAccounts) {
+  if (!termsUrl && hasAccounts && !termsFailure) {
     const page = await deps.fetchHtml(origin + "/terms");
+    termsFailure = deps.failureFor?.(origin + "/terms");
     if (page && TERMS_LINK.test(policyText(page.html).slice(0, 4000))) termsUrl = page.url;
   }
 
-  if (!privacyUrl && collectsData) {
+  if (!privacyUrl && collectsData && !privacyFailure) {
     const reasons = [trackers.length ? `loads ${list(trackers.map((t) => t.name))}` : "", emailForms ? `has ${emailForms} form${emailForms === 1 ? "" : "s"} that collect email addresses` : "", hasAccounts ? "offers sign-up or login" : ""].filter(Boolean);
     findings.push({ type: "privacy", severity: "high", title: "No Privacy Policy found", url: origin + "/",
-      description: `No link to a privacy policy was found on ${pages.length} scanned page${pages.length === 1 ? "" : "s"}, and /privacy and /privacy-policy did not return one. The site ${list(reasons)}, so it processes personal data. GDPR (Articles 13 and 14) and US state privacy laws such as the CCPA usually require a privacy notice in that case. ${LAWYER}`,
+      description: `No link to a privacy policy was found on ${pages.length} scanned page${pages.length === 1 ? "" : "s"}, and /privacy and /privacy-policy did not return one. The site ${list(reasons)}, which may involve processing personal data. GDPR (Articles 13 and 14) and US state privacy laws such as the CCPA usually require a privacy notice in that case. ${LAWYER}`,
       remedy: "1. Publish a privacy policy at a stable URL such as /privacy.\n2. Say who runs the service and how to contact you, what personal data you collect, why, which third parties receive it (analytics, payments, email, hosting), how long you keep it, and how users can access or delete it.\n3. Link it from the footer of every page and next to every form that collects personal data.\n4. Have a lawyer review it if you have users in the EU, UK or California." });
   } else if (privacyUrl && home && !collectLinks(home).some((link) => link.href.split("#")[0] === privacyUrl!.split("#")[0] || isPolicyLink(link, PRIVACY_PATH, PRIVACY_LABEL))) {
     findings.push({ type: "privacy", severity: "low", title: "Privacy Policy is not linked from the homepage", url: home.url,
@@ -279,23 +285,15 @@ export async function checkCompliance(baseUrl: string, pages: CompliancePage[], 
       remedy: "Add a \"Privacy Policy\" link to the shared site footer so it appears on every page, including the homepage." });
   }
 
-  if (!termsUrl && hasAccounts) {
+  if (!termsUrl && hasAccounts && !termsFailure) {
     findings.push({ type: "privacy", severity: "medium", title: "No Terms of Service found", url: origin + "/",
-      description: `The site offers sign-up or login, but no link to terms of service was found on the scanned pages and /terms did not return them. Terms are not always a legal requirement, but a SaaS without them has no agreed rules on acceptable use, payment, refunds, liability or account termination. ${LAWYER}`,
+      description: `The site offers sign-up or login, but no link to terms of service was found on the scanned pages and /terms did not return them. Terms are not always a legal requirement, but public terms help communicate rules on acceptable use, payment, refunds and account termination. ${LAWYER}`,
       remedy: "Publish terms of service at /terms covering acceptable use, accounts, payment and refunds, termination, liability limits and governing law. Link them in the footer and on the sign-up form." });
   }
 
-  const tracking = trackers;
-  let noConsentToolFinding: VulnerabilityResult | undefined;
-  if (tracking.length && !consentTools.length) {
-    noConsentToolFinding = { type: "cookies-consent", severity: "medium", title: "Trackers found with no cookie consent tool", url: home?.url ?? origin + "/",
-      description: `The page HTML loads ${list(tracking.map((t) => t.name))}, and no consent management tool, Google consent mode default or cookie banner markup was found in it. In the EU and UK, the ePrivacy rules and GDPR generally require consent before non-essential analytics or advertising cookies are set. A banner rendered only by JavaScript may not be visible to this check. ${LAWYER}`,
-      remedy: "1. Add a consent tool (for example Cookiebot, Usercentrics, CookieYes, Klaro or a self-built banner).\n2. Load analytics and ad tags only after the visitor accepts, or set Google consent mode to denied by default:\n\n   gtag('consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });\n\n3. Give \"Reject\" the same prominence as \"Accept\".\n4. List these services in your privacy or cookie policy." };
-    findings.push(noConsentToolFinding);
-  }
   if (trackers.length) {
     findings.push({ type: "cookies-consent", severity: "info", title: "Tracking and analytics services detected", url: home?.url ?? origin + "/",
-      description: `Detected in the page HTML: ${trackers.map((t) => `${t.name} (${t.kind})`).join(", ")}.${consentTools.length ? ` Consent tooling detected: ${list(consentTools)}.` : ""} Each of these receives visitor data and usually needs to be named in your privacy policy.`,
+      description: `Detected in the page HTML: ${trackers.map((t) => `${t.name} (${t.kind})`).join(", ")}.${consentTools.length ? ` Consent tooling detected: ${list(consentTools)}.` : ""} Consent and data transmission are not verified by the HTML check.`,
       remedy: "Keep this list in sync with your privacy and cookie policy, and remove tags you no longer use." });
   }
 
@@ -368,21 +366,30 @@ export async function checkCompliance(baseUrl: string, pages: CompliancePage[], 
   let policy: StaticComplianceResult["policy"] = null;
   const readPolicy = async (url: string) => {
     const crawled = pages.find((page) => page.url.split("#")[0] === url.split("#")[0]);
-    const page = crawled ?? await deps.fetchHtml(url);
-    return page ? policyText(page.html) : "";
+    return crawled ?? await deps.fetchHtml(url);
   };
   if (privacyUrl) {
-    const text = await readPolicy(privacyUrl);
-    if (!text && legal.privacyUrl && collectsData) {
-      findings.push({ type: "privacy", severity: "medium", title: "Linked privacy policy could not be verified", url: privacyUrl,
-        description: "The scan found a policy link but could not read an HTML notice at that address.",
-        remedy: "Open the link as a signed-out visitor. Fix a broken destination, or confirm that the policy is accessible in its published format." });
+    const page = await readPolicy(privacyUrl);
+    if (page) {
+      const text = policyText(page.html);
+      checks.push({ key: "policy", label: "Privacy policy", status: text ? "pass" : "issue", detail: text ? "Privacy policy text was read." : "The linked HTML page returned no readable text.", url: page.url });
+      const cookiePage = legal.cookiePolicyUrl && legal.cookiePolicyUrl !== privacyUrl ? await readPolicy(legal.cookiePolicyUrl) : null;
+      const cookieText = cookiePage ? policyText(cookiePage.html) : "";
+      if (text) policy = { url: page.url, text: cookieText ? `${text}\n${cookieText}` : text };
+    } else {
+      checks.push({ key: "policy", label: "Privacy policy", ...notChecked(deps.failureFor?.(privacyUrl) ?? "error"), url: privacyUrl });
     }
-    // A separate cookie policy often lists the vendors, so it counts as part of the notice.
-    const cookieText = legal.cookiePolicyUrl && legal.cookiePolicyUrl !== privacyUrl ? await readPolicy(legal.cookiePolicyUrl) : "";
-    if (text.length >= 400) policy = { url: privacyUrl, text: cookieText ? `${text}\n${cookieText}` : text };
+  } else {
+    checks.push({ key: "policy", label: "Privacy policy", ...(privacyFailure ? notChecked(privacyFailure) : {
+      status: collectsData ? "issue" : "pass", detail: collectsData ? "The scanned pages and standard locations did not show a privacy policy." : "The sampled pages gave no policy or data collection signal.",
+    }) });
   }
-  return { findings, trackers, consentTools, policy, noConsentToolFinding };
+  checks.push({ key: "terms", label: "Terms link", ...(termsFailure ? notChecked(termsFailure) : {
+    status: hasAccounts && !termsUrl ? "issue" : "pass",
+    detail: termsUrl ? "A terms link or page was found." : hasAccounts ? "No terms link surfaced on the sampled pages or at /terms." : "No account entry point was observed on the sampled pages.",
+  }), url: termsUrl });
+  checks.push({ key: "accessibility", label: "HTML accessibility", status: findings.some((finding) => finding.type === "accessibility") ? "issue" : "pass", detail: `Inspected HTML accessibility signals on ${pages.length} page(s).` });
+  return { findings, trackers, consentTools, policy, checks };
 }
 
 /** Compares a privacy policy with the trackers seen on the site (static and browser). */

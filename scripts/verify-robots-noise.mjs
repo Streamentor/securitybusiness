@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { analyzeRobotsTxt } from "../src/lib/scanner.ts";
+const robots = readFileSync(new URL("./fixtures/automateed-robots-2026-11-22.txt", import.meta.url), "utf8");
+const finding = analyzeRobotsTxt("https://www.automateed.com/robots.txt", robots).filter((row) => row.title === "Sensitive Paths in robots.txt");
+assert.equal(finding.length, 1);
+assert.equal(finding[0].severity, "info");
+assert.doesNotMatch(finding[0].description, /\/api\/|\/wp-admin\//);
+assert.equal((finding[0].description.match(/debug-wordpress/g) ?? []).length, 1);
+console.log("Robots noise and duplicate checks passed.");

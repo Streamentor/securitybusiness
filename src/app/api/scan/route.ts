@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { saveWebsiteDiagnostic } from "@/lib/website-scan-diagnostics";
 import { websiteFailure } from "@/lib/website-scan-failure";
 import { prisma } from "@/lib/db";
@@ -7,6 +7,7 @@ import { prepareCreator, recordReportCreator } from "@/lib/report-access";
 import { auth } from "@/lib/auth";
 import { admitWebsiteScan } from "@/lib/scan-gate";
 import { serializeWebsiteFindings } from "@/lib/scan-remediation";
+import { COMPLIANCE_COVERAGE_TITLE } from "@/lib/compliance-types";
 import { complianceScanOptions } from "@/lib/compliance-scan-options";
 
 export const maxDuration = 120;
@@ -56,10 +57,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (creator) await recordReportCreator(scan.id, creator.hash);
-
     // Run the scan
     try {
+      if (creator) await recordReportCreator(scan.id, creator.hash);
       const results = await scanWebsite(normalizedUrl, undefined, await complianceScanOptions(userId, userPlan));
 
       // Save vulnerabilities in batch
@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
         where: { id: scan.id },
         data: {
           status: "completed",
+          url: results.url ?? normalizedUrl,
           overallScore: results.score,
           pagesScanned: results.pagesScanned,
           totalPages: results.coverage?.pagesDiscovered ?? results.pagesScanned,
@@ -103,10 +104,16 @@ export async function POST(req: NextRequest) {
       }
 
     if (process.env.VERCEL_ENV === "production" && ["live", "dry-run"].includes(process.env.EMAIL_SEQUENCE_MODE || "") && userId) {
-      const { after } = await import("next/server");
       const emailUserId = userId;
       after(async () => { const { maybeSendWelcome } = await import("@/lib/email/worker"); await maybeSendWelcome(emailUserId); });
     }
+
+      const pending = results.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === COMPLIANCE_COVERAGE_TITLE);
+      const runCompliance = results.runCompliance;
+      if (pending && runCompliance) after(async () => {
+        const { finishWebsiteCompliance } = await import("@/lib/website-compliance-job");
+        await finishWebsiteCompliance(scan.id, pending, runCompliance);
+      });
 
       return NextResponse.json({
         ...updatedScan,

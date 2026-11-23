@@ -58,14 +58,14 @@ assert.equal(scanner.matchesExpectedSensitiveFile("/.env", "text/plain", "DATABA
 // All HTTP responses here are local fixtures; these tests never contact a target.
 const originalFetch = globalThis.fetch;
 try {
-  let calls = 0;
-  globalThis.fetch = async (_url, options) => {
-    calls += 1;
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push(new URL(url).pathname);
     assert.ok(options.dispatcher, "scanner requests must use the socket-level public-address guard");
     return new Response("Access denied", { status: 403, headers: { "content-type": "text/html" } });
   };
   await assert.rejects(scanner.scanWebsite("https://203.0.113.1"), scanner.WebsiteScanError, "an unreadable website must not receive a score or count as one scanned page");
-  assert.equal(calls, 1, "an unreadable target must stop before additional probes");
+  assert.ok(calls.every((path) => ["/", "/robots.txt", "/sitemap.xml", "/sitemap_index.xml", "/llms.txt", "/.well-known/security.txt", "/security.txt"].includes(path)), "an unreadable homepage must stop all checks beyond the initial public resources");
   globalThis.fetch = async () => new Response("<html><body>Hello</body></html>", { headers: { "content-type": "text/html" } });
   assert.deepEqual(await scanner.discoverPages("https://203.0.113.1"), ["https://203.0.113.1"], "a reachable HTML page must still be discovered");
   globalThis.fetch = async () => new Response('{"ok":true}', { headers: { "content-type": "application/json" } });

@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { describeWebsiteStack, detectWebsiteStack, specializeWebsiteRemedy, OTHER_SERVERS } from "../src/lib/website-stack.ts";
+import { buildFixPrompt } from "../src/lib/fix-prompt.ts";
+const finding = { type: "info-disclosure", title: "Technology Disclosed via X-Powered-By", remedy: "Generic suggestions", severity: "low", description: "", url: "" };
+const next = detectWebsiteStack(new Headers({ "X-Powered-By": "Next.js", "x-vercel-id": "fixture" }), "");
+assert.match(specializeWebsiteRemedy(finding, next).remedy.split(OTHER_SERVERS)[0], /^Next\.js\npoweredByHeader|^Next\.js\nSet poweredByHeader/);
+const nginx = detectWebsiteStack(new Headers({ Server: "nginx" }), "");
+assert.match(specializeWebsiteRemedy(finding, nginx).remedy.split(OTHER_SERVERS)[0], /^nginx\n/);
+assert.match(buildFixPrompt({ ...finding, surface: "deployed website", target: "/", category: "headers", evidence: "", stack: describeWebsiteStack(next) }), /Next\.js on Vercel/);
+console.log("Stack-specific remedy checks passed.");

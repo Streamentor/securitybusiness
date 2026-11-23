@@ -44,6 +44,8 @@ const STATEMENTS = [
   `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "aiInputTokens" INTEGER`,
   `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "aiOutputTokens" INTEGER`,
   `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "aiFindingsCount" INTEGER`,
+  `ALTER TABLE "RepoScan" ADD COLUMN IF NOT EXISTS "reviewParentId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "RepoScan_reviewParentId_idx" ON "RepoScan"("reviewParentId")`,
   `CREATE TABLE IF NOT EXISTS "AIReviewPreference" (
     "userId" TEXT PRIMARY KEY REFERENCES "User"("id") ON DELETE CASCADE,
     "enabled" BOOLEAN NOT NULL DEFAULT true

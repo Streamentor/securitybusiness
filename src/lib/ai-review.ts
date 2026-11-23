@@ -1,13 +1,14 @@
 import { redactSecrets } from "@/lib/secret-patterns";
 import type { RepoFinding } from "@/lib/github-scanner";
 
-export interface ReviewFile { path: string; content: string }
+export interface ReviewFile { path: string; content: string; context?: readonly ReviewFile[] }
 export interface ReviewUser { plan: string; role?: string | null; enabled?: boolean }
 export interface AIReviewOutcome {
   status: "completed" | "partial" | "skipped" | "failed";
   note: string;
   findings: RepoFinding[];
   filesReviewed: number;
+  reviewedPaths: string[];
   model: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -67,20 +68,30 @@ function payload(model: string, files: ReviewFile[], outputBudget: number) {
   };
 }
 export function prepareReviewBatches(files: readonly ReviewFile[], config: ReturnType<typeof reviewConfig>) {
-  const batches: ReviewFile[][] = [];
-  // Input is already sorted by the scanner's riskScore. Preserve that order.
-  const candidates = files.filter((file) => eligibleReviewFile(file.path));
-  for (const file of candidates) {
-    let batch = batches[batches.length - 1];
-    const perBatchBudget = Math.floor(config.inputBudget / 2);
-    if (!batch || tokenBound(payload(config.model, [...batch, file], config.outputBudget)) > perBatchBudget) {
-      if (batches.length === 2) continue;
-      if (tokenBound(payload(config.model, [file], config.outputBudget)) > perBatchBudget) continue;
-      batch = []; batches.push(batch);
+  const batches: Array<{ primary: ReviewFile[]; files: ReviewFile[] }> = [];
+  const perBatchBudget = Math.floor(config.inputBudget / 2);
+  const fits = (files: ReviewFile[]) => tokenBound(payload(config.model, files, config.outputBudget)) <= perBatchBudget;
+  const context = (batch: ReviewFile[], primary: ReviewFile) => {
+    const result = [...batch];
+    for (const file of primary.context ?? []) {
+      if (!result.some((entry) => entry.path === file.path) && fits([...result, file])) result.push(file);
     }
-    batch.push(file);
+    return result;
+  };
+  for (const file of files) {
+    if (!eligibleReviewFile(file.path) || batches.some((batch) => batch.files.some((entry) => entry.path === file.path))) continue;
+    // The payload limit is a byte upper bound. Avoid repeatedly formatting
+    // very large files that cannot fit into any batch.
+    if (Buffer.byteLength(file.content) > perBatchBudget) continue;
+    let batch = batches[batches.length - 1];
+    if (!batch || !fits([...batch.files, file])) {
+      if (batches.length === 2 || !fits([file])) continue;
+      batch = { primary: [], files: [] }; batches.push(batch);
+    }
+    batch.primary.push(file);
+    batch.files = context([...batch.files, file], file);
   }
-  return batches.map((files) => ({ files, body: payload(config.model, files, config.outputBudget) }));
+  return batches.map(({ files }) => ({ files, body: payload(config.model, files, config.outputBudget) }));
 }
 function similarTitle(a: string, b: string) {
   const words = (text: string) => new Set(text.toLowerCase().match(/[a-z]{3,}/g)?.filter((w) => !["the", "and", "for", "with", "missing", "potential"].includes(w)) || []);
@@ -106,7 +117,7 @@ export function validateAIFindings(data: unknown, files: readonly ReviewFile[], 
     const excerpt = redactSecrets(row.evidence as string).trim();
     const context = redactSecrets(file.content.split("\n").slice(Math.max(0, line - 3), line + 2).join("\n"));
     if (excerpt.length < 4 || !context.includes(excerpt)) continue;
-    if ([...existing, ...accepted].some((f) => f.file === file.path && f.line !== null && Math.abs(f.line - line) <= 5 && similarTitle(f.title, row.title as string))) continue;
+    if ([...existing, ...accepted].some((f) => f.file === file.path && f.line !== null && Math.abs(f.line - line) <= 5 && (similarTitle(f.title, row.title as string) || /^Route authentication not seen$|^Webhook signature verification not seen$/.test(f.title) && f.category === row.category))) continue;
     const title = redactSecrets(row.title as string).slice(0, 200);
     accepted.push({ id: `ai:${file.path}:${line}:${accepted.length}`, file: file.path, line, title, source: "ai", confidence: row.confidence as "high" | "medium" | "low",
       severity: row.severity as RepoFinding["severity"], category: row.category as RepoFinding["category"], evidence: excerpt.slice(0, 1_200), why: redactSecrets(row.why as string).slice(0, 2_000),
@@ -116,7 +127,7 @@ export function validateAIFindings(data: unknown, files: readonly ReviewFile[], 
 }
 function safeUsage(value: unknown) { return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null; }
 export async function reviewRepositoryWithAI(input: {user: ReviewUser; files: readonly ReviewFile[]; findings: readonly RepoFinding[]; timeoutMs?: number}, meter: ReviewMeter): Promise<AIReviewOutcome> {
-  const outcome: AIReviewOutcome = {status: "skipped", note: "AI logic review is available on Starter and Pro. No AI review ran for this scan.", findings: [], filesReviewed: 0, model: null, inputTokens: 0, outputTokens: 0};
+  const outcome: AIReviewOutcome = {status: "skipped", note: "AI logic review is available on Starter and Pro. No AI review ran for this scan.", findings: [], filesReviewed: 0, reviewedPaths: [], model: null, inputTokens: 0, outputTokens: 0};
   if (!canReviewWithAI(input.user)) return outcome;
   if (input.user.enabled === false) return {...outcome, note: "AI review is turned off in your account. Rule-based checks completed."};
   if (process.env.VERCEL_ENV === "preview" || process.env.AI_REVIEW_ENABLED === "false" || !process.env.OPENAI_API_KEY) return {...outcome, note: "AI review is not configured. Rule-based checks completed."};
@@ -151,7 +162,8 @@ export async function reviewRepositoryWithAI(input: {user: ReviewUser; files: re
         if (data.status !== "completed" || !usageKnown || !Array.isArray(data.output)) throw new Error("Incomplete review");
         const text = data.output.filter((item: {type?: string}) => item.type === "message").flatMap((item: {content?: {type: string; text?: string}[]}) => item.content || []).filter((part: {type: string}) => part.type === "output_text").map((part: {text?: string}) => part.text || "").join("");
         const findings = validateAIFindings(JSON.parse(text), files, input.findings);
-        outcome.filesReviewed += files.length;
+        outcome.reviewedPaths.push(...files.map((file) => file.path));
+        outcome.filesReviewed = new Set(outcome.reviewedPaths).size;
         return findings;
       } catch {
         failures++;

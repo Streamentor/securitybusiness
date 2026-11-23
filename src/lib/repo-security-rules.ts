@@ -23,6 +23,8 @@ export interface DependencyCoordinate {
   version: string;
   file: string;
   line: number | null;
+  direct?: boolean;
+  devOnly?: boolean;
 }
 
 const MAX_DEPENDENCIES = 180;
@@ -50,7 +52,13 @@ function addDependency(target: Map<string, DependencyCoordinate>, dependency: De
   if (!dependency.name || !dependency.version || dependency.version.length > 100) return;
   if (/^(?:file:|link:|workspace:|https?:|git\+|github:)/i.test(dependency.version)) return;
   const key = `${dependency.ecosystem}:${dependency.name.toLowerCase()}:${dependency.version}`;
-  if (!target.has(key)) target.set(key, dependency);
+  const previous = target.get(key);
+  if (!previous) target.set(key, dependency);
+  else if (dependency.ecosystem === "npm") target.set(key, {
+    ...(dependency.direct ? dependency : previous),
+    direct: previous.direct || dependency.direct,
+    devOnly: previous.devOnly === true && dependency.devOnly === true,
+  });
 }
 
 export function isAgentSecurityFile(path: string) {
@@ -162,6 +170,7 @@ export function analyzeDependencyHygiene(files: RepositoryFile[], repositoryPath
 
 export function extractDependencyInventory(files: RepositoryFile[]) {
   const dependencies = new Map<string, DependencyCoordinate>();
+  const byPath = new Map(files.map((file) => [file.path, file]));
   let manifests = 0;
 
   for (const file of files) {
@@ -169,11 +178,23 @@ export function extractDependencyInventory(files: RepositoryFile[]) {
     if (["package-lock.json", "npm-shrinkwrap.json"].includes(basename)) {
       manifests += 1;
       try {
-        const parsed = JSON.parse(file.content) as { packages?: Record<string, { name?: string; version?: string }> };
+        type NpmRecord = { name?: string; version?: string; dev?: boolean; dependencies?: Record<string, string>; devDependencies?: Record<string, string>; optionalDependencies?: Record<string, string>; peerDependencies?: Record<string, string> };
+        const parsed = JSON.parse(file.content) as { packages?: Record<string, NpmRecord> };
+        const manifestPath = file.path.slice(0, file.path.length - basename.length) + "package.json";
+        const manifest = byPath.get(manifestPath);
+        const declared = parsed.packages?.[""] ?? (manifest ? JSON.parse(manifest.content) as NpmRecord : undefined);
+        const direct = new Set(Object.keys({ ...declared?.dependencies, ...declared?.devDependencies, ...declared?.optionalDependencies, ...declared?.peerDependencies }));
+        const lines = new Map<string, number>();
+        file.content.split("\n").forEach((line, index) => {
+          const lock = /^\s*"([^"]*node_modules\/[^"]*)"\s*:/.exec(line);
+          if (lock && !lines.has(lock[1])) lines.set(lock[1], index + 1);
+        });
         for (const [lockPath, record] of Object.entries(parsed.packages || {})) {
           if (!lockPath.includes("node_modules/") || !record?.version) continue;
           const name = record.name || packageNameFromLockPath(lockPath);
-          addDependency(dependencies, { ecosystem: "npm", name, version: record.version, file: file.path, line: lineFor(file.content, `"${lockPath}"`) });
+          addDependency(dependencies, { ecosystem: "npm", name, version: record.version, file: file.path, line: lines.get(lockPath) ?? null,
+            direct: declared ? direct.has(name) && lockPath === "node_modules/" + name : undefined, devOnly: record.dev === true,
+          });
         }
       } catch { /* Ignore malformed lockfiles. */ }
       continue;

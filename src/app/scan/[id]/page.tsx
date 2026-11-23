@@ -34,9 +34,11 @@ import { ScanLimitDialog } from "@/components/ScanLimitDialog";
 import { authPageHref, reportReturnHref, previewFindingTitles, type ScanLimit } from "@/lib/scan-journey";
 import { ToastContainer, toast } from "@/components/Toast";
 import { formatDate } from "@/lib/utils";
+import { OTHER_SERVERS, STACK_TITLE } from "@/lib/website-stack";
 import { buildFixPrompt } from "@/lib/fix-prompt";
 import { isVisibleWebsiteFinding } from "@/lib/scan-remediation";
 import { COMPLIANCE_COVERAGE_TITLE, COMPLIANCE_DISCLAIMER, isComplianceFinding, parseComplianceCoverage } from "@/lib/compliance-types";
+import { notChecked, type CheckItem } from "@/lib/website-check-state";
 import type { RemediationAccess } from "@/lib/scan-remediation";
 
 interface Vulnerability { id: string; type: string; severity: string; title: string; description?: string; url?: string; remedy?: string; detailsLocked?: boolean; remediationAccess: RemediationAccess }
@@ -44,7 +46,7 @@ interface Scan { id: string; url: string; status: string; overallScore: number |
 interface ScanComparison { previousScanId: string; previousScore: number | null; previousCreatedAt: string; resolved: string[]; added: string[]; stillOpen: number }
 
 const VERIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-interface ReadinessItem { key: string; label: string; status: "pass" | "warning" | "unknown"; detail: string; url: string }
+type ReadinessItem = CheckItem;
 
 const severityOrder = ["critical", "high", "medium", "low", "info"];
 const severityConfig: Record<string, { label: string; text: string; bg: string; border: string; icon: React.ElementType }> = {
@@ -75,7 +77,7 @@ function guideForFinding(finding: Vulnerability) {
   return null;
 }
 
-function FindingCard({ finding, defaultOpen, expanded, onExpandedChange, onRegister, registerHref }: { finding: Vulnerability; defaultOpen: boolean; expanded?: boolean; onExpandedChange?: (value: boolean) => void; onRegister: () => void; registerHref: string }) {
+function FindingCard({ finding, stack, defaultOpen, expanded, onExpandedChange, onRegister, registerHref }: { finding: Vulnerability; stack?: string; defaultOpen: boolean; expanded?: boolean; onExpandedChange?: (value: boolean) => void; onRegister: () => void; registerHref: string }) {
   const [open, setOpen] = useState(defaultOpen);
   const isOpen = expanded ?? open;
   const freeFix = finding.remediationAccess === "free";
@@ -84,7 +86,8 @@ function FindingCard({ finding, defaultOpen, expanded, onExpandedChange, onRegis
   const Icon = config.icon;
   const guideHref = guideForFinding(finding);
   if (finding.detailsLocked) return <article id={`finding-${finding.id}`} className={`scroll-mt-24 rounded-xl border ${config.border} ${finding.severity !== "info" ? "border-l-[3px] border-l-[#ff6b6b] bg-[#ff6b6b]/[0.035]" : "bg-[#0b1016]"} p-4 sm:p-5`}><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 break-words text-sm font-semibold text-white">{finding.title}</h3><span className={`shrink-0 text-xs font-semibold ${config.text}`}>{config.label}</span></div><Link href={`${registerHref}&finding=${encodeURIComponent(finding.id)}`} onClick={onRegister} className="mt-3 inline-flex items-center gap-2 text-xs text-[#ffc1c1] hover:underline"><Lock className="h-3.5 w-3.5" />Open this finding with a free account</Link></article>;
-  const fixPrompt = buildFixPrompt({ surface: "deployed website", title: finding.title, severity: finding.severity, category: finding.type, target: finding.url || "", evidence: finding.description || "", remediation: finding.remedy || "" });
+  const [primaryRemedy, otherRemedies] = (finding.remedy ?? "").split(OTHER_SERVERS);
+  const fixPrompt = buildFixPrompt({ surface: "deployed website", title: finding.title, severity: finding.severity, category: finding.type, target: finding.url || "", evidence: finding.description || "", remediation: primaryRemedy, stack });
   return (
     <article id={`finding-${finding.id}`} className={`scroll-mt-24 overflow-hidden rounded-xl border ${config.border} bg-[#0b1016]`}>
       <button onClick={() => onExpandedChange ? onExpandedChange(!isOpen) : setOpen(!isOpen)} className="grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 p-4 text-left sm:gap-4 sm:p-5" aria-expanded={isOpen}>
@@ -98,7 +101,7 @@ function FindingCard({ finding, defaultOpen, expanded, onExpandedChange, onRegis
             <div className="min-w-0"><p className="text-[0.68rem] font-bold uppercase tracking-[.12em] text-[#687382]">What we observed</p><p className="mt-3 break-words text-sm leading-7 text-[#a5aeba]">{finding.description}</p><div className="mt-5 rounded-lg border border-white/[0.07] bg-black/20 px-3 py-2.5"><p className="text-[0.65rem] font-medium uppercase tracking-[.1em] text-[#606b79]">Affected URL</p><p className="mt-1 break-all font-mono text-xs leading-5 text-[#909aa8]">{finding.url}</p></div>{guideHref && <Link href={guideHref} className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--signal)] hover:underline">Understand this check <ArrowUpRight className="h-3.5 w-3.5" /></Link>}</div>
             <div className="min-w-0 rounded-xl border border-white/[0.08] bg-white/[0.025] p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-semibold text-white"><Sparkles className="h-4 w-4 text-[var(--signal)]" /> {freeFix ? "Your free fix" : "How to fix it"}</div>{canViewRemedy && <CopyPromptButton prompt={fixPrompt} />}</div>
-              {canViewRemedy ? <pre className="mt-4 max-w-full overflow-x-auto whitespace-pre-wrap break-words font-sans text-sm leading-7 text-[#b6bec9]">{finding.remedy}</pre> : finding.remediationAccess === "none" ? <p className="mt-4 text-sm leading-6 text-[#8f99a7]">No implementation steps were provided for this observation. Review its evidence and any linked guide.</p> : <div className="mt-5 rounded-xl border border-[var(--signal)]/15 bg-[#0b1016] p-5 text-center"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--signal)]/10 text-[var(--signal)]"><Lock className="h-4 w-4" /></span><p className="mt-3 text-sm font-semibold text-white">The remediation is ready.</p><p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-[#8f99a7]">Unlock the implementation steps and configuration examples for this finding.</p><Link href="/pricing" className="button-primary mt-4 w-full sm:w-auto">Unlock the fix</Link></div>}
+              {canViewRemedy ? <><pre className="mt-4 max-w-full overflow-x-auto whitespace-pre-wrap break-words font-sans text-sm leading-7 text-[#b6bec9]">{primaryRemedy}</pre>{otherRemedies && <details className="mt-4 text-sm text-[#a5aeba]"><summary className="cursor-pointer">Other servers</summary><pre className="mt-3 whitespace-pre-wrap break-words font-sans">{otherRemedies}</pre></details>}</> : finding.remediationAccess === "none" ? <p className="mt-4 text-sm leading-6 text-[#8f99a7]">No implementation steps were provided for this observation. Review its evidence and any linked guide.</p> : <div className="mt-5 rounded-xl border border-[var(--signal)]/15 bg-[#0b1016] p-5 text-center"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--signal)]/10 text-[var(--signal)]"><Lock className="h-4 w-4" /></span><p className="mt-3 text-sm font-semibold text-white">The remediation is ready.</p><p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-[#8f99a7]">Unlock the implementation steps and configuration examples for this finding.</p><Link href="/pricing" className="button-primary mt-4 w-full sm:w-auto">Unlock the fix</Link></div>}
             </div>
           </div>
         </div>
@@ -155,18 +158,41 @@ export default function ScanResultPage() {
     if (match) requestAnimationFrame(() => document.getElementById(`finding-${match[1]}`)?.scrollIntoView({block: "start"}));
   }, [loading, scan?.id]);
 
+  const stack = scan?.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === STACK_TITLE)?.description;
   const canViewRemedies = userPlan === "starter" || userPlan === "pro";
   const allFindings = useMemo(() => [...(scan?.vulnerabilities || [])].filter(isVisibleWebsiteFinding).sort((a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity)), [scan]);
   // Privacy, consent and accessibility findings have their own section and do not count toward the security summary.
   const findings = useMemo(() => allFindings.filter((finding) => !isComplianceFinding(finding)), [allFindings]);
   const complianceFindings = useMemo(() => allFindings.filter(isComplianceFinding), [allFindings]);
   const complianceCoverage = useMemo(() => parseComplianceCoverage(scan?.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === COMPLIANCE_COVERAGE_TITLE)?.description), [scan]);
+  const compliancePending = complianceCoverage?.state === "running";
+  useEffect(() => {
+    if (!compliancePending) return;
+    let active = true;
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const token = new URLSearchParams(window.location.hash.slice(1)).get("share");
+        const response = await fetch(`/api/scan/${params.id}`, { cache: "no-store", headers: token ? { "x-report-share-token": token } : {} });
+        if (response.ok && active) {
+          const updated = await response.json() as Scan;
+          if (active) setScan(updated);
+        }
+      } catch { /* retry on the next poll */ }
+      finally { inFlight = false; }
+    }, 3000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [compliancePending, params.id]);
+
   const readiness = useMemo<ReadinessItem[]>(() => {
     const snapshot = scan?.vulnerabilities.find((finding) => finding.type === "scan-meta" && finding.title === "SaaS readiness snapshot");
     if (!snapshot) return [];
     try {
-      const parsed = JSON.parse(snapshot.description || "{}") as { items?: ReadinessItem[] };
-      return Array.isArray(parsed.items) ? parsed.items : [];
+      const parsed = JSON.parse(snapshot.description || "{}") as { version?: number; items?: ReadinessItem[] };
+      if (!Array.isArray(parsed.items)) return [];
+      return parsed.version === 2 ? parsed.items : parsed.items.map((item) => item.status === "pass" ? item : { ...item, ...notChecked("error") });
     } catch { return []; }
   }, [scan]);
   const counts = useMemo(() => Object.fromEntries(severityOrder.map((severity) => [severity, findings.filter((finding) => finding.severity === severity).length])) as Record<string, number>, [findings]);
@@ -280,7 +306,7 @@ export default function ScanResultPage() {
               {(scan.comparison.resolved.length > 0 || scan.comparison.added.length > 0) && <ul className="mt-4 space-y-1 text-xs leading-5 text-[#a5afbd]">{scan.comparison.resolved.map((title) => <li key={`r-${title}`}><span className="mr-2 text-[#b9ff66]">✓</span>{title}</li>)}{scan.comparison.added.map((title) => <li key={`a-${title}`}><span className="mr-2 text-[#ff8585]">+</span>{title}</li>)}</ul>}
             </div>}
             <div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-semibold tracking-[-0.025em]">{filter === "all" ? "All findings" : `${severityConfig[filter].label} findings`}</h2><p className="mt-1 text-xs text-[#717c8b]">{scan.access?.requiresAccount && freeFix ? "One complete finding first. Remaining findings follow in priority order." : "Ordered from highest to lowest priority"}</p></div>{freeFix && <button onClick={openFreeFix} className="ml-3 shrink-0 text-xs font-semibold text-[var(--signal)]">Open your free fix</button>}{filter !== "all" && <button onClick={() => setFilter("all")} className="text-xs text-[var(--signal)] hover:underline">Clear filter</button>}</div>
-            {visibleFindings.length ? <div className="space-y-3">{displayedFindings.map((finding, index) => <FindingCard key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={index === 0} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[var(--signal)]" /><p className="mt-4 font-medium">No {filter} findings.</p></div>}
+            {visibleFindings.length ? <div className="space-y-3">{displayedFindings.map((finding, index) => <FindingCard stack={stack} key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={index === 0} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[var(--signal)]" /><p className="mt-4 font-medium">{filter === "all" ? "No findings in the checks that ran." : "No " + filter + " findings."}</p></div>}
           </section>
 
           <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
@@ -300,14 +326,16 @@ export default function ScanResultPage() {
         </section>}
 
         {(complianceCoverage || complianceFindings.length > 0) && <section id="compliance" className="mt-8" aria-label="Privacy and compliance">
-          <div className="mb-4"><p className="eyebrow">Privacy & compliance</p><h2 className="mt-2 text-xl font-semibold tracking-[-0.025em]">{complianceFindings.filter((finding) => finding.severity !== "info").length ? `${complianceFindings.filter((finding) => finding.severity !== "info").length} privacy, consent or accessibility finding${complianceFindings.filter((finding) => finding.severity !== "info").length === 1 ? "" : "s"}` : "No privacy or accessibility findings in the checks that ran"}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-[#8f99a7]">{COMPLIANCE_DISCLAIMER} These findings do not change the security score.</p>
-            {complianceCoverage && <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#717c8b]">
-              <li>{complianceCoverage.browser === "ran" ? "Browser consent test ran (first visit, Reject, Global Privacy Control)" : complianceCoverage.browser === "plan" ? "Browser consent test: Starter and Pro" : "Browser consent test could not run this time"}</li>
-              <li>{complianceCoverage.ai === "ran" ? "AI privacy policy review ran" : complianceCoverage.ai === "plan" ? "AI privacy policy review: Pro" : complianceCoverage.ai === "off" ? "AI review is off in your account" : complianceCoverage.ai === "no-policy" ? "No readable privacy policy to review" : "AI privacy policy review was unavailable"}</li>
-              {complianceCoverage.policyUrl && <li><a href={complianceCoverage.policyUrl} target="_blank" rel="noreferrer" className="hover:text-white hover:underline">Privacy policy read</a></li>}
+          <div className="mb-4"><p className="eyebrow">Privacy & compliance</p><h2 className="mt-2 text-xl font-semibold tracking-[-0.025em]">{compliancePending ? "Privacy and consent checks running…" : complianceFindings.filter((finding) => finding.severity !== "info").length ? `${complianceFindings.filter((finding) => finding.severity !== "info").length} privacy, consent or accessibility finding${complianceFindings.filter((finding) => finding.severity !== "info").length === 1 ? "" : "s"}` : complianceCoverage?.checks && complianceCoverage.checks.every((item) => item.status === "not_checked") ? "Privacy and consent checks unavailable" : "No privacy or accessibility findings in the checks that ran"}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-[#8f99a7]">{COMPLIANCE_DISCLAIMER} These findings do not change the security score.</p>
+            {complianceCoverage?.checks && <ul className="mt-3 grid gap-2 text-xs text-[#a5aeba] sm:grid-cols-2">
+              {complianceCoverage.checks.map((item) => <li className="surface-muted rounded-lg p-3" key={item.key}>
+                <strong className="text-white">{item.label}</strong> · {item.status === "not_checked" ? "Not checked" : item.status === "issue" ? "Issue" : "Checked"}
+                <p className="mt-1">{item.detail}</p>
+                {item.url && <a href={item.url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-[#a5aeba] underline">{item.url}</a>}
+              </li>)}
             </ul>}
           </div>
-          {complianceFindings.length ? <div className="space-y-3">{complianceFindings.map((finding) => <FindingCard key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={false} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : <div className="surface-muted rounded-2xl px-6 py-8 text-center text-sm text-[#a5aeba]"><CheckCircle2 className="mx-auto h-6 w-6 text-[var(--signal)]" /><p className="mt-3">No missing privacy pages, consent problems or accessibility issues were detected on the scanned pages.</p></div>}
+          {compliancePending ? null : complianceFindings.length ? <div className="space-y-3">{complianceFindings.map((finding) => <FindingCard stack={stack} key={finding.id} onRegister={startRegistration} registerHref={registerHref} finding={finding} defaultOpen={false} expanded={finding.remediationAccess === "free" ? freeFixExpanded : undefined} onExpandedChange={finding.remediationAccess === "free" ? setFreeFixExpanded : undefined} />)}</div> : null}
         </section>}
 
         <section className="mt-6 grid gap-4 lg:grid-cols-2" aria-label="Scan the code and unlock fixes">
@@ -334,9 +362,9 @@ export default function ScanResultPage() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {readiness.map((item) => {
               const passing = item.status === "pass";
-              const unknown = item.status === "unknown";
+              const unknown = item.status === "not_checked";
               return <a key={item.key} href={item.url} target="_blank" rel="noreferrer" className="surface-muted group min-w-0 rounded-xl p-4 transition hover:border-white/20">
-                <div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-semibold text-white">{item.label}</p><span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[0.62rem] font-bold uppercase tracking-[.08em] ${passing ? "bg-[var(--signal)]/10 text-[var(--signal)]" : unknown ? "bg-white/[0.06] text-[#98a2b3]" : "bg-[#ffbf69]/10 text-[#ffca7d]"}`}>{passing ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{passing ? "Ready" : unknown ? "Check" : "Review"}</span></div>
+                <div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-semibold text-white">{item.label}</p><span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[0.62rem] font-bold uppercase tracking-[.08em] ${passing ? "bg-[var(--signal)]/10 text-[var(--signal)]" : unknown ? "bg-white/[0.06] text-[#98a2b3]" : "bg-[#ffbf69]/10 text-[#ffca7d]"}`}>{passing ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{passing ? "Ready" : unknown ? "Not checked" : "Issue"}</span></div>
                 <p className="mt-3 text-xs leading-5 text-[#7f8998]">{item.detail}</p><span className="mt-4 inline-flex items-center gap-1 text-[0.68rem] text-[#626d7c] transition group-hover:text-white">Open resource <ArrowUpRight className="h-3 w-3" /></span>
               </a>;
             })}

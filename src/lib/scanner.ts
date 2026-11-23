@@ -7,6 +7,9 @@ import { isIP } from "node:net";
 import type { LookupFunction } from "node:net";
 import { connect as connectTls } from "node:tls";
 import { Agent } from "undici";
+import { describeWebsiteStack, detectWebsiteStack, specializeWebsiteRemedy, STACK_TITLE } from "./website-stack.ts";
+import { notChecked, type CheckItem, type NotCheckedReason } from "./website-check-state.ts";
+import { COMPLIANCE_COVERAGE_TITLE, pendingCompliance } from "./compliance-types.ts";
 import type { ComplianceRunner } from "./compliance-runner";
 
 export interface VulnerabilityResult {
@@ -24,6 +27,7 @@ interface ScanResult {
   vulnerabilities: VulnerabilityResult[];
   pagesScanned: number;
   coverage?: WebsiteCoverage;
+  runCompliance?: () => Promise<VulnerabilityResult[]>;
 }
 
 export interface ScanProgress {
@@ -44,7 +48,7 @@ export class WebsiteScanError extends Error {
     super(message); this.name = "WebsiteScanError"; this.failure = failure;
   }
 }
-const scanBudget = new AsyncLocalStorage<{deadline: number; exhausted: boolean; failedRequests: number}>();
+const scanBudget = new AsyncLocalStorage<{ deadline: number; skips?: Set<string>; check?: string }>();
 interface CrawledPage {url: string; html: string; headers: Headers}
 function networkFailure(error: unknown, timedOut = false): WebsiteFailure {
   if (timedOut) return websiteFailure("timeout");
@@ -57,13 +61,7 @@ function networkFailure(error: unknown, timedOut = false): WebsiteFailure {
 }
 
 
-interface ReadinessItem {
-  key: "tls" | "robots" | "sitemap" | "llms" | "security" | "canonical" | "indexability";
-  label: string;
-  status: "pass" | "warning" | "unknown";
-  detail: string;
-  url: string;
-}
+type ReadinessItem = CheckItem;
 
 function isPrivateAddress(address: string): boolean {
   const normalized = address.toLowerCase().split("%")[0];
@@ -165,7 +163,7 @@ export async function safeFetch(
   const {onFailure, sameSiteRedirects, timeout, ...fetchOptions} = opts;
   const budget = scanBudget.getStore();
   const remaining = budget ? budget.deadline - Date.now() : Infinity;
-  if (remaining <= 0) { if (budget) {budget.exhausted = true; budget.failedRequests += 1;} onFailure?.(websiteFailure("timeout")); return null; }
+  if (remaining <= 0) { if (budget?.check) budget.skips?.add(budget.check); onFailure?.(websiteFailure("timeout")); return null; }
   let failure: WebsiteFailure | undefined;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout>;
@@ -208,7 +206,7 @@ export async function safeFetch(
           void response.body?.cancel().catch(() => undefined);
           const nextUrl = new URL(location, currentUrl);
           if (sameSiteRedirects && nextUrl.hostname.replace(/^www\./, "") !== new URL(url).hostname.replace(/^www\./, "")) {
-            failure = websiteFailure("redirect"); throw new Error("Cross-host crawl redirect");
+            failure = websiteFailure("redirect_offsite"); throw new Error("Cross-host crawl redirect");
           }
           currentUrl = nextUrl.toString();
           continue;
@@ -231,7 +229,7 @@ export async function safeFetch(
             if (bytes > MAX_SCAN_RESPONSE_BYTES) { failure = websiteFailure("response-too-large"); throw new Error("Scanner response exceeds the body byte limit."); }
           }
         }
-        if (budget && ([403, 429].includes(response.status) || response.headers.get("cf-mitigated") === "challenge" || response.headers.get("x-vercel-mitigated") === "challenge")) budget.failedRequests += 1;
+        if (budget?.check && ([401, 403, 429].includes(response.status) || response.headers.get("cf-mitigated") === "challenge" || response.headers.get("x-vercel-mitigated") === "challenge")) budget.skips?.add(budget.check);
         return response;
       } catch (error) {
         // Cancel both tee branches; awaiting only one can deadlock until the
@@ -245,8 +243,7 @@ export async function safeFetch(
     }
     return null;
   } catch (error) {
-    if (budget && Date.now() >= budget.deadline) budget.exhausted = true;
-    if (budget) budget.failedRequests += 1;
+    if (budget?.check) budget.skips?.add(budget.check);
     onFailure?.(failure ?? networkFailure(error, controller.signal.aborted));
     return null;
   } finally {
@@ -255,7 +252,8 @@ export async function safeFetch(
 }
 
 // ─── Helper: DNS TXT lookup ────────────────────────────────────────
-async function dnsLookupTxt(hostname: string): Promise<string[][]> {
+async function dnsLookupTxt(hostname: string): Promise<string[][] | null> {
+  if (remainingBudget() <= 0) return null;
   try {
     const dns = await import("dns");
     const { promisify } = await import("util");
@@ -266,8 +264,9 @@ async function dnsLookupTxt(hostname: string): Promise<string[][]> {
         timer = setTimeout(() => reject(new Error("DNS response deadline exceeded")), Math.max(1, Math.min(5000, (scanBudget.getStore()?.deadline ?? Infinity) - Date.now())));
       })]);
     } finally { clearTimeout(timer); }
-  } catch {
-    return [];
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    return code === "ENODATA" || code === "ENOTFOUND" ? [] : null;
   }
 }
 
@@ -277,18 +276,23 @@ export async function discoverPages(
   maxPages: number = 25,
   onPage?: (page: CrawledPage) => void,
   onFailure?: (failure: WebsiteFailure) => void,
-  onIncomplete?: () => void,
+  onIncomplete?: (reason: "time" | "size" | "request") => void,
+  initialPage?: CrawledPage,
 ): Promise<string[]> {
   const visited = new Set<string>();
   const toVisit = [baseUrl];
   const pages: string[] = [];
   const baseHost = new URL(baseUrl).hostname.replace(/^www\./, "");
   const crawlDeadline = Date.now() + 25000;
+  let bytesRead = 0;
+  const byteLimit = 4_000_000;
+  let sizeLimited = false;
 
   while (toVisit.length > 0 && pages.length < maxPages) {
-    if (Date.now() >= crawlDeadline) { onIncomplete?.(); break; }
+    if (Date.now() >= crawlDeadline) { onIncomplete?.("time"); break; }
+    if (sizeLimited || bytesRead >= byteLimit) { onIncomplete?.("size"); break; }
     // Crawl up to 3 pages concurrently
-    const batch = toVisit.splice(0, 3).filter((u) => !visited.has(u));
+    const batch = [...new Set(toVisit.splice(0, Math.min(3, maxPages - pages.length)))].filter((u) => !visited.has(u));
     if (batch.length === 0) break;
 
     const results = await Promise.allSettled(
@@ -296,20 +300,25 @@ export async function discoverPages(
         if (visited.has(batchUrl)) return null;
         visited.add(batchUrl);
 
-        const res = await safeFetch(batchUrl, { redirect: "follow", timeout: Math.min(12000, Math.max(1, crawlDeadline - Date.now())), sameSiteRedirects: true, onFailure });
-        if (!res) { onIncomplete?.(); return null; }
-        const provider = res.headers.has("cf-ray") ? "Cloudflare" : res.headers.has("x-vercel-id") ? "Vercel" : undefined;
-        if (!res.ok || (res.headers.get("cf-mitigated") === "challenge" || res.headers.get("x-vercel-mitigated") === "challenge")) {
-          const code = [401, 403, 429].includes(res.status) || (res.headers.get("cf-mitigated") === "challenge" || res.headers.get("x-vercel-mitigated") === "challenge") ? "blocked" : res.status >= 300 && res.status < 400 ? "redirect" : "http-error";
-          onFailure?.(websiteFailure(code, res.status, provider)); onIncomplete?.(); return null;
+        const cached = batchUrl === baseUrl ? initialPage : undefined;
+        const res = cached ? null : await safeFetch(batchUrl, { redirect: "follow", timeout: Math.min(12000, Math.max(1, crawlDeadline - Date.now())), sameSiteRedirects: true, onFailure });
+        if (!cached && !res) { onIncomplete?.(Date.now() >= crawlDeadline ? "time" : "request"); return null; }
+        const headers = cached?.headers ?? res!.headers;
+        const provider = headers.has("cf-ray") ? "Cloudflare" : headers.has("x-vercel-id") ? "Vercel" : undefined;
+        if (res && (!res.ok || headers.get("cf-mitigated") === "challenge" || headers.get("x-vercel-mitigated") === "challenge")) {
+          const code = [401, 403, 429].includes(res.status) || headers.get("cf-mitigated") === "challenge" || headers.get("x-vercel-mitigated") === "challenge" ? "blocked" : res.status >= 300 && res.status < 400 ? "redirect" : "http-error";
+          onFailure?.(websiteFailure(code, res.status, provider)); onIncomplete?.("request"); return null;
         }
-        const ct = res.headers.get("content-type") || "";
-        if (!ct.toLowerCase().includes("text/html")) { onFailure?.(websiteFailure("not-html")); onIncomplete?.(); return null; }
+        if (!/text\/html/i.test(headers.get("content-type") || "")) { onFailure?.(websiteFailure("not-html")); onIncomplete?.("request"); return null; }
 
-        const html = await res.text();
-        if (!html.trim()) { onFailure?.(websiteFailure("empty-html")); onIncomplete?.(); return null; }
-        const finalUrl = res.url || batchUrl;
-        onPage?.({url: batchUrl, html, headers: res.headers});
+        const html = cached?.html ?? await res!.text();
+        if (!html.trim()) { onFailure?.(websiteFailure("empty-html")); onIncomplete?.("request"); return null; }
+        const bytes = Buffer.byteLength(html);
+        if (bytesRead + bytes > byteLimit) { sizeLimited = true; onIncomplete?.("size"); return null; }
+        bytesRead += bytes;
+        const finalUrl = cached?.url || res?.url || batchUrl;
+        visited.add(finalUrl);
+        onPage?.({url: finalUrl, html, headers});
         const $ = cheerio.load(html);
         const links: string[] = [];
 
@@ -330,14 +339,14 @@ export async function discoverPages(
           }
         });
 
-        return { url: batchUrl, links };
+        return { url: finalUrl, links };
       })
     );
 
     for (const r of results) {
       if (r.status === "fulfilled" && r.value) {
         if (pages.length < maxPages) {
-          pages.push(r.value.url);
+          if (!pages.includes(r.value.url)) pages.push(r.value.url);
         }
         for (const link of r.value.links) {
           if (!visited.has(link) && pages.length + toVisit.length < maxPages * 2) {
@@ -413,7 +422,7 @@ async function inspectTlsCertificate(url: string): Promise<{ item: ReadinessItem
 
   if (parsed.protocol !== "https:") {
     return {
-      item: { key: "tls", label: "TLS certificate", status: "warning", detail: "The scanned URL does not use HTTPS.", url },
+      item: { key: "tls", label: "TLS certificate", status: "issue", detail: "The scanned URL does not use HTTPS.", url },
       vulnerabilities,
     };
   }
@@ -443,7 +452,7 @@ async function inspectTlsCertificate(url: string): Promise<{ item: ReadinessItem
       socket.once("secureConnect", () => {
         const certificate = socket.getPeerCertificate();
         if (!certificate?.valid_to) {
-          finish({ key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate details could not be read.", url: certificateUrl });
+          finish({ key: "tls", label: "TLS certificate", ...notChecked("error"), url: certificateUrl });
           return;
         }
 
@@ -458,7 +467,7 @@ async function inspectTlsCertificate(url: string): Promise<{ item: ReadinessItem
             url: certificateUrl,
             remedy: "Replace or renew the certificate with a certificate trusted by common browsers. Confirm that the full intermediate chain is served, that the certificate covers the production hostname, and that your CDN or load balancer is presenting the intended certificate. Test the public hostname again after deployment.",
           };
-          finish({ key: "tls", label: "TLS certificate", status: "warning", detail: "The certificate is not trusted by the scanner.", url: certificateUrl }, [finding]);
+          finish({ key: "tls", label: "TLS certificate", status: "issue", detail: "The certificate is not trusted by the scanner.", url: certificateUrl }, [finding]);
           return;
         }
 
@@ -472,18 +481,18 @@ async function inspectTlsCertificate(url: string): Promise<{ item: ReadinessItem
             url: certificateUrl,
             remedy: "Renew or replace the certificate before it interrupts customer access. Check the automated renewal job, DNS validation, and CDN or load balancer configuration. Add certificate-expiry monitoring so the team is alerted well before the next renewal window.",
           };
-          finish({ key: "tls", label: "TLS certificate", status: "warning", detail: expired ? "The certificate has expired." : `Expires in ${daysRemaining} day(s).`, url: certificateUrl }, [finding]);
+          finish({ key: "tls", label: "TLS certificate", status: "issue", detail: expired ? "The certificate has expired." : `Expires in ${daysRemaining} day(s).`, url: certificateUrl }, [finding]);
           return;
         }
 
         finish({ key: "tls", label: "TLS certificate", status: "pass", detail: `Trusted certificate, valid for ${daysRemaining} more day(s).`, url: certificateUrl });
       });
-      socket.once("timeout", () => finish({ key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate check timed out.", url: certificateUrl }));
-      socket.once("error", () => finish({ key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate could not be verified.", url: certificateUrl }));
+      socket.once("timeout", () => finish({ key: "tls", label: "TLS certificate", ...notChecked("timeout"), url: certificateUrl }));
+      socket.once("error", () => finish({ key: "tls", label: "TLS certificate", ...notChecked("error"), url: certificateUrl }));
     });
   } catch {
     return {
-      item: { key: "tls", label: "TLS certificate", status: "unknown", detail: "The certificate could not be verified.", url: certificateUrl },
+      item: { key: "tls", label: "TLS certificate", ...notChecked("error"), url: certificateUrl },
       vulnerabilities,
     };
   }
@@ -643,6 +652,14 @@ export function analyzeCSP(url: string, csp: string): VulnerabilityResult[] {
     return sources !== null && sources.includes("'unsafe-eval'");
   });
   const hasDirective = (name: string) => policies.some((p) => p.has(name));
+
+  if (policies.every((policy) => policy.size === 1 && policy.has("frame-ancestors"))) {
+    return [{
+      type: "csp", severity: "medium", title: "CSP only sets frame-ancestors",
+      description: "The policy controls embedding. It does not restrict scripts, objects, base URLs, or form destinations.",
+      url, remedy: "Keep frame-ancestors and introduce script-src, object-src, base-uri, and form-action in a Report-Only policy. Test checkout, login and embeds before enforcing it.",
+    }];
+  }
 
   if (inlineAllowed) {
     vulns.push({ type: "csp", severity: "high", title: "CSP Allows Unsafe Inline Scripts", description: "The effective script policy allows inline scripts or inline event handlers ('unsafe-inline' without a nonce, hash or 'strict-dynamic'), which removes most CSP protection against injected scripts.", url, remedy: "The 'unsafe-inline' directive completely undermines CSP's XSS protection because it allows any injected <script> tag to execute. Replace it with nonces or hashes:\n\nUsing nonces (recommended):\n1. Generate a random nonce per request on the server\n2. Add it to your CSP header: script-src 'nonce-abc123'\n3. Add it to each script tag: <script nonce=\"abc123\">\n\nNext.js example (middleware.ts):\n\n   import { NextResponse } from 'next/server';\n   import crypto from 'crypto';\n   export function middleware(req) {\n     const nonce = crypto.randomBytes(16).toString('base64');\n     const csp = `script-src 'nonce-${nonce}' 'strict-dynamic';`;\n     const res = NextResponse.next();\n     res.headers.set('Content-Security-Policy', csp);\n     return res;\n   }\n\nUsing hashes:\n1. Hash each inline script: echo -n 'your script content' | openssl dgst -sha256 -binary | base64\n2. Add to CSP: script-src 'sha256-abc123...'\n\nNote: If you use a framework like React or Vue that requires inline scripts, use 'strict-dynamic' with nonces — it automatically trusts scripts loaded by your nonced scripts." });
@@ -904,21 +921,23 @@ async function checkEmailSecurity(url: string): Promise<VulnerabilityResult[]> {
     dnsLookupTxt(`_dmarc.${domain}`),
   ]);
 
-  const hasSPF = spfRecords.some((r) => r.some((t) => t.startsWith("v=spf1")));
-  if (!hasSPF) {
+  const hasSPF = spfRecords?.some((parts) => parts.join("").startsWith("v=spf1"));
+  if (!spfRecords) scanBudget.getStore()?.skips?.add("SPF DNS");
+  else if (!hasSPF) {
     vulns.push({ type: "email", severity: "medium", title: "Missing SPF Record", description: `No SPF record for ${domain}. Email spoofing possible.`, url, remedy: `Without an SPF (Sender Policy Framework) record, anyone can send emails that appear to come from ${domain}. Attackers use this for phishing — sending fake emails to your customers that look legitimate.\n\nAdd a TXT record to your DNS:\n\n   Name: ${domain}\n   Type: TXT\n   Value: v=spf1 include:_spf.google.com ~all\n\nCommon SPF configurations:\n- Google Workspace: v=spf1 include:_spf.google.com ~all\n- Microsoft 365: v=spf1 include:spf.protection.outlook.com ~all\n- SendGrid: v=spf1 include:sendgrid.net ~all\n- Multiple services: v=spf1 include:_spf.google.com include:sendgrid.net ~all\n- If you don't send email from this domain: v=spf1 -all\n\nSPF mechanisms explained:\n- ~all (softfail): Emails from unauthorized servers are marked suspicious but delivered\n- -all (hardfail): Emails from unauthorized servers are rejected — more secure but use after testing\n- +all: NEVER use this — it allows anyone to send as your domain\n\nAfter adding, verify with: dig TXT ${domain}` });
   } else {
-    const spfTxt = spfRecords.flat().find((t) => t.startsWith("v=spf1"));
+    const spfTxt = spfRecords.map(parts => parts.join("")).find((t) => t.startsWith("v=spf1"));
     if (spfTxt?.includes("+all")) {
       vulns.push({ type: "email", severity: "high", title: "SPF Allows All Senders (+all)", description: `SPF uses +all, allowing any server to send as ${domain}.`, url, remedy: `Your SPF record ends with +all, which explicitly allows ANY server in the world to send emails as ${domain}. This completely defeats the purpose of SPF.\n\nFix — change +all to ~all or -all in your DNS TXT record:\n\n   Current (dangerous): v=spf1 ... +all\n   Fixed (recommended): v=spf1 ... ~all   (softfail — marks unauthorized as suspicious)\n   Strictest:           v=spf1 ... -all   (hardfail — rejects unauthorized)\n\nSteps:\n1. Log into your DNS provider (Cloudflare, Route53, Namecheap, etc.)\n2. Find the TXT record for ${domain} that starts with v=spf1\n3. Change +all to ~all (start with softfail to avoid breaking legitimate email)\n4. Monitor for a week using DMARC reports to verify no legitimate email is affected\n5. Optionally upgrade to -all for maximum protection\n\nNote: Some online guides incorrectly suggest +all. This is never correct — it negates all SPF protection.` });
     }
   }
 
-  const hasDMARC = dmarcRecords.some((r) => r.some((t) => t.startsWith("v=DMARC1")));
-  if (!hasDMARC) {
+  const hasDMARC = dmarcRecords?.some((parts) => parts.join("").startsWith("v=DMARC1"));
+  if (!dmarcRecords) scanBudget.getStore()?.skips?.add("DMARC DNS");
+  else if (!hasDMARC) {
     vulns.push({ type: "email", severity: "medium", title: "Missing DMARC Record", description: `No DMARC record for ${domain}.`, url, remedy: `Without DMARC (Domain-based Message Authentication, Reporting & Conformance), receiving email servers don't know what to do when SPF or DKIM checks fail. Attackers can freely spoof your domain for phishing.\n\nAdd a DMARC TXT record to your DNS:\n\n   Name: _dmarc.${domain}\n   Type: TXT\n   Value: v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@${domain}; pct=100; adkim=s; aspf=s\n\nDMARC policies (start with quarantine, upgrade to reject):\n- p=none: Monitor only — spoofed emails still delivered (testing phase)\n- p=quarantine: Spoofed emails go to spam folder (recommended starting point)\n- p=reject: Spoofed emails are completely rejected (strongest protection)\n\nRecommended rollout:\n1. Start with p=none to collect reports without affecting email delivery\n2. Review DMARC reports for 2-4 weeks to identify legitimate senders\n3. Move to p=quarantine once confident\n4. Finally move to p=reject for maximum protection\n\nFree DMARC report analyzers:\n- dmarcian.com\n- mxtoolbox.com/dmarc.aspx\n- easydmarc.com\n\nAlso set up DKIM signing with your email provider for even stronger email authentication.` });
   } else {
-    const dmarcTxt = dmarcRecords.flat().find((t) => t.startsWith("v=DMARC1"));
+    const dmarcTxt = dmarcRecords.map(parts => parts.join("")).find((t) => t.startsWith("v=DMARC1"));
     if (dmarcTxt?.includes("p=none")) {
       vulns.push({ type: "email", severity: "low", title: "DMARC Policy Set to None", description: "DMARC p=none — spoofed emails won't be blocked.", url, remedy: `Your DMARC policy is set to p=none, which only monitors — it doesn't actually block spoofed emails. This is fine as a temporary testing phase, but should be upgraded.\n\nUpgrade path:\n1. Review your DMARC reports (sent to the rua= address) to confirm all legitimate email sources are properly authenticated with SPF and DKIM\n2. Upgrade to quarantine:\n   v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@${domain}; pct=100\n3. After confirming no issues, upgrade to reject:\n   v=DMARC1; p=reject; rua=mailto:dmarc-reports@${domain}; pct=100\n\nYou can use pct= to gradually roll out stricter policies:\n   v=DMARC1; p=reject; pct=25; ...  (reject 25% of failing emails)\n   Then increase to 50, 75, 100 over weeks.\n\nCommon issues before upgrading:\n- Marketing emails sent through third-party services need SPF/DKIM alignment\n- Forwarded emails may fail DMARC — this is expected\n- Transactional email services (SendGrid, SES) need to be in your SPF record` });
     }
@@ -928,26 +947,22 @@ async function checkEmailSecurity(url: string): Promise<VulnerabilityResult[]> {
 }
 
 // ─── 9. robots.txt analysis ───────────────────────────────────────
-async function checkRobotsTxt(baseUrl: string): Promise<VulnerabilityResult[]> {
+export function analyzeRobotsTxt(robotsUrl: string, text: string): VulnerabilityResult[] {
   const vulns: VulnerabilityResult[] = [];
-  const robotsUrl = new URL("/robots.txt", baseUrl).toString();
-  const res = await safeFetch(robotsUrl);
-  if (!res || res.status !== 200) return vulns;
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("text/html")) return vulns;
-  const text = await res.text();
-  if (!text.trim()) return vulns;
-
-  const sensitivePatterns = ["/admin", "/login", "/dashboard", "/api", "/config", "/backup", "/database", "/secret", "/private", "/internal", "/staging", "/debug", "/phpMyAdmin", "/wp-admin", "/panel"];
-  const exposed: string[] = [];
+  const common = new Set(["/api", "/wp-admin", "/wp-login.php", "/cart", "/checkout", "/account", "/search", "/_next"]);
+  const exposed = new Map<string, string>();
   for (const line of text.split("\n")) {
-    const lower = line.toLowerCase().trim();
-    if (lower.startsWith("disallow:")) {
-      const path = lower.replace("disallow:", "").trim();
-      for (const p of sensitivePatterns) { if (path.includes(p.toLowerCase())) { exposed.push(path); break; } }
-    }
+    const match = /^\s*disallow:\s*(\/[^\s#?]*)/i.exec(line);
+    if (!match) continue;
+    const canonical = match[1].toLowerCase().replace(/\/+$/, "");
+    if (common.has(canonical) || !/(?:^|\/)(?:debug|internal|staging|backup|phpmyadmin|test-)(?=[\/._-]|$|(?<=test-))/i.test(canonical)) continue;
+    exposed.set(canonical, match[1]);
   }
-  if (exposed.length > 0) vulns.push({ type: "info-disclosure", severity: "low", title: "Sensitive Paths in robots.txt", description: `Reveals: ${exposed.slice(0, 5).join(", ")}.`, url: robotsUrl, remedy: "Your robots.txt file is publicly readable (by design), and it lists sensitive paths like admin panels, APIs, or internal dashboards. While robots.txt tells search engines not to crawl these paths, attackers actively read robots.txt to discover hidden endpoints.\n\nFix — don't rely on robots.txt for security:\n\n1. Protect sensitive paths with proper authentication instead:\n   - Require login for /admin, /dashboard, /internal\n   - Use API keys or OAuth for /api endpoints\n\n2. Keep robots.txt simple — only list paths you want to hide from search results, not sensitive paths:\n   User-agent: *\n   Disallow: /api/\n   Sitemap: https://yourdomain.com/sitemap.xml\n\n3. If you want to hide pages from search results without revealing them in robots.txt, use the noindex meta tag instead:\n   <meta name=\"robots\" content=\"noindex, nofollow\">\n\n4. For truly sensitive paths, ensure they return 403/404 for unauthenticated users — that's your real security, not obscurity." });
+  if (exposed.size) vulns.push({
+    type: "info-disclosure", severity: "info", title: "Sensitive Paths in robots.txt",
+    description: "robots.txt is public by design. It lists paths that look like internal tools: " + [...exposed.values()].slice(0, 5).join(", ") + ". Access was not tested.",
+    url: robotsUrl, remedy: "Review these paths in your own application. Require appropriate server-side authorization for internal tools. robots.txt only gives instructions to crawlers.",
+  });
 
   if (text.split("\n").some((l) => l.trim().toLowerCase() === "disallow: /")) {
     vulns.push({ type: "seo", severity: "info", title: "robots.txt Blocks All Crawling", description: "Disallow: / blocks all search engines.", url: robotsUrl, remedy: "Your robots.txt has 'Disallow: /' which tells ALL search engines to not crawl any page on your site. This means Google, Bing, and others won't index your site and it won't appear in search results.\n\nIf this is intentional (staging site, internal app):\n   This is fine. No action needed.\n\nIf this is a production site that should be indexed:\n   Replace with selective rules:\n\n   User-agent: *\n   Disallow: /api/\n   Disallow: /dashboard/\n   Disallow: /admin/\n   Allow: /\n\n   Sitemap: https://yourdomain.com/sitemap.xml\n\nCommon mistake: This often happens when a staging robots.txt is accidentally deployed to production. Check your deployment pipeline to ensure environment-specific robots.txt files.\n\nNext.js App Router — create src/app/robots.ts:\n\n   export default function robots() {\n     return {\n       rules: { userAgent: '*', allow: '/', disallow: ['/api/', '/dashboard/'] },\n       sitemap: 'https://yourdomain.com/sitemap.xml',\n     };\n   }" });
@@ -1119,81 +1134,90 @@ async function checkSitemap(baseUrl: string): Promise<VulnerabilityResult[]> {
   return vulns;
 }
 
-async function collectSaaSReadiness(baseUrl: string): Promise<VulnerabilityResult[]> {
+type ReadinessProbe =
+  | { state: "read"; url: string; response: Response; text: string }
+  | { state: "absent"; url: string }
+  | { state: "not_checked"; url: string; reason: NotCheckedReason; failure?: WebsiteFailure };
+
+async function probeReadiness(url: string, timeout: number): Promise<ReadinessProbe> {
+  let failure: WebsiteFailure | undefined;
+  const response = await safeFetch(url, { timeout, sameSiteRedirects: true, onFailure: (value) => { failure = value; } });
+  const finalUrl = response?.url || url;
+  if (response && ([401, 403, 429].includes(response.status) || response.headers.get("cf-mitigated") === "challenge" || response.headers.get("x-vercel-mitigated") === "challenge")) {
+    failure = websiteFailure("blocked", response.status);
+  } else if (response?.status === 404 || response?.status === 410) {
+    return { state: "absent", url: finalUrl };
+  } else if (response?.ok) {
+    return { state: "read", url: finalUrl, response, text: await response.text() };
+  }
+  const code = failure?.code;
+  const reason = remainingBudget() <= 0 ? "time_budget"
+    : code === "blocked" || code === "timeout" || code === "redirect_offsite" ? code : "error";
+  return { state: "not_checked", url: finalUrl, reason, failure };
+}
+
+export async function collectSaaSReadiness(baseUrl: string) {
   const root = new URL(baseUrl);
-  const urls = {
-    home: root.toString(),
-    robots: new URL("/robots.txt", root).toString(),
-    sitemap: new URL("/sitemap.xml", root).toString(),
-    sitemapIndex: new URL("/sitemap_index.xml", root).toString(),
-    llms: new URL("/llms.txt", root).toString(),
-    securityWellKnown: new URL("/.well-known/security.txt", root).toString(),
-    securityRoot: new URL("/security.txt", root).toString(),
+  const probe = (path: string) => probeReadiness(new URL(path, root).toString(), 6000);
+  const [home, robots, sitemap, sitemapIndex, llms, securityWellKnown, securityRoot] = await Promise.all([
+    probeReadiness(root.toString(), 8000), probe("/robots.txt"), probe("/sitemap.xml"),
+    probe("/sitemap_index.xml"), probe("/llms.txt"), probe("/.well-known/security.txt"), probe("/security.txt"),
+  ]);
+  const nonHtml = (result: Extract<ReadinessProbe, { state: "read" }>) => !/text\/html/i.test(result.response.headers.get("content-type") || "");
+  const file = (key: string, label: string, probes: ReadinessProbe[], matches: (value: Extract<ReadinessProbe, { state: "read" }>) => boolean, ready: string, issue: string): CheckItem => {
+    const valid = probes.find((value) => value.state === "read" && matches(value));
+    if (valid) return { key, label, status: "pass", detail: ready, url: valid.url };
+    const unread = probes.find((value) => value.state === "not_checked");
+    if (unread?.state === "not_checked") return { key, label, ...notChecked(unread.reason), url: unread.url };
+    return { key, label, status: "issue", detail: issue, url: probes[0].url };
   };
 
-  const [homeRes, robotsRes, sitemapRes, sitemapIndexRes, llmsRes, securityWellKnownRes, securityRootRes, tls] = await Promise.all([
-    safeFetch(urls.home, { timeout: 8000 }),
-    safeFetch(urls.robots, { timeout: 6000 }),
-    safeFetch(urls.sitemap, { timeout: 6000 }),
-    safeFetch(urls.sitemapIndex, { timeout: 6000 }),
-    safeFetch(urls.llms, { timeout: 6000 }),
-    safeFetch(urls.securityWellKnown, { timeout: 6000 }),
-    safeFetch(urls.securityRoot, { timeout: 6000 }),
-    inspectTlsCertificate(baseUrl),
-  ]);
-
-  const readText = async (response: Response | null) => response?.ok ? (await response.text()).slice(0, 250_000) : "";
-  const [home, robots, sitemap, sitemapIndex, llms, securityWellKnown, securityRoot] = await Promise.all([
-    readText(homeRes), readText(robotsRes), readText(sitemapRes), readText(sitemapIndexRes), readText(llmsRes), readText(securityWellKnownRes), readText(securityRootRes),
-  ]);
-
-  const items: ReadinessItem[] = [tls.item];
-  if (!robots) items.push({ key: "robots", label: "robots.txt", status: "warning", detail: "No readable robots.txt was found at the root.", url: urls.robots });
-  else if (/^\s*disallow:\s*\/\s*$/im.test(robots)) items.push({ key: "robots", label: "robots.txt", status: "warning", detail: "The file appears to block crawling across the site.", url: urls.robots });
-  else items.push({ key: "robots", label: "robots.txt", status: "pass", detail: /sitemap:/i.test(robots) ? "Available and includes a sitemap reference." : "Available, but it does not reference a sitemap.", url: urls.robots });
-
-  const sitemapBody = sitemap || sitemapIndex;
-  const sitemapUrl = sitemap ? urls.sitemap : urls.sitemapIndex;
-  items.push(sitemapBody && /<(urlset|sitemapindex|url|sitemap)[\s>]/i.test(sitemapBody)
-    ? { key: "sitemap", label: "XML sitemap", status: "pass", detail: "A readable XML sitemap was found.", url: sitemapUrl }
-    : { key: "sitemap", label: "XML sitemap", status: "warning", detail: "No readable XML sitemap was found at the common locations.", url: urls.sitemap });
-
-  items.push(llms && /(^|\n)#{1,3}\s+|https?:\/\//i.test(llms)
-    ? { key: "llms", label: "llms.txt", status: "pass", detail: "An AI discovery file with structured content was found.", url: urls.llms }
-    : { key: "llms", label: "llms.txt", status: "warning", detail: "Optional AI discovery file not found or not readable.", url: urls.llms });
-
-  const securityBody = securityWellKnown || securityRoot;
-  const securityUrl = securityWellKnown ? urls.securityWellKnown : urls.securityRoot;
-  items.push(securityBody && /(^|\n)contact:/i.test(securityBody)
-    ? { key: "security", label: "security.txt", status: "pass", detail: "A security contact file was found.", url: securityUrl }
-    : { key: "security", label: "security.txt", status: "warning", detail: "No valid security.txt contact file was found.", url: urls.securityWellKnown });
-
-  if (home && homeRes) {
-    const $ = cheerio.load(home);
-    const canonical = $('link[rel="canonical"]').attr("href");
-    items.push(canonical
-      ? { key: "canonical", label: "Canonical URL", status: "pass", detail: "The homepage declares a canonical URL.", url: new URL(canonical, urls.home).toString() }
-      : { key: "canonical", label: "Canonical URL", status: "warning", detail: "The homepage has no canonical link element.", url: urls.home });
-    const robotsMeta = $('meta[name="robots"]').attr("content") || "";
-    const xRobots = homeRes.headers.get("x-robots-tag") || "";
-    const blocked = /noindex/i.test(`${robotsMeta} ${xRobots}`);
-    items.push({ key: "indexability", label: "Homepage indexability", status: blocked ? "warning" : "pass", detail: blocked ? "The homepage sends a noindex directive." : "No noindex directive was detected on the homepage.", url: urls.home });
-  } else {
-    items.push({ key: "canonical", label: "Canonical URL", status: "unknown", detail: "The homepage could not be read.", url: urls.home });
-    items.push({ key: "indexability", label: "Homepage indexability", status: "unknown", detail: "The homepage could not be read.", url: urls.home });
+  const isSitemap = (value: Extract<ReadinessProbe, { state: "read" }>) => /<(urlset|sitemapindex)[\s>]/i.test(value.text);
+  const sitemaps = [sitemap, sitemapIndex];
+  if (!sitemaps.some((item) => item.state === "read" && isSitemap(item)) && robots.state === "read") {
+    const named = new Set<string>();
+    for (const match of robots.text.matchAll(/^\s*sitemap:\s*(\S+)/gim)) {
+      try {
+        const candidate = new URL(match[1], robots.url);
+        if (["https:", "http:"].includes(candidate.protocol) && candidate.hostname.replace(/^www\./, "") === root.hostname.replace(/^www\./, "") && !sitemaps.some((item) => item.url === candidate.href)) {
+          named.add(candidate.href);
+        }
+      } catch { /* invalid sitemap declaration */ }
+      if (named.size === 3) break;
+    }
+    sitemaps.push(...await Promise.all([...named].map((url) => probeReadiness(url, 6000))));
+  }
+  const items: CheckItem[] = [
+    file("robots", "robots.txt", [robots], (value) => nonHtml(value) && Boolean(value.text.trim()), "The root robots.txt is available.", "The root endpoint did not serve a robots.txt file."),
+    file("sitemap", "XML sitemap", sitemaps, isSitemap, "An XML sitemap is available.", "The sitemap locations checked did not return an XML sitemap."),
+    file("llms", "llms.txt", [llms], (value) => nonHtml(value) && /(^|\n)#{1,3}\s+|https?:\/\//i.test(value.text), "A structured AI discovery file is available.", "The root endpoint did not serve a structured llms.txt file. This file is optional."),
+    file("security", "security.txt", [securityWellKnown, securityRoot], (value) => nonHtml(value) && /^contact:/im.test(value.text), "A security contact file is available.", "Neither standard security.txt endpoint returned a security contact."),
+  ];
+  if (robots.state === "read" && items[0].status === "pass" && /^\s*disallow:\s*\/\s*$/im.test(robots.text)) {
+    items[0] = { ...items[0], status: "issue", detail: "The file contains a rule that blocks crawling from the root." };
   }
 
-  return [
-    ...tls.vulnerabilities,
-    {
-      type: "scan-meta",
-      severity: "info",
-      title: "SaaS readiness snapshot",
-      description: JSON.stringify({ version: 1, items }),
-      url: baseUrl,
-      remedy: "",
-    },
-  ];
+  if (home.state === "read" && !nonHtml(home) && home.text.trim()) {
+    const $ = cheerio.load(home.text);
+    const canonical = $('head link[rel="canonical"]').attr("href");
+    let canonicalUrl: string | undefined;
+    if (canonical) {
+      try {
+        const parsed = new URL(canonical, home.url);
+        if (["http:", "https:"].includes(parsed.protocol)) canonicalUrl = parsed.toString();
+      } catch { /* invalid declaration */ }
+    }
+    const robotsDirectives = $('head meta[name="robots"]').attr("content") || "";
+    const noindex = /\bnoindex\b/i.test(robotsDirectives + " " + (home.response.headers.get("x-robots-tag") || ""));
+    items.push(
+      { key: "canonical", label: "Canonical URL", status: canonicalUrl ? "pass" : "issue", detail: canonicalUrl ? "The homepage declares a canonical URL." : "The homepage has no valid canonical link.", url: canonicalUrl ?? home.url },
+      { key: "indexability", label: "Homepage indexability", status: noindex ? "issue" : "pass", detail: noindex ? "The homepage sends a noindex directive." : "No noindex directive was detected on the homepage.", url: home.url },
+    );
+  } else {
+    const status = notChecked(home.state === "not_checked" ? home.reason : "error");
+    items.push({ key: "canonical", label: "Canonical URL", ...status, url: home.url }, { key: "indexability", label: "Homepage indexability", ...status, url: home.url });
+  }
+  return { home, robots, items };
 }
 
 // ─── 16. WAF detection ────────────────────────────────────────────
@@ -1384,7 +1408,7 @@ export interface ScanOptions {
 }
 
 export async function scanWebsite(url: string, onProgress?: ProgressCallback, options: ScanOptions = {}): Promise<ScanResult> {
-  return scanBudget.run({deadline: Date.now() + 90000, exhausted: false, failedRequests: 0}, () => scanWebsiteWithinBudget(url, onProgress, options));
+  return scanBudget.run({deadline: Date.now() + (options.compliance ? 62_000 : 90_000)}, () => scanWebsiteWithinBudget(url, onProgress, options));
 }
 
 function remainingBudget() {
@@ -1392,11 +1416,6 @@ function remainingBudget() {
   return budget ? budget.deadline - Date.now() : 60_000;
 }
 
-async function fetchComplianceHtml(pageUrl: string) {
-  const res = await safeFetch(pageUrl, { timeout: 8000 });
-  if (!res || !res.ok || !(res.headers.get("content-type") || "").includes("text/html")) return null;
-  try { return { url: pageUrl, html: await res.text() }; } catch { return null; }
-}
 async function scanWebsiteWithinBudget(
   url: string,
   onProgress?: ProgressCallback,
@@ -1425,19 +1444,34 @@ async function scanWebsiteWithinBudget(
   report("Discovering pages…", "crawl", "running");
   const snapshots = new Map<string, CrawledPage>();
   let initialFailure: WebsiteFailure | undefined;
-  let incomplete = false;
-  const pages = await discoverPages(url, 25, page => snapshots.set(page.url, page), failure => { initialFailure ??= failure; }, () => { incomplete = true; });
+  const skipped = new Set<string>();
+  const check = (label: string, run: () => Promise<VulnerabilityResult[]>) =>
+    scanBudget.run({ deadline: scanBudget.getStore()!.deadline, check: label, skips: skipped }, async () => {
+      if (remainingBudget() <= 0) { skipped.add(label); return []; }
+      try { return await run(); }
+      catch { skipped.add(label); return []; }
+    });
+  const readiness = await collectSaaSReadiness(url);
+  const homepage = readiness.home;
+  if (homepage.state === "not_checked") initialFailure = homepage.failure;
+  const initialPage = homepage.state === "read" && /text\/html/i.test(homepage.response.headers.get("content-type") || "") && homepage.text.trim()
+    ? { url: homepage.url, html: homepage.text, headers: homepage.response.headers } : undefined;
+  const earlyPrivacyUrl = initialPage && options.compliance?.findPrivacyLink([initialPage]);
+  const earlyPrivacy = earlyPrivacyUrl && new URL(earlyPrivacyUrl).hostname.replace(/^www\./, "") === new URL(url).hostname.replace(/^www\./, "")
+    ? probeReadiness(earlyPrivacyUrl, 8000) : undefined;
+  const pages = await discoverPages(url, 25, page => snapshots.set(page.url, page), failure => { initialFailure ??= failure; }, (cause) => {
+    skipped.add(cause === "size" ? "Linked HTML pages (stopped at the size budget)" : cause === "time" ? "Linked HTML pages (stopped at the crawl time budget)" : "Linked HTML pages (some requests did not complete)");
+  }, initialPage);
+  if (pages.length) url = pages[0];
+  const tls = pages.length && remainingBudget() > 0 ? inspectTlsCertificate(url) : Promise.resolve({
+    item: { key: "tls", label: "TLS certificate", ...notChecked("time_budget"), url } as CheckItem,
+    vulnerabilities: [] as VulnerabilityResult[],
+  });
   if (pages.length === 0) {
     const failure = initialFailure ?? websiteFailure("network");
     throw new WebsiteScanError(failure.message, failure);
   }
   report(`Found ${pages.length} page(s)`, "crawl", "done", 0, pages.length);
-
-  // The browser consent test (paid plans) runs beside the HTTP checks so it does not add to scan time.
-  options.compliance?.start(pages[0], {
-    timeoutMs: Math.max(5_000, Math.min(45_000, remainingBudget() - 25_000)),
-    fetchResource: (url, init) => safeFetch(url, { ...init, timeout: 8_000, redirect: "manual" }),
-  });
 
   // ── Steps 2-7: Independent checks — PARALLEL BATCH 1 ──────────
   currentStepNum = 2;
@@ -1449,8 +1483,8 @@ async function scanWebsiteWithinBudget(
   report("Checking directory listings…", "directories", "running");
 
   const [sslV, fileV, emailV, robotsV, errorV, dirV] = await Promise.all([
-    checkSSL(url), checkSensitiveFiles(url), checkEmailSecurity(url),
-    checkRobotsTxt(url), checkErrorPages(url), checkDirectoryListing(url),
+    check("HTTPS configuration", () => checkSSL(url)), check("Public file checks", () => checkSensitiveFiles(url)), check("Email DNS", () => checkEmailSecurity(url)),
+    readiness.robots.state === "read" && readiness.items[0].status !== "not_checked" && !/text\/html/i.test(readiness.robots.response.headers.get("content-type") || "") ? analyzeRobotsTxt(readiness.robots.url, readiness.robots.text) : [], check("Error pages", () => checkErrorPages(url)), check("Directory listings", () => checkDirectoryListing(url)),
   ]);
 
   allVulns.push(...sslV);
@@ -1487,8 +1521,8 @@ async function scanWebsiteWithinBudget(
   report("Checking SaaS readiness…", "readiness", "running");
 
   const [apiV, methodV, sitemapV, wafV, redirectV, readinessV, corsV] = await Promise.all([
-    checkAPIEndpoints(url), checkHTTPMethods(url), checkSitemap(url),
-    detectWAF(url), checkRedirectChain(url), collectSaaSReadiness(url), checkCorsPolicy(url),
+    check("API checks", () => checkAPIEndpoints(url)), check("HTTP methods", () => checkHTTPMethods(url)), check("Sitemap contents", () => checkSitemap(url)),
+    check("WAF response headers", () => detectWAF(url)), check("Redirect chain", () => checkRedirectChain(url)), tls, check("CORS response headers", () => checkCorsPolicy(url)),
   ]);
 
   allVulns.push(...apiV);
@@ -1512,15 +1546,24 @@ async function scanWebsiteWithinBudget(
   currentStepNum = 12;
   report("Redirect analysis complete", "redirects", "done", redirectV.length);
 
-  allVulns.push(...readinessV);
+  readiness.items.unshift(readinessV.item);
+  for (const item of readiness.items) if (item.status === "not_checked") skipped.add(item.label);
+  allVulns.push(...readinessV.vulnerabilities, {
+    type: "scan-meta", severity: "info", title: "SaaS readiness snapshot",
+    description: JSON.stringify({ version: 2, items: readiness.items }), url, remedy: "",
+  });
   currentStepNum = 13;
-  report("SaaS readiness complete", "readiness", "done", readinessV.filter((item) => item.type !== "scan-meta").length);
+  report("SaaS readiness complete", "readiness", "done", readinessV.vulnerabilities.length);
 
   // ── Steps 14-17: Per-page checks ──────────────────────────────
   currentStepNum = 14;
   report("Analyzing security headers…", "headers", "running");
 
   let pagesAnalyzed = 0;
+  const firstPage = snapshots.get(pages[0])!;
+  const stack = detectWebsiteStack(firstPage.headers, firstPage.html);
+  const stackName = describeWebsiteStack(stack);
+  if (stackName) allVulns.push({ type: "scan-meta", severity: "info", title: STACK_TITLE, description: stackName, url, remedy: "" });
   // Cookies are often set on login or app pages, not the homepage: collect them from every page.
   const cookieHeaders = new Headers();
 
@@ -1528,7 +1571,7 @@ async function scanWebsiteWithinBudget(
     // Analyze exactly the bounded HTML already read during discovery. A second
     // request used to discard good evidence when the origin later rate-limited us.
     const snapshot = snapshots.get(pageUrl);
-    if (!snapshot) { incomplete = true; continue; }
+    if (!snapshot) { skipped.add("HTML analysis for unread pages"); continue; }
     const res = snapshot;
     for (const cookie of res.headers.getSetCookie?.() ?? []) cookieHeaders.append("set-cookie", cookie);
 
@@ -1580,22 +1623,42 @@ async function scanWebsiteWithinBudget(
   // Source maps
   currentStepNum = 17;
   report("Checking source maps…", "source-maps", "running");
-  const srcMapV = await checkSourceMaps(url, pages, snapshots);
+  const srcMapV = await check("Source maps", () => checkSourceMaps(url, pages, snapshots));
   allVulns.push(...srcMapV);
   report("Source maps complete", "source-maps", "done", srcMapV.length);
 
-  // Privacy, consent and accessibility
-  currentStepNum = 18;
-  if (options.compliance) {
-    report("Checking privacy & consent…", "compliance", "running");
-    const htmlPages = pages.flatMap((pageUrl) => {
-      const snapshot = snapshots.get(pageUrl);
-      return snapshot && (snapshot.headers.get("content-type") || "").includes("text/html") ? [{ url: pageUrl, html: snapshot.html }] : [];
+  // The main score is available once the website checks are saved. The
+  // privacy task keeps bounded page snapshots in memory in this invocation.
+  const compliance = options.compliance;
+  let runCompliance: ScanResult["runCompliance"];
+  if (compliance) {
+    const pagesForCompliance = [...snapshots.values()];
+    const requestDeadline = scanBudget.getStore()!.deadline + 52_000;
+    allVulns.push({
+      type: "scan-meta", severity: "info", title: COMPLIANCE_COVERAGE_TITLE,
+      description: JSON.stringify(pendingCompliance(requestDeadline)), url, remedy: "",
     });
-    const complianceV = await options.compliance.finish({ url, pages: htmlPages, fetchHtml: fetchComplianceHtml, remainingMs: remainingBudget })
-      .catch(() => [] as VulnerabilityResult[]);
-    allVulns.push(...complianceV);
-    report("Privacy & consent complete", "compliance", "done", complianceV.filter((item) => item.type !== "scan-meta" && item.severity !== "info").length);
+    runCompliance = () => scanBudget.run({ deadline: requestDeadline }, async () => {
+      const failures = new Map<string, NotCheckedReason>();
+      const fetchHtml = async (pageUrl: string) => {
+        const site = new URL(url).hostname.replace(/^www\./, "");
+        if (new URL(pageUrl).hostname.replace(/^www\./, "") !== site) {
+          failures.set(pageUrl, "redirect_offsite");
+          return null;
+        }
+        const result = pageUrl === earlyPrivacyUrl && earlyPrivacy ? await earlyPrivacy : await probeReadiness(pageUrl, 8000);
+        if (result.state === "read" && /text\/html/i.test(result.response.headers.get("content-type") ?? "") && result.text.trim()) {
+          return { url: result.url, html: result.text };
+        }
+        if (result.state !== "absent") failures.set(pageUrl, result.state === "not_checked" ? result.reason : "error");
+        return null;
+      };
+      compliance.start(url, {
+        timeoutMs: Math.max(1, Math.min(38_000, remainingBudget() - 4_000)),
+        fetchResource: (resourceUrl, init) => safeFetch(resourceUrl, { ...init, timeout: 8_000, redirect: "manual" }),
+      });
+      return compliance.finish({ url, pages: pagesForCompliance, fetchHtml, failureFor: (pageUrl) => failures.get(pageUrl), remainingMs: remainingBudget });
+    });
   }
 
   // Deduplicate
@@ -1607,10 +1670,10 @@ async function scanWebsiteWithinBudget(
     return true;
   });
 
-  const partial = incomplete || Boolean(scanBudget.getStore()?.exhausted) || Boolean(scanBudget.getStore()?.failedRequests);
-  return { url, score: calculateScore(unique), vulnerabilities: unique, pagesScanned: pagesAnalyzed,
+  const partial = skipped.size > 0;
+  return { url, score: calculateScore(unique), vulnerabilities: unique.map((finding) => specializeWebsiteRemedy(finding, stack)), pagesScanned: pagesAnalyzed, runCompliance,
     coverage: {partial, pagesDiscovered: pages.length, pagesAnalyzed, note: partial
-      ? "Some pages or checks could not be completed within the scan limits. This score uses observed findings only; unread checks are not proof of safety."
-      : "Public website checks only. Up to 25 linked HTML pages; authenticated routes and repository code were not reviewed."},
+      ? `${pagesAnalyzed} pages read. Not checked or incomplete: ${[...skipped].join("; ")}.`
+      : "Public website checks only. Up to 25 linked HTML pages within the crawl budget."},
   };
 }

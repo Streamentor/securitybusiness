@@ -16,6 +16,7 @@ export function websiteFailure(code, httpStatus, provider) {
     "empty-html": "The URL returned no readable HTML content. Check the public app URL and try again.",
     "response-too-large": "The website response exceeded the scanner's 2 MB safety limit. Try a smaller public page.",
     redirect: "The URL redirected to another hostname or exceeded the redirect limit. Enter the final app URL you own or are authorized to test.",
+    redirect_offsite: "The URL redirected to another site. Enter the final app URL you own or are authorized to test.",
     network: "The scanner could not connect to the website. The server may be unavailable or blocking data-center requests; check its logs and try again.",
     internal: "The scan could not finish because of a scanner or storage error. Please try again. Any reserved scan credit is returned when the failed job is handled.",
   };

@@ -1,3 +1,4 @@
+import { fixtureArchive } from "./fixture-repo-archive.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks, stripTypeScriptTypes } from "node:module";
@@ -96,8 +97,9 @@ try {
     $executeRaw:async(_strings,...values)=>{fixture.charged-=values[0];return 1;},
     aIReviewPreference:{findUnique:async()=>({enabled:fixture.enabled}),upsert:async(args)=>{fixture.enabled=args.update.enabled;}},
     user:{findUnique:async()=>fixture.user},
-    repoScan:{updateMany:async()=>{if(fixture.job.status!=="queued")return {count:0};fixture.job.status="running";return {count:1};},findUnique:async()=>fixture.job,findFirst:async(args)=>{assert.equal(args.where.userId,"user-a");assert.equal(args.where.id,"job-1");return fixture.job;},update:async(args)=>{fixture.updates.push(args.data);return Object.assign(fixture.job,args.data);}},
+    repoScan:{updateMany:async({where,data})=>{if(typeof where.status==="string" ? fixture.job.status!==where.status : !where.status.in.includes(fixture.job.status))return {count:0};fixture.updates.push(data);Object.assign(fixture.job,data);return {count:1};},findUnique:async()=>fixture.job,findFirst:async(args)=>{assert.equal(args.where.userId,"user-a");assert.equal(args.where.id,"job-1");return fixture.job;},update:async(args)=>{fixture.updates.push(args.data);return Object.assign(fixture.job,args.data);}},
   };
+  fixture.db.$transaction=async (operation)=>operation(fixture.db);
   assert.equal(await store.reserveAIReviewTokens("user-a","2026-11",1,0),false);
   assert.deepEqual(await Promise.all([store.reserveAIReviewTokens("user-a","2026-11",60,100),store.reserveAIReviewTokens("user-a","2026-11",60,100)]),[true,false]);
   await store.settleAIReviewTokens("user-a","2026-11",60,25); assert.equal(fixture.charged,25);
@@ -113,7 +115,7 @@ try {
     if(target.pathname==="/repos/owner/app")return Response.json({name:"app",full_name:"owner/app",html_url:"https://github.com/owner/app",private:false,default_branch:"main",pushed_at:"t"});
     if(target.pathname.includes("/commits/"))return Response.json({sha});
     if(target.pathname.includes("/git/trees/"))return Response.json({truncated:false,tree:[{path:files[0].path,type:"blob",size:100}]});
-    if(target.hostname==="raw.githubusercontent.com")return new Response(files[0].content);
+    if(target.pathname.includes("/tarball/"))return fixtureArchive([files[0]]);
     if(target.hostname==="api.osv.dev")return Response.json({results:[]});
     throw new Error("Unexpected fixture destination");
   };
@@ -146,5 +148,29 @@ try {
   const staleBody=await response.json();assert.equal(staleBody.result.findings.some(f=>f.source==="ai"),false,"stale-job responses also redact AI details after downgrade");
   fixture.session=null;
   response=await GET(new NextRequest("https://fixture.invalid/api/repo-scans/job-1"),{params:Promise.resolve({id:"job-1"})}); assert.equal(response.status,401);
+
+  // Next-batch admission pins the original commit and reserves one credit per
+  // unique request, even when the report input contains a different repo.
+  fixture.user = { plan: "starter", role: "user" };
+  fixture.enabled = true;
+  process.env.GITHUB_APP_ID = "";
+  let credit = 1, child = null;
+  const parent = { repository: "owner/app", commitSha: sha, result: { aiReview: { hasNextBatch: true, reviewedPaths: [files[0].path] } } };
+  fixture.db.$queryRaw = async () => [{ id: "user-a" }];
+  fixture.db.repoScan.count = async () => 0;
+  fixture.db.repoScan.findMany = async () => [];
+  fixture.db.repoScan.findFirst = async ({ where }) => where.reviewParentId ? child : where.userId === "user-a" && where.id === "parent" ? parent : null;
+  fixture.db.repoScan.create = async ({ data }) => {
+    assert.equal(data.repository, "owner/app");
+    assert.equal(data.requestedRef, sha);
+    assert.equal(data.reviewParentId, "parent");
+    child = { id: "new-batch" };
+    return child;
+  };
+  fixture.db.user.updateMany = async ({ data }) => { credit -= data.credits.decrement; return { count: 1 }; };
+  await assert.rejects(jobs.createRepoScanJob("other-owner", "", "parent"), /No further AI batch/);
+  assert.deepEqual(await jobs.createRepoScanJob("user-a", "other/repository", "parent"), { id: "new-batch" });
+  assert.deepEqual(await jobs.createRepoScanJob("user-a", "", "parent"), { id: "new-batch" });
+  assert.equal(credit, 0, "duplicate request reserves only one credit");
 } finally {globalThis.fetch=originalFetch; for(const key of Object.keys(process.env)) if(!(key in savedEnv))delete process.env[key]; Object.assign(process.env,savedEnv);}
 console.log("AI review verified: schema/evidence, references, secrets, deduplication, entitlement, usage reservations, opt-out, Responses contract and job fallback.");

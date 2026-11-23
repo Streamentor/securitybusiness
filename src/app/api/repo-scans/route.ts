@@ -12,12 +12,14 @@ export async function POST(request: NextRequest) {
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "The request body must be valid JSON." }, { status: 400 }); }
   const input = typeof body === "object" && body !== null && "repository" in body ? String((body as { repository: unknown }).repository || "").trim() : "";
+  const reviewParentId = typeof body === "object" && body !== null && "reviewParentId" in body && typeof body.reviewParentId === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(body.reviewParentId) ? body.reviewParentId : undefined;
   const authorized = typeof body === "object" && body !== null && (body as { authorized?: unknown }).authorized === true;
-  if (!input) return NextResponse.json({ error: "Choose a repository to scan." }, { status: 400 });
+  if (reviewParentId && request.headers.get("origin") !== request.nextUrl.origin) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
+  if (!input && !reviewParentId) return NextResponse.json({ error: "Choose a repository to scan." }, { status: 400 });
   if (!authorized) return NextResponse.json({ error: "Confirm that you own the repository or have permission to scan it.", code: "authorization_required" }, { status: 400 });
 
   try {
-    const job = await createRepoScanJob(session.user.id, input);
+    const job = await createRepoScanJob(session.user.id, input, reviewParentId);
     // Runs after the response: the browser can leave and come back to /repo-scan/<id>.
     after(() => runRepoScanJob(job.id));
     return NextResponse.json({ id: job.id }, { status: 202 });
