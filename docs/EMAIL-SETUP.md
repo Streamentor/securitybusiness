@@ -33,6 +33,9 @@ Configure these in the `securitybusiness-n767` project, **Production only**. Mar
 - `EMAIL_SEQUENCE_START_AT`: a valid UTC ISO timestamp. Required even in dry-run. Reset to the actual activation time when switching live; do not backdate to enroll old accounts.
 - `EMAIL_UNSUBSCRIBE_SECRET`: at least 32 random bytes, preferably 64 hex characters. Retain it: rotation invalidates existing unsubscribe links.
 - `CRON_SECRET`: a separate random secret for Vercel's Bearer-authenticated cron calls. Preserve any existing cron secret rather than rotating it unnecessarily.
+- `PLAN_PURCHASE_EMAIL_TO`: the owner's recipient for internal alerts on the first paid invoice of a new Starter or Pro subscription. Omit this variable to disable the alerts.
+
+Plan purchase alerts use the existing SES sender. They are independent of `EMAIL_SEQUENCE_MODE`. Stripe's signed live `invoice.paid` event queues an alert by invoice ID, and the existing email cron picks up pending deliveries. Confirm that this event is enabled for the production webhook. Check the `PlanPurchaseEmail` row and SES before investigating an uncertain delivery. A record left in `sending` or `unknown` needs reconciliation before any resend.
 
 The code always passes `ConfigurationSetName=scanmysaas-onboarding`. SESv2 Simple supports custom headers, so it assembles multipart/alternative from Text and Html. Both unsubscribe headers and Reply-To are included. The HTML twin contains only paragraphs and direct links. UTMs are campaign labels, not a click tracking redirect.
 

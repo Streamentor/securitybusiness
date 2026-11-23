@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { stripe, getCreditsForPlan, getPlanFromPriceId } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 import Stripe from "stripe";
@@ -45,6 +45,13 @@ export async function POST(req: NextRequest) {
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
         await handleInvoicePaid(invoice);
+        if (invoice.billing_reason === "subscription_create" && event.livemode) {
+          const { queuePlanPurchaseEmail, drainPlanPurchaseEmails } = await import("@/lib/email/plan-purchase");
+          const invoiceId = await queuePlanPurchaseEmail(invoice);
+          if (invoiceId) after(() => drainPlanPurchaseEmails(invoiceId).catch(() => {
+            console.error("Plan purchase email queue could not be drained");
+          }));
+        }
         break;
       }
 
