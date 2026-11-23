@@ -6,9 +6,11 @@ const f={ledger:new Set(),credits:5,periodEnd:new Date("2026-03-01"),fail:false,
 globalThis.creditFixture=f;
 const shim=s=>({url:`data:text/javascript,${encodeURIComponent(s)}`,shortCircuit:true});
 registerHooks({resolve(s,c,next){
- if(s==="next/server")return next("next/server.js",c);
+ if(s==="next/server")return shim("export const NextResponse={json:Response.json.bind(Response)}; export const after=(task)=>globalThis.creditFixture.after.push(task);");
+ if(s==="server-only")return shim("export {};");
  if(s==="@/lib/db")return shim("export const prisma=globalThis.creditFixture.db;");
- if(s==="@/lib/stripe")return shim('export const getCreditsForPlan=p=>p==="pro"?30:p==="starter"?10:0; export const getPlanFromPriceId=()=>"pro"; export const stripe={webhooks:{constructEvent:()=>{if(globalThis.creditFixture.invalidSignature)throw Error("bad signature");return globalThis.creditFixture.event;}},subscriptions:{retrieve:async()=>({metadata:{plan:"pro"},items:{data:[{current_period_end:1775001600}]}})}};');
+ if(s==="@/lib/stripe")return shim('export const PLANS={pro:{name:"Pro"},starter:{name:"Starter"}}; export const getCreditsForPlan=p=>p==="pro"?30:p==="starter"?10:0; export const getPlanFromPriceId=id=>id==="price_fixture"?"pro":null; export const stripe={webhooks:{constructEvent:()=>{if(globalThis.creditFixture.invalidSignature)throw Error("bad signature");return globalThis.creditFixture.event;}},subscriptions:{retrieve:async()=>({metadata:{plan:"pro"},items:{data:[{current_period_end:1775001600}]}})}};');
+ if(s==="@aws-sdk/client-sesv2")return shim('export class SendEmailCommand{constructor(input){this.input=input;}} export class SESv2Client{async send(command){globalThis.creditFixture.emails.push(command.input);return {MessageId:"ses_fixture"};} destroy(){}}');
  if(s.startsWith("@/"))return{url:new URL(`${s.slice(2)}.ts`,root).href,shortCircuit:true};
  return next(s,c);
 },load(u,c,next){if(u.startsWith(root.href)&&u.endsWith(".ts"))return{format:"module",source:stripTypeScriptTypes(readFileSync(new URL(u),"utf8"),{mode:"transform"}),shortCircuit:true};return next(u,c);}});
@@ -47,3 +49,59 @@ for(const id of ["evt_one","evt_two"]){f.event={id,type:"invoice.paid",data:{obj
 assert.equal(f.credits,30,"different Stripe event IDs for same invoice do not double grant");
 f.event.data.object.billing_reason="subscription_create";f.event.data.object.id="in_first";await route.POST(request(true));assert.equal(f.credits,30,"first invoice still belongs to checkout fulfillment");
 console.log("Invoice identity, parallel retries, atomic rollback, rollover and signed webhook regression checks passed.");
+
+Object.assign(process.env, {
+  VERCEL_ENV: "production", PLAN_PURCHASE_EMAIL_TO: "owner@example.invalid", AWS_SES_REGION: "eu-central-1",
+  EMAIL_FROM: "Stefan from ScanMySaaS <stefan@scanmysaas.com>", EMAIL_REPLY_TO: "stefan@scanmysaas.com",
+  AWS_SES_ACCESS_KEY_ID: "fixture", AWS_SES_SECRET_ACCESS_KEY: "fixture",
+});
+const outbox = new Map();
+f.after = [];
+f.emails = [];
+f.db.$executeRaw = async (parts, ...values) => {
+  const sql = parts.join("?");
+  if (sql.startsWith("INSERT")) {
+    const [invoiceId, plan, amountPaid, currency] = values;
+    if (!outbox.has(invoiceId)) outbox.set(invoiceId, { invoiceId, plan, amountPaid: BigInt(amountPaid), currency, status: "pending", attempts: 0 });
+  } else {
+    assert.match(sql, /"status" = 'sent'/);
+    outbox.get(values[1]).status = "sent";
+  }
+  return 1;
+};
+f.db.$queryRaw = async (parts, invoiceId) => {
+  assert.match(parts.join("?"), /FOR UPDATE SKIP LOCKED/);
+  const row = outbox.get(invoiceId);
+  if (!row || row.status !== "pending") return [];
+  row.status = "sending";
+  return [{ ...row, attempts: ++row.attempts }];
+};
+const invoice = {
+  id: "in_purchase", livemode: true, status: "paid", billing_reason: "subscription_create",
+  amount_paid: 7900, currency: "usd", lines: { data: [{ pricing: { price_details: { price: "price_fixture" } } }] },
+};
+const paidEvent = (object, livemode = true) => ({ type: "invoice.paid", livemode, data: { object } });
+for (const event of [
+  paidEvent(invoice, false),
+  paidEvent({ ...invoice, amount_paid: 0 }),
+  paidEvent({ ...invoice, status: "open" }),
+  paidEvent({ ...invoice, lines: { data: [] } }),
+]) {
+  f.event = event;
+  assert.equal((await route.POST(request(true))).status, 200);
+}
+assert.equal(outbox.size, 0, "test, unpaid, free and unrelated invoices do not queue alerts");
+f.event = paidEvent(invoice);
+const purchaseResponses = await Promise.all(Array.from({ length: 4 }, () => route.POST(request(true))));
+assert.ok(purchaseResponses.every((response) => response.status === 200));
+assert.equal(f.emails.length, 0, "paid webhook persists the task before delivery");
+assert.equal(outbox.size, 1);
+await Promise.all(f.after.map((task) => task()));
+assert.equal(f.emails.length, 1, "webhook retries and concurrent workers produce one confirmed delivery");
+assert.equal(outbox.get(invoice.id).status, "sent");
+assert.deepEqual(f.emails[0].Destination.ToAddresses, ["owner@example.invalid"]);
+assert.match(f.emails[0].Content.Simple.Subject.Data, /New Pro purchase/);
+assert.match(f.emails[0].Content.Simple.Body.Text.Data, /USD\s+79\.00/);
+assert.match(f.emails[0].Content.Simple.Body.Text.Data, /dashboard\.stripe\.com\/invoices\/in_purchase/);
+assert.equal(f.emails[0].Content.Simple.Headers, undefined, "internal alert is outside the customer sequence");
+console.log("Plan purchase notification eligibility, signed webhook, outbox dedupe and SES envelope passed.");

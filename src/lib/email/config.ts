@@ -16,11 +16,15 @@ export function equalSecret(left: string, right: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 export function validEmail(value: string): boolean { return value.length <= 254 && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(value); }
-export function deliveryConfig() {
+export function sendingConfig() {
   const region = process.env.AWS_SES_REGION || "";
   const from = process.env.EMAIL_FROM || "";
   const replyTo = process.env.EMAIL_REPLY_TO || "";
+  if (!/^[a-z]{2}-[a-z]+-\d$/.test(region) || !/^Stefan from ScanMySaaS <[^<>\r\n]+@scanmysaas\.com>$/.test(from) || !validEmail(replyTo) || !process.env.AWS_SES_ACCESS_KEY_ID || !process.env.AWS_SES_SECRET_ACCESS_KEY) throw new Error("Email sending configuration incomplete");
+  return { region, from, replyTo, configurationSet: "scanmysaas-onboarding" };
+}
+export function deliveryConfig() {
   const address = process.env.EMAIL_POSTAL_ADDRESS || "";
-  if (!/^[a-z]{2}-[a-z]+-\d$/.test(region) || !/^Stefan from ScanMySaaS <[^<>\r\n]+@scanmysaas\.com>$/.test(from) || !validEmail(replyTo) || !address.trim() || /[\r\n]/.test(address) || !process.env.AWS_SES_ACCESS_KEY_ID || !process.env.AWS_SES_SECRET_ACCESS_KEY || !process.env.AWS_SES_SNS_TOPIC_ARN) throw new Error("Email configuration incomplete");
-  return { region, from, replyTo, address, configurationSet: "scanmysaas-onboarding" };
+  if (!address.trim() || /[\r\n]/.test(address) || !process.env.AWS_SES_SNS_TOPIC_ARN) throw new Error("Email configuration incomplete");
+  return { ...sendingConfig(), address };
 }

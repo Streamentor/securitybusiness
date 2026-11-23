@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { equalSecret, sequenceMode } from "@/lib/email/config";
 import { runEmailSequence } from "@/lib/email/worker";
 import { recordSequenceRun } from "@/lib/email/store";
+import { drainPlanPurchaseEmails } from "@/lib/email/plan-purchase";
 export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || !equalSecret(req.headers.get("authorization") || "", `Bearer ${secret}`)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const began = new Date();
   try {
-    const result = await runEmailSequence();
+    const [result] = await Promise.all([
+      runEmailSequence(),
+      drainPlanPurchaseEmails().catch(() => console.error("Plan purchase email queue could not be drained")),
+    ]);
     if (result.mode !== "off") await recordSequenceRun(result.mode, "completed", began, result.examined, result.sent);
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
